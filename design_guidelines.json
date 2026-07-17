@@ -1,0 +1,180 @@
+{
+  "typography": {
+    "headings": {
+      "family": "Unbounded, sans-serif",
+      "style": "Cyber/Web3 feel, wide display sans. Use tracking-tighter.",
+      "sizes": {
+        "h1": "text-4xl sm:text-5xl lg:text-6xl",
+        "h2": "text-2xl sm:text-3xl lg:text-4xl",
+        "h3": "text-xl sm:text-2xl",
+        "h4": "text-lg sm:text-xl"
+      }
+    },
+    "body": {
+      "family": "Outfit, sans-serif",
+      "size": "text-base (mobile: text-sm)",
+      "line_height": "leading-relaxed"
+    },
+    "technical_data": {
+      "family": "JetBrains Mono, monospace",
+      "usage": "Use for AI tokens, system prompts, API keys, data points, and code-like elements."
+    },
+    "rules": [
+      "Headlines MUST use tight letter spacing: tracking-tight or tracking-tighter.",
+      "Overlines/Labels MUST be Uppercase + Tiny + Wide Spacing (tracking-[0.2em]).",
+      "The jump between a heading and subheading must not exceed 2 Tailwind steps.",
+      "Never use Inter, Roboto, or Open Sans for Headings."
+    ]
+  },
+  "colors": {
+    "archetype": "ARCHETYPE 7: ELECTRIC & NEON (Future, Speed, Disruption)",
+    "base": {
+      "background": "#050505",
+      "surface": "#0A0514",
+      "surface_elevated": "#120B24"
+    },
+    "accents": {
+      "primary": "#00F0FF",
+      "secondary": "#FF0055",
+      "tertiary": "#8A2BE2"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A0A0B0",
+      "muted": "#606070"
+    },
+    "status": {
+      "success": "#00FF66",
+      "warning": "#FFD700",
+      "error": "#FF3333"
+    },
+    "rules": [
+      "No pure black (#000000) or pure grey. Tint greys with blue/violet.",
+      "Use Black-on-Black layers (matte vs glossy) to ground neon colors.",
+      "Ensure text meets APCA standards. Provide text-shadow for text over images/gradients."
+    ]
+  },
+  "visual_enhancers": {
+    "glassmorphism": {
+      "usage": "Sticky Headers, Floating Navs, Toasts, Modal Overlays",
+      "implementation": "bg-black/60 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)]",
+      "rule": "Never use pure transparent backgrounds for overlays."
+    },
+    "tracing_beam": {
+      "usage": "High-conversion Cards (Role Selection, Active Tutor Packs, Model Router Cards)",
+      "implementation": "A border that isn't static. Use framer-motion to animate a glowing gradient line traveling around the container edge with blur-md behind it."
+    },
+    "retro_futurism": {
+      "usage": "Terminal-style code blocks or System Prompt editors in Model Router",
+      "implementation": "Dark indigo background, high-contrast borders, drop-shadow-[0_0_8px_rgba(0,240,255,0.5)] on active focus."
+    }
+  },
+  "component_guidelines": {
+    "general": "ALWAYS use pure HTML + Tailwind for structural/marketing layouts. Use customized Shadcn for forms, dialogs, dropdowns.",
+    "buttons": "Pill-shaped or sharp technical buttons with interaction animations. NEVER use default 'Vercel-look'.",
+    "forms": "Use Shadcn Input, Select, Form. Do not build from scratch. Use pure white or neon glowing focus rings (focus:ring-primary).",
+    "model_router_ui": {
+      "provider_cards": "Glassmorphism cards with provider logo, masked API key input (reveal/copy buttons), enable/disable toggle switch.",
+      "fallback_chain": "Drag-and-drop vertical list. Use drag handles. Show ghost image when dragging. Add up/down fallback controls.",
+      "system_prompt_editor": "Monospace text area (retro-futurism style) with 'Save' state and token counter."
+    },
+    "content_generation_form": {
+      "layout": "Two-column bento grid. Left: Upload/Paste area. Right: Config (Content type, EN/BM toggle). Bottom: Preview and Publish.",
+      "upload_zone": "Dashed neon border with hover state (bg-primary/5)."
+    },
+    "student_progress_cards": {
+      "style": "Neumorphism mix (clay & crisp) with 1px border. Solid background, dark mode friendly. Progress bars must use neon primary color with inner glow."
+    }
+  },
+  "grids": {
+    "marketing_landing": {
+      "mode": "MODE A: THE TETRIS GRID",
+      "base": "grid-cols-1 md:grid-cols-8 lg:grid-cols-12",
+      "gap": "gap-8 to gap-12",
+      "rule": "Asymmetry. Leave breathing room. Do not fill 100% of the grid perfectly."
+    },
+    "dashboards": {
+      "mode": "MODE B: High Density Grid",
+      "base": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4",
+      "gap": "gap-4 or gap-6",
+      "rule": "Every pixel utilized. Use h-full on children."
+    }
+  },
+  "layouts": {
+    "spacing": "Generous spacing. p-6, p-8, p-12. Containers with borders MUST have internal padding.",
+    "alignment": "Optical alignment over geometrical. Left-align dense content. Never center-align by default.",
+    "mobile_first": "Start with grid-cols-1. Images max-h-[80vh] on mobile."
+  },
+  "motion": {
+    "requirements": [
+      "Hover states for all interactive elements (must be explicitly set, e.g., hover:bg-slate-900 hover:text-white).",
+      "Entrance animations staggered for lists.",
+      "Micro-animations for toggles and drag-drop actions.",
+      "DO NOT use 'transition: all'. Target specific properties."
+    ]
+  },
+  "accessibility": {
+    "contrast": "Min 4.5:1 for normal text, 3:1 for large text.",
+    "focus": "Focus states must have HIGHER contrast than default state.",
+    "testing": "All interactive elements MUST include data-testid attribute (e.g., data-testid='login-admin-btn').",
+    "motion": "Respect prefers-reduced-motion."
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.pexels.com/photos/30547577/pexels-photo-30547577.jpeg",
+        "category": "Hero Background / Abstract AI",
+        "description": "Dynamic abstract depiction of digital circuits with vivid lights and glowing lines."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1760260627301-c92d64cb2a67?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHwxfHxzdHVkZW50JTIwc3R1ZHlpbmclMjBnbG93aW5nJTIwc2NyZWVufGVufDB8fHx8MTc4Mjk5Mzg5N3ww&ixlib=rb-4.1.0&q=85",
+        "category": "Role CTA - Learner",
+        "description": "Person looking at glowing screens, representing the student dashboard access."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1758525861536-15fb8a3ee629?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHw0fHxwYXJlbnQlMjB0ZWFjaGluZyUyMGNoaWxkJTIwdGFibGV0fGVufDB8fHx8MTc4MzgzOTk3OHww&ixlib=rb-4.1.0&q=85",
+        "category": "Role CTA - Parent",
+        "description": "Mother and daughter studying together at a table."
+      },
+      {
+        "url": "https://images.pexels.com/photos/14314636/pexels-photo-14314636.jpeg",
+        "category": "Role CTA - Admin / Tech",
+        "description": "A digitally rendered abstract image showcasing a futuristic eye with complex network patterns."
+      }
+    ],
+    "rules": "Never use placeholder URLs. Preserve brand names if any."
+  },
+  "3d_libraries": {
+    "primary": "React Three Fiber (R3F) + Drei",
+    "usage": "Use for the Landing Page Hero section to create an immersive, abstract neural network or glowing orb that reacts to scroll/mouse movement.",
+    "lighting": "Ensure 3D scenes have adequate lighting so objects are clearly visible. Avoid flat, muddy renders."
+  },
+  "instructions_to_main_agent": {
+    "project_type": "hybrid_fullstack (SaaS dashboard + marketing/landing page)",
+    "language_support": "Implement a global EN / BM (Bahasa Melayu) toggle in the header. State should be managed globally.",
+    "theme_setup": "Default to Dark Mode (Electric & Neon archetype). Provide a robust setup in Tailwind config.",
+    "routing_structure": "Isolate the Marketing Landing Page from the Dashboards. Dashboards must have protected layouts with Sidebar.",
+    "development_phases": [
+      "1. Setup Tailwind config with exact color tokens and font families (Unbounded, Outfit, JetBrains Mono).",
+      "2. Build 3D Landing Page with Hero, About, Contact, and Role-Based CTAs (Admin/Parent/Learner).",
+      "3. Develop Admin Dashboard: Sidebar, Stats Overview, Content Generator Form, and Model Router.",
+      "4. Develop Student Dashboard: Tutor Packs, Progress, Cards for Summaries/Quizzes/Flashcards.",
+      "5. Develop Parent Dashboard: Progress monitoring."
+    ]
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic outputs. Make creative, distinctive frontends.",
+    "Dark colors look good independently without gradients. DO NOT use dark colors as full-screen gradients.",
+    "Don't make generic centered layouts. Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition. Eg: 'transition: all'. Target specific properties.",
+    "You MUST NOT center align the app container, ie do not add '.App { text-align: center; }'.",
+    "Always use modern button styles with interaction animations & relevant color.",
+    "NEVER use AI assistant Emoji characters (\ud83e\udd16\ud83e\udde0\ud83d\udcad\ud83d\udca1) for icons. Use lucide-react or @phosphor-icons/react.",
+    "Every interaction needs micro-animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable.",
+    "Missing image categories = you must use the provided URLs, DO NOT use placeholder text.",
+    "Use sonner for toast notifications.",
+    "Add 'data-testid' to ALL interactive elements."
+  ]
+}
