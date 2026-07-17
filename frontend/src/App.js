@@ -1,55 +1,73 @@
-import { useEffect } from "react";
+import React from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
-import { HOME } from "@/constants/testIds";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "sonner";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { AuthProvider } from "@/context/AuthContext";
+import { LangProvider } from "@/context/LangContext";
+import RequireRole from "@/components/RequireRole";
+import DashboardShell from "@/components/DashboardShell";
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+import Landing from "@/pages/Landing";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
+import AdminOverview from "@/pages/admin/Overview";
+import AdminGenerate from "@/pages/admin/Generate";
+import AdminRouter from "@/pages/admin/Router";
+import AdminPacks from "@/pages/admin/Packs";
+import AdminStudents from "@/pages/admin/Students";
 
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          data-testid={HOME.emergentLink}
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+import { StudentHome, StudentBrowse } from "@/pages/student/Student";
+import { ParentHome, ParentPacks } from "@/pages/parent/Parent";
+
+const AdminLayout = ({ children }) => (
+  <RequireRole roles={["admin"]}>
+    <DashboardShell>{children}</DashboardShell>
+  </RequireRole>
+);
+const StudentLayout = ({ children }) => (
+  <RequireRole roles={["student"]}>
+    <DashboardShell>{children}</DashboardShell>
+  </RequireRole>
+);
+const ParentLayout = ({ children }) => (
+  <RequireRole roles={["parent"]}>
+    <DashboardShell>{children}</DashboardShell>
+  </RequireRole>
+);
 
 function App() {
   return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <LangProvider>
+      <AuthProvider>
+        <div className="App">
+          <Toaster position="top-right" theme="dark" richColors />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+
+              <Route path="/admin" element={<AdminLayout><AdminOverview /></AdminLayout>} />
+              <Route path="/admin/generate" element={<AdminLayout><AdminGenerate /></AdminLayout>} />
+              <Route path="/admin/manual" element={<AdminLayout><AdminGenerate manual /></AdminLayout>} />
+              <Route path="/admin/router" element={<AdminLayout><AdminRouter /></AdminLayout>} />
+              <Route path="/admin/packs" element={<AdminLayout><AdminPacks /></AdminLayout>} />
+              <Route path="/admin/students" element={<AdminLayout><AdminStudents /></AdminLayout>} />
+
+              <Route path="/student" element={<StudentLayout><StudentHome /></StudentLayout>} />
+              <Route path="/student/browse" element={<StudentLayout><StudentBrowse /></StudentLayout>} />
+
+              <Route path="/parent" element={<ParentLayout><ParentHome /></ParentLayout>} />
+              <Route path="/parent/packs" element={<ParentLayout><ParentPacks /></ParentLayout>} />
+
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </div>
+      </AuthProvider>
+    </LangProvider>
   );
 }
 

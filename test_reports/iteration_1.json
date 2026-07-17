@@ -1,0 +1,39 @@
+{
+  "summary": "First-run E2E testing of MYTAMAN AI Tutor MVP. Backend: 25/25 pytest tests pass covering auth, packs, content (manual + AI generate via Model Router → OpenAI), stats, router config/patch/order/prompts, role gating. Frontend: verified landing (EN/BM toggle changes copy), role card → /login?role= prefill, admin/parent/student login and role-based routing (student & parent redirected away from /admin), admin Overview stats populated, Generate → AI (OpenAI provider fallback via EMERGENT_LLM_KEY worked in ~5-10s) + Publish, Router page (toggle, up/down, save-key, save-prompts), Packs create, Student browse/enroll, Student content grid + modal open/close, Parent packs select, and Register new student.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin/Student/Parent dashboards", "issues": ["Page H1 headings ('Daily operations', 'Generate content with AI', 'Set up content manually', 'Tutor Packs', 'My learning', \"Your child's progress\", 'Available Tutor Packs', 'Select packs for your child', 'Welcome back', 'Create your account') are hardcoded English strings and do NOT switch when EN/BM toggle is used. Sidebar labels + section overlines DO translate via t() correctly. Recommend routing these H1 strings through LangContext to fulfill the 'EN + BM from day 1' promise across all dashboards."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Localize hardcoded H1 headings in admin/parent/student pages and Login/Register (currently only navigation labels / overlines are translated).",
+    "OPTIONAL: `content-grid` container and its child items both share the `data-testid` prefix `content-` — consider renaming the container to something like `student-content-grid` to avoid selector confusion in tests. Not a runtime bug."
+  ],
+  "critical_code_review_comments": [
+    "Overview.jsx swallows /content/stats errors with `.catch(() => {})` — good UX but hides 401/403 debugging. Consider showing a toast on failure.",
+    "Generate.jsx: `useEffect` uses eslint-disable for deps; safe here since loadPacks/loadItems close over stable refs, but could be cleaner with useCallback.",
+    "model_router.py `_resolve_key` order: env var overrides UI-entered key then falls back to EMERGENT_LLM_KEY — this means saved UI keys are effectively ignored when OPENAI_API_KEY etc. are set in .env. Current .env only sets EMERGENT_LLM_KEY so behaviour is correct today, but the precedence should be documented (UI shows 'key ready' if any of env/ui/emergent is present).",
+    "content.py `/content/list` for admin (`only_published=False` and role=admin) will still return unpublished, but for admins default is to show all — verified working. Response includes `source_text` in DB but not in Pydantic response, good.",
+    "Packs.jsx: `pack-desc` textarea is optional in UI but backend model marks `description` as required (no default). Empty description will 422. Consider adding `required` or a server-side default.",
+    "server.py: async mongo client is created in both server.py and db.py — two separate `AsyncIOMotorClient` connections to the same URL. Minor duplication; consider unifying.",
+    "auth.py stores `_verify` using bcrypt but does not enforce max-length (>72 bytes truncates silently in bcrypt). Low risk for MVP.",
+    "Language toggle only wired via LangContext; no <html lang> attribute updated on <html>. Minor a11y."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@mytaman.ai / Admin@12345, parent@mytaman.ai / Parent@12345, student@mytaman.ai / Student@12345 (from /app/memory/test_credentials.md, all verified working)",
+  "seed_data_creation": "Created via UI: TEST Pack TESTPK_3572 (admin/packs), TEST_Pack_b5624a (backend test), test AI-generated summary content 'TEST AI 3619' (published), new registered student TEST_ui_303644@example.com. Backend test also created several TEST_* packs and TEST_ registered users. Backend tests also patched Router state (order restored, prompts overwritten with 'TEST PROMPT — please summarize.' for chapter_summary — main agent may want to re-seed default prompts if desired).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All critical paths pass. AI generation goes through EMERGENT_LLM_KEY (provider = 'openai' returned). Backend regression file at /app/backend/tests/backend_test.py — 25 tests, ~11s run. Notable minor UX finding: H1 headings on dashboards/auth pages are not translated (only sidebar/overlines are). The `content-grid` container shares testid prefix with its item buttons; use `button[data-testid^=\"content-\"]` to select items. Backend Router prompts were mutated during test — chapter_summary now says 'TEST PROMPT — please summarize.' — main agent may re-seed if needed."
+}
