@@ -1,0 +1,52 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: mytaman-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - mytaman
+
+  backend:
+    build:
+      context: ./backend
+    container_name: mytaman-backend
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      DB_NAME: ${DB_NAME:-mytaman}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      JWT_SECRET: ${JWT_SECRET}
+      FERNET_KEY: ${FERNET_KEY}
+      EMERGENT_LLM_KEY: ${EMERGENT_LLM_KEY}
+      # Optional direct provider keys (override router UI keys):
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    networks:
+      - mytaman
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Empty -> API calls resolve as /api/... and nginx proxies to backend.
+        REACT_APP_BACKEND_URL: ""
+    container_name: mytaman-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${APP_PORT:-3000}:80"
+    networks:
+      - mytaman
+
+networks:
+  mytaman:
+    driver: bridge
+
+volumes:
+  mongo_data:
