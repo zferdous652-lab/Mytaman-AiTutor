@@ -9,7 +9,7 @@ const LandingNav = ({ t }) => (
         <Link to="/" data-testid="nav-logo" className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2] pulse-glow" />
           <div className="font-display font-semibold tracking-tight text-white">
-            MYTAMAN <span className="text-[#00f0ff]">AI</span>
+            MYTAMAN <span className="text-[#00f0ff]">AI TUTOR</span>
           </div>
         </Link>
         <nav className="hidden md:flex items-center gap-8 text-sm text-white/70">

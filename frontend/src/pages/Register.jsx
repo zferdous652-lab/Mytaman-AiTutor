@@ -33,7 +33,7 @@ const Register = () => {
         <div className="flex items-center justify-between mb-8">
           <Link to="/" data-testid="register-logo" className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2]" />
-            <div className="font-display font-semibold text-white">MYTAMAN AI</div>
+            <div className="font-display font-semibold text-white">MYTAMAN AI TUTOR</div>
           </Link>
           <LanguageToggle testId="register-lang" />
         </div>

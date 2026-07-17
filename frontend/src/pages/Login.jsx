@@ -49,7 +49,7 @@ const Login = () => {
         <div className="relative h-full flex flex-col justify-between p-12">
           <Link to="/" className="flex items-center gap-2" data-testid="login-logo">
             <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2]" />
-            <div className="font-display font-semibold text-white">MYTAMAN AI</div>
+            <div className="font-display font-semibold text-white">MYTAMAN AI TUTOR</div>
           </Link>
           <div>
             <div className="overline text-[#00f0ff]">{t("tagline")}</div>
