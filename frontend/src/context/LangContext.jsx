@@ -9,7 +9,7 @@ const dict = {
     hero_title_1: "Personalised tutoring",
     hero_title_2: "for every learner.",
     hero_sub:
-      "MYTAMAN AI Tutor blends pre-built KSSM curriculum with adaptive AI that generates summaries, quizzes, flashcards and mind maps — in English and Bahasa Melayu.",
+      "MYTAMAN AI TUTOR blends pre-built KSSM curriculum with adaptive AI that generates summaries, quizzes, flashcards and mind maps — in English and Bahasa Melayu.",
     get_started: "Get started",
     login_admin: "Admin login",
     login_parent: "Parent login",
@@ -33,7 +33,7 @@ const dict = {
     contact_title: "Contact us",
     contact_body: "Reach the team for partnerships, school pilots, or enterprise licensing.",
     email: "Email",
-    footer: "© MYTAMAN AI Tutor. Built with adaptive AI.",
+    footer: "© MYTAMAN AI TUTOR. Built with adaptive AI.",
     // auth
     email_ph: "you@school.edu",
     password: "Password",
@@ -83,7 +83,7 @@ const dict = {
     hero_title_1: "Tutor peribadi",
     hero_title_2: "untuk setiap pelajar.",
     hero_sub:
-      "MYTAMAN AI Tutor menggabungkan kurikulum KSSM sedia ada dengan AI adaptif — menjana ringkasan, kuiz, kad imbas dan peta minda dalam Bahasa Melayu dan Inggeris.",
+      "MYTAMAN AI TUTOR menggabungkan kurikulum KSSM sedia ada dengan AI adaptif — menjana ringkasan, kuiz, kad imbas dan peta minda dalam Bahasa Melayu dan Inggeris.",
     get_started: "Mula sekarang",
     login_admin: "Log masuk Admin",
     login_parent: "Log masuk Ibu Bapa",
@@ -107,7 +107,7 @@ const dict = {
     contact_title: "Hubungi kami",
     contact_body: "Hubungi kami untuk kerjasama, uji-jalan sekolah, atau lesen enterprise.",
     email: "Emel",
-    footer: "© MYTAMAN AI Tutor. Dibina dengan AI adaptif.",
+    footer: "© MYTAMAN AI TUTOR. Dibina dengan AI adaptif.",
     email_ph: "anda@sekolah.edu",
     password: "Kata laluan",
     name: "Nama penuh",
