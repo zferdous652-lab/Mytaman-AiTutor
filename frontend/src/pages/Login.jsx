@@ -105,12 +105,6 @@ const Login = () => {
               {t("sign_up")}
             </Link>
           </div>
-          <div className="mt-8 rounded-xl border border-white/10 bg-white/5 p-4 text-xs text-white/60 font-mono">
-            <div className="text-white/80 mb-2">Demo accounts</div>
-            admin@mytaman.ai / Admin@12345<br />
-            parent@mytaman.ai / Parent@12345<br />
-            student@mytaman.ai / Student@12345
-          </div>
         </div>
       </div>
     </div>
