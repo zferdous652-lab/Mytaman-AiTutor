@@ -303,23 +303,32 @@ const ManualContent = () => {
   }, []);
   useEffect(() => { loadDrafts(packId); }, [packId, loadDrafts]);
 
-  // Hydrate the visible builder fields from the working set whenever the selected
-  // chapter/type/language changes (fires after any state batch that also updated workingSet).
-  useEffect(() => {
-    if (!chapterId) return;
-    const entry = workingSet[keyFor(chapterId, contentType, language)];
+  // Pushes a working-set entry's payload into the visible builder fields. Called directly
+  // (not just via effect) so it also works when the target selection is already the current
+  // one -- e.g. loading a draft whose first item matches what's already on screen, where
+  // chapterId/contentType/language wouldn't actually change and an effect keyed on them
+  // would never re-fire.
+  const applyHydration = (map, cid, ctype, lang) => {
+    const entry = map[keyFor(cid, ctype, lang)];
     const p = entry?.payload || {};
-    if (contentType === "summary") setBody(p.body || "");
-    if (contentType === "notes") setNotes(p.notes?.length ? p.notes : [""]);
-    if (contentType === "quiz") {
+    if (ctype === "summary") setBody(p.body || "");
+    if (ctype === "notes") setNotes(p.notes?.length ? p.notes : [""]);
+    if (ctype === "quiz") {
       setQuestions(
         p.questions?.length
           ? p.questions.map((q) => ({ ...q, options: q.options || ["", "", "", ""], correct_answer: q.correct_answer || "" }))
           : [emptyQuestion()]
       );
     }
-    if (contentType === "flashcards") setCards(p.cards?.length ? p.cards : [{ front: "", back: "" }]);
-    if (contentType === "mindmap") setMindmap({ image_url: p.image_url || "", caption: p.caption || "" });
+    if (ctype === "flashcards") setCards(p.cards?.length ? p.cards : [{ front: "", back: "" }]);
+    if (ctype === "mindmap") setMindmap({ image_url: p.image_url || "", caption: p.caption || "" });
+  };
+
+  // Safety net for indirect chapter changes (e.g. auto-selecting a chapter after switching
+  // Course, which happens asynchronously via loadChapters and can't call applyHydration directly).
+  useEffect(() => {
+    if (!chapterId) return;
+    applyHydration(workingSet, chapterId, contentType, language);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chapterId, contentType, language]);
 
@@ -373,9 +382,21 @@ const ManualContent = () => {
     setPackId(pid);
   };
   const switchCourse = (cid) => { syncCurrent(); setCourseId(cid); };
-  const switchChapter = (cid) => { syncCurrent(); setChapterId(cid); };
-  const switchContentType = (ct) => { syncCurrent(); setContentType(ct); };
-  const switchLanguage = (l) => { syncCurrent(); setLanguage(l); };
+  const switchChapter = (cid) => {
+    const synced = syncCurrent();
+    setChapterId(cid);
+    applyHydration(synced, cid, contentType, language);
+  };
+  const switchContentType = (ct) => {
+    const synced = syncCurrent();
+    setContentType(ct);
+    applyHydration(synced, chapterId, ct, language);
+  };
+  const switchLanguage = (l) => {
+    const synced = syncCurrent();
+    setLanguage(l);
+    applyHydration(synced, chapterId, contentType, l);
+  };
 
   const addCourse = async () => {
     if (!newCourseTitle.trim() || !packId) return;
@@ -419,14 +440,12 @@ const ManualContent = () => {
   };
 
   const jumpToPending = (entry) => {
-    syncCurrent();
-    setCourseId((cur) => {
-      const owningCourse = courses.find((c) => c.id === entry.course_id) ? entry.course_id : cur;
-      return owningCourse;
-    });
+    const synced = syncCurrent();
+    if (courses.find((c) => c.id === entry.course_id)) setCourseId(entry.course_id);
     setChapterId(entry.chapter_id);
     setContentType(entry.content_type);
     setLanguage(entry.language);
+    applyHydration(synced, entry.chapter_id, entry.content_type, entry.language);
   };
 
   const save = async () => {
@@ -449,6 +468,11 @@ const ManualContent = () => {
       });
       toast.success(`Draft ${data.draft_index} saved with ${data.items.length} item(s)`);
       setWorkingSet({});
+      setBody("");
+      setNotes([""]);
+      setQuestions([emptyQuestion()]);
+      setCards([{ front: "", back: "" }]);
+      setMindmap({ image_url: "", caption: "" });
       await loadDrafts(packId);
     } catch (err2) {
       toast.error(err2?.response?.data?.detail?.[0]?.msg || err2?.response?.data?.detail || "Save failed");
@@ -475,6 +499,7 @@ const ManualContent = () => {
       setChapterId(first.chapter_id);
       setContentType(first.content_type);
       setLanguage(first.language);
+      applyHydration(next, first.chapter_id, first.content_type, first.language);
     }
     toast.success(`Draft ${draft.draft_index} loaded — browse chapters/types below to view or edit each item, then Save to create a new version`);
   };
