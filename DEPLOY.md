@@ -132,7 +132,7 @@ docker compose exec mongo mongosh
 
 ## 7. Round-trip workflow
 
-1. New code gets pushed to GitHub from the Emergent workspace.
+1. New code gets pushed to GitHub.
 2. On the VM:
    ```bash
    cd mytaman-ai-tutor
