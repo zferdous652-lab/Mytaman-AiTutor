@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, X, Upload, CheckCircle2, FileEdit } from "lucide-react";
+import { Plus, X, Upload, CheckCircle2, FileEdit, Pencil } from "lucide-react";
 import { api } from "@/lib/api";
 
 const TYPES = [
@@ -236,6 +236,86 @@ const MindmapBuilder = ({ mindmap, setMindmap, uploading, onUpload }) => {
   );
 };
 
+// ---------- Rendered content preview (per content type, not raw JSON) ----------
+const QUESTION_TYPE_LABEL = { mcq: "Multiple choice", true_false: "True / False", short_answer: "Short answer" };
+
+const ContentPreview = ({ draft }) => {
+  const { content_type, payload } = draft;
+
+  if (content_type === "summary") {
+    return <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{payload?.body}</p>;
+  }
+
+  if (content_type === "notes") {
+    return (
+      <ul className="space-y-1.5 text-sm text-white/80">
+        {(payload?.notes || []).map((n, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="text-[#00f0ff]">•</span> <span>{n}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  if (content_type === "quiz") {
+    return (
+      <div className="space-y-4">
+        {(payload?.questions || []).map((q, i) => (
+          <div key={i} className="text-sm">
+            <div className="text-white/90">
+              <span className="text-white/40 font-mono text-xs mr-1">Q{i + 1}.</span>
+              {q.question}
+              <span className="ml-2 text-[10px] uppercase tracking-widest text-white/30">{QUESTION_TYPE_LABEL[q.type]}</span>
+            </div>
+            {q.type === "mcq" && (
+              <ul className="mt-1 space-y-0.5 pl-5">
+                {(q.options || []).map((opt, oi) => (
+                  <li key={oi} className={opt === q.correct_answer ? "text-[#00ff66]" : "text-white/60"}>
+                    {opt === q.correct_answer ? "✓ " : "— "}{opt}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {q.type === "true_false" && (
+              <div className="mt-1 pl-5 text-[#00ff66]">Answer: {q.correct_answer?.toUpperCase()}</div>
+            )}
+            {q.type === "short_answer" && q.correct_answer && (
+              <div className="mt-1 pl-5 text-white/50">Reference answer: {q.correct_answer}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (content_type === "flashcards") {
+    return (
+      <div className="space-y-2">
+        {(payload?.cards || []).map((c, i) => (
+          <div key={i} className="rounded-xl border border-white/10 bg-white/5 p-3 grid grid-cols-2 gap-3 text-sm">
+            <div className="text-white/90">{c.front}</div>
+            <div className="text-white/60 border-l border-white/10 pl-3">{c.back}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (content_type === "mindmap") {
+    return (
+      <div>
+        {payload?.image_url && (
+          <img src={payload.image_url} alt="Mind map" className="w-full max-h-72 object-contain rounded-xl bg-black/30 border border-white/10" />
+        )}
+        {payload?.caption && <div className="mt-2 text-xs text-white/50">{payload.caption}</div>}
+      </div>
+    );
+  }
+
+  return null;
+};
+
 const ManualContent = () => {
   const [packs, setPacks] = useState([]);
   const [packId, setPackId] = useState("");
@@ -397,6 +477,23 @@ const ManualContent = () => {
     if (previewDraft?.id === id) setPreviewDraft(data);
   };
 
+  const editDraft = (d) => {
+    const p = d.payload || {};
+    if (d.content_type === "summary") setBody(p.body || "");
+    if (d.content_type === "notes") setNotes(p.notes?.length ? p.notes : [""]);
+    if (d.content_type === "quiz") {
+      setQuestions(
+        p.questions?.length
+          ? p.questions.map((q) => ({ ...q, options: q.options || ["", "", "", ""], correct_answer: q.correct_answer || "" }))
+          : [emptyQuestion()]
+      );
+    }
+    if (d.content_type === "flashcards") setCards(p.cards?.length ? p.cards : [{ front: "", back: "" }]);
+    if (d.content_type === "mindmap") setMindmap({ image_url: p.image_url || "", caption: p.caption || "" });
+    setPreviewDraft(d);
+    toast.success(`Draft ${d.draft_index} loaded into editor — edit and Save to create a new version`);
+  };
+
   const selectedChapter = chapters.find((c) => c.id === chapterId);
 
   return (
@@ -546,9 +643,9 @@ const ManualContent = () => {
                 <div className="mt-1 text-xs font-mono text-white/50">
                   Draft {previewDraft.draft_index} · {previewDraft.status}
                 </div>
-                <pre className="mt-3 whitespace-pre-wrap text-sm text-white/80 font-mono leading-relaxed max-h-80 overflow-auto">
-                  {JSON.stringify(previewDraft.payload, null, 2)}
-                </pre>
+                <div className="mt-3 max-h-96 overflow-auto">
+                  <ContentPreview draft={previewDraft} />
+                </div>
               </div>
             )}
           </div>
@@ -567,20 +664,31 @@ const ManualContent = () => {
                     Draft {d.draft_index}
                     <span className="ml-2 text-[10px] uppercase tracking-widest text-white/40">{d.status}</span>
                   </button>
-                  {d.status === "confirmed" ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-[#00ff66] uppercase tracking-widest">
-                      <CheckCircle2 size={12} /> Confirmed
-                    </span>
-                  ) : (
+                  <div className="flex items-center gap-3 shrink-0">
                     <button
                       type="button"
-                      onClick={() => confirmDraft(d.id)}
-                      className="text-[10px] uppercase tracking-widest text-[#00f0ff] hover:underline"
-                      data-testid={`draft-${d.draft_index}-confirm`}
+                      onClick={() => editDraft(d)}
+                      className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-white/50 hover:text-[#00f0ff]"
+                      data-testid={`draft-${d.draft_index}-edit`}
+                      title="Load into editor"
                     >
-                      Confirm
+                      <Pencil size={11} /> Edit
                     </button>
-                  )}
+                    {d.status === "confirmed" ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-[#00ff66] uppercase tracking-widest">
+                        <CheckCircle2 size={12} /> Confirmed
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => confirmDraft(d.id)}
+                        className="text-[10px] uppercase tracking-widest text-[#00f0ff] hover:underline"
+                        data-testid={`draft-${d.draft_index}-confirm`}
+                      >
+                        Confirm
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
               {drafts.length === 0 && <div className="text-xs text-white/40">No drafts yet.</div>}
