@@ -14,6 +14,7 @@ import Register from "@/pages/Register";
 
 import AdminOverview from "@/pages/admin/Overview";
 import AdminGenerate from "@/pages/admin/Generate";
+import AdminManualContent from "@/pages/admin/ManualContent";
 import AdminRouter from "@/pages/admin/Router";
 import AdminPacks from "@/pages/admin/Packs";
 import AdminStudents from "@/pages/admin/Students";
@@ -51,7 +52,7 @@ function App() {
 
               <Route path="/admin" element={<AdminLayout><AdminOverview /></AdminLayout>} />
               <Route path="/admin/generate" element={<AdminLayout><AdminGenerate /></AdminLayout>} />
-              <Route path="/admin/manual" element={<AdminLayout><AdminGenerate manual /></AdminLayout>} />
+              <Route path="/admin/manual" element={<AdminLayout><AdminManualContent /></AdminLayout>} />
               <Route path="/admin/router" element={<AdminLayout><AdminRouter /></AdminLayout>} />
               <Route path="/admin/packs" element={<AdminLayout><AdminPacks /></AdminLayout>} />
               <Route path="/admin/students" element={<AdminLayout><AdminStudents /></AdminLayout>} />

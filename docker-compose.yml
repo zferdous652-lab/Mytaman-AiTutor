@@ -26,6 +26,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    volumes:
+      - backend_uploads:/app/uploads
     networks:
       - mytaman
 
@@ -50,3 +52,4 @@ networks:
 
 volumes:
   mongo_data:
+  backend_uploads:

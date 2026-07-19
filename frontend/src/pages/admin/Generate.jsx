@@ -12,7 +12,7 @@ const TYPES = [
   { v: "notes", label: "Notes" },
 ];
 
-const Generate = ({ manual = false }) => {
+const Generate = () => {
   const { t, lang } = useLang();
   const [packs, setPacks] = useState([]);
   const [form, setForm] = useState({
@@ -20,7 +20,6 @@ const Generate = ({ manual = false }) => {
     title: "",
     content_type: "summary",
     source_text: "",
-    body: "",
     language: lang,
   });
   const [result, setResult] = useState(null);
@@ -44,27 +43,15 @@ const Generate = ({ manual = false }) => {
     setBusy(true);
     setResult(null);
     try {
-      if (manual) {
-        const { data } = await api.post("/content/manual", {
-          pack_id: form.pack_id,
-          title: form.title,
-          content_type: form.content_type,
-          body: form.body,
-          language: form.language,
-        });
-        setResult(data);
-        toast.success("Content saved");
-      } else {
-        const { data } = await api.post("/content/generate", {
-          pack_id: form.pack_id,
-          title: form.title,
-          content_type: form.content_type,
-          source_text: form.source_text,
-          language: form.language,
-        });
-        setResult(data);
-        toast.success(`Generated via ${data.provider}`);
-      }
+      const { data } = await api.post("/content/generate", {
+        pack_id: form.pack_id,
+        title: form.title,
+        content_type: form.content_type,
+        source_text: form.source_text,
+        language: form.language,
+      });
+      setResult(data);
+      toast.success(`Generated via ${data.provider}`);
       loadItems();
     } catch (err) {
       toast.error(err?.response?.data?.detail?.message || err?.response?.data?.detail || "Failed");
@@ -80,13 +67,13 @@ const Generate = ({ manual = false }) => {
 
   return (
     <div className="p-8 lg:p-12">
-      <div className="overline text-[#00f0ff]">{manual ? t("manual") : t("generate")}</div>
+      <div className="overline text-[#00f0ff]">{t("generate")}</div>
       <h1 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mt-2 mb-8">
-        {manual ? "Set up content manually" : "Generate content with AI"}
+        Generate content with AI
       </h1>
 
       <div className="grid lg:grid-cols-5 gap-6">
-        <form onSubmit={submit} className="lg:col-span-3 space-y-4 rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6" data-testid={manual ? "manual-form" : "generate-form"}>
+        <form onSubmit={submit} className="lg:col-span-3 space-y-4 rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6" data-testid="generate-form">
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-white/60">{t("pack")}</label>
@@ -139,15 +126,15 @@ const Generate = ({ manual = false }) => {
             </div>
           </div>
           <div>
-            <label className="text-xs text-white/60">{manual ? "Body" : t("source_material")}</label>
+            <label className="text-xs text-white/60">{t("source_material")}</label>
             <textarea
-              data-testid={manual ? "gen-body" : "gen-source"}
+              data-testid="gen-source"
               required
               rows={10}
-              value={manual ? form.body : form.source_text}
-              onChange={(e) => setForm({ ...form, [manual ? "body" : "source_text"]: e.target.value })}
+              value={form.source_text}
+              onChange={(e) => setForm({ ...form, source_text: e.target.value })}
               className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white font-mono text-sm leading-relaxed"
-              placeholder={manual ? "Type or paste the content..." : "Paste chapter text, curriculum notes, or lesson material..."}
+              placeholder="Paste chapter text, curriculum notes, or lesson material..."
             />
           </div>
           <button
@@ -157,7 +144,7 @@ const Generate = ({ manual = false }) => {
             className="inline-flex items-center gap-2 rounded-full bg-[#00f0ff] px-6 py-2.5 text-sm font-semibold text-black hover:bg-white transition-colors disabled:opacity-50"
           >
             <Sparkles size={14} />
-            {busy ? t("generating") : manual ? t("save_manual") : t("generate_btn")}
+            {busy ? t("generating") : t("generate_btn")}
           </button>
         </form>
 
