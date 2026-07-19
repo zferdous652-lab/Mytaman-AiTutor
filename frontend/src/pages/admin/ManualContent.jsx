@@ -263,6 +263,10 @@ const ManualContent = () => {
   // Pending content, accumulated client-side across chapters/types until "Save content"
   // bundles it all into a single pack-level draft. Keyed by chapter+type+language.
   const [workingSet, setWorkingSet] = useState({});
+  // Which draft (by id) the working set currently mirrors, so the Drafts panel can
+  // highlight it -- also doubles as a diagnostic: if the highlight moves but the fields
+  // don't, the bug is in hydration; if the highlight doesn't move, it's a click/event bug.
+  const [activeDraftId, setActiveDraftId] = useState(null);
 
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [newChapterTitle, setNewChapterTitle] = useState("");
@@ -379,6 +383,7 @@ const ManualContent = () => {
   const switchPack = (pid) => {
     if (Object.keys(workingSet).length > 0) toast("Switched Tutor Pack — pending items cleared.");
     setWorkingSet({});
+    setActiveDraftId(null);
     setPackId(pid);
   };
   const switchCourse = (cid) => { syncCurrent(); setCourseId(cid); };
@@ -468,6 +473,7 @@ const ManualContent = () => {
       });
       toast.success(`Draft ${data.draft_index} saved with ${data.items.length} item(s)`);
       setWorkingSet({});
+      setActiveDraftId(null);
       setBody("");
       setNotes([""]);
       setQuestions([emptyQuestion()]);
@@ -498,6 +504,7 @@ const ManualContent = () => {
       toast(`Discarded ${orphanedKeys.length} pending item(s) not part of Draft ${draft.draft_index}`);
     }
     setWorkingSet(next);
+    setActiveDraftId(draft.id);
     const first = draft.items[0];
     if (first) {
       setCourseId(first.course_id);
@@ -682,20 +689,26 @@ const ManualContent = () => {
           <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6">
             <div className="overline text-[#00f0ff] mb-3">Drafts</div>
             <div className="space-y-2 max-h-[32rem] overflow-auto" data-testid="drafts-list">
-              {drafts.map((d) => (
+              {drafts.map((d) => {
+                const isActive = d.id === activeDraftId;
+                return (
                 <div
                   role="button"
                   tabIndex={0}
                   key={d.id}
                   onClick={() => loadDraftIntoWorkingSet(d)}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") loadDraftIntoWorkingSet(d); }}
-                  className="w-full flex items-center justify-between gap-3 border-b border-white/5 pb-2 text-left hover:bg-white/5 rounded-lg px-1 -mx-1 transition-colors cursor-pointer"
+                  className={`w-full flex items-center justify-between gap-3 border pb-2 pt-2 rounded-lg px-3 -mx-1 transition-colors cursor-pointer ${
+                    isActive ? "border-[#00f0ff] bg-[#00f0ff]/10" : "border-transparent border-b-white/5 hover:bg-white/5"
+                  }`}
                   data-testid={`draft-${d.draft_index}`}
+                  data-active={isActive}
                 >
                   <div>
-                    <div className="text-sm text-white">
+                    <div className="text-sm text-white flex items-center gap-1.5">
+                      {isActive && <span className="h-1.5 w-1.5 rounded-full bg-[#00f0ff]" />}
                       Draft {d.draft_index}
-                      <span className="ml-2 text-[10px] uppercase tracking-widest text-white/40">{d.status}</span>
+                      <span className="ml-1 text-[10px] uppercase tracking-widest text-white/40">{d.status}</span>
                     </div>
                     <div className="text-[10px] text-white/40 mt-0.5">{d.items.length} item(s)</div>
                   </div>
@@ -714,7 +727,8 @@ const ManualContent = () => {
                     </button>
                   )}
                 </div>
-              ))}
+                );
+              })}
               {drafts.length === 0 && <div className="text-xs text-white/40">No drafts yet.</div>}
             </div>
           </div>
