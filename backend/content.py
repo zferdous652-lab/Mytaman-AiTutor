@@ -116,6 +116,14 @@ class TextPayload(BaseModel):
     body: str = Field(min_length=1)
 
 
+class NotesPayload(BaseModel):
+    notes: List[str] = Field(min_length=1, max_length=200)
+
+    def validate_shape(self):
+        if any(not n.strip() for n in self.notes):
+            raise ValueError("Notes cannot be empty")
+
+
 def _validate_payload(content_type: str, payload: dict) -> dict:
     try:
         if content_type == "quiz":
@@ -127,7 +135,11 @@ def _validate_payload(content_type: str, payload: dict) -> dict:
             return FlashcardsPayload(**payload).model_dump()
         if content_type == "mindmap":
             return MindmapPayload(**payload).model_dump()
-        # summary / notes
+        if content_type == "notes":
+            parsed = NotesPayload(**payload)
+            parsed.validate_shape()
+            return parsed.model_dump()
+        # summary
         return TextPayload(**payload).model_dump()
     except (ValidationError, ValueError) as e:
         raise HTTPException(status_code=422, detail=f"Invalid payload for {content_type}: {e}")

@@ -157,6 +157,36 @@ const FlashcardsBuilder = ({ cards, setCards }) => {
   );
 };
 
+// ---------- Notes builder (structured bullet points) ----------
+const NotesBuilder = ({ notes, setNotes }) => {
+  const addNote = () => setNotes([...notes, ""]);
+  const removeNote = (idx) => setNotes(notes.filter((_, i) => i !== idx));
+  const patch = (idx, value) => setNotes(notes.map((n, i) => (i === idx ? value : n)));
+
+  return (
+    <div className="space-y-2" data-testid="notes-builder">
+      {notes.map((n, idx) => (
+        <div key={idx} className="flex items-center gap-2" data-testid={`note-${idx}`}>
+          <span className="text-xs font-mono text-white/40 w-14 shrink-0">Note {idx + 1}</span>
+          <input
+            value={n}
+            onChange={(e) => patch(idx, e.target.value)}
+            placeholder="Key point..."
+            className={smallInputCls + " flex-1"}
+            data-testid={`note-${idx}-text`}
+          />
+          <button type="button" onClick={() => removeNote(idx)} className="text-white/40 hover:text-white">
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+      <button type="button" onClick={addNote} className="inline-flex items-center gap-1 text-xs text-[#00f0ff] hover:underline" data-testid="note-add">
+        <Plus size={12} /> Add note
+      </button>
+    </div>
+  );
+};
+
 // ---------- Mind map builder (image upload) ----------
 const MindmapBuilder = ({ mindmap, setMindmap, uploading, onUpload }) => {
   const [dragOver, setDragOver] = useState(false);
@@ -227,6 +257,7 @@ const ManualContent = () => {
   const [questions, setQuestions] = useState([emptyQuestion()]);
   const [cards, setCards] = useState([{ front: "", back: "" }]);
   const [mindmap, setMindmap] = useState({ image_url: "", caption: "" });
+  const [notes, setNotes] = useState([""]);
 
   const loadPacks = async () => {
     const { data } = await api.get("/packs/list");
@@ -291,7 +322,8 @@ const ManualContent = () => {
   };
 
   const buildPayload = () => {
-    if (contentType === "summary" || contentType === "notes") return { body };
+    if (contentType === "summary") return { body };
+    if (contentType === "notes") return { notes: notes.map((n) => n.trim()).filter(Boolean) };
     if (contentType === "quiz") {
       return {
         questions: questions.map((q) => ({
@@ -309,8 +341,11 @@ const ManualContent = () => {
 
   const validate = () => {
     if (!chapterId) return "Select a chapter first.";
-    if (contentType === "summary" || contentType === "notes") {
+    if (contentType === "summary") {
       if (!body.trim()) return "Body cannot be empty.";
+    }
+    if (contentType === "notes") {
+      if (notes.every((n) => !n.trim())) return "Add at least one note.";
     }
     if (contentType === "quiz") {
       if (questions.length === 0) return "Add at least one question.";
@@ -470,16 +505,17 @@ const ManualContent = () => {
                 {TYPES.find((t) => t.v === contentType)?.label} for <span className="text-white">{selectedChapter.title}</span>
               </div>
 
-              {(contentType === "summary" || contentType === "notes") && (
+              {contentType === "summary" && (
                 <textarea
                   rows={10}
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   className={inputCls + " font-mono text-sm leading-relaxed"}
-                  placeholder="Type or paste the content..."
+                  placeholder="Write a brief overview of this chapter..."
                   data-testid="mc-body"
                 />
               )}
+              {contentType === "notes" && <NotesBuilder notes={notes} setNotes={setNotes} />}
               {contentType === "quiz" && <QuizBuilder questions={questions} setQuestions={setQuestions} />}
               {contentType === "flashcards" && <FlashcardsBuilder cards={cards} setCards={setCards} />}
               {contentType === "mindmap" && (
