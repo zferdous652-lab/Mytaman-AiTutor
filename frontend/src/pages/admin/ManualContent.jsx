@@ -488,9 +488,14 @@ const ManualContent = () => {
   };
 
   const loadDraftIntoWorkingSet = (draft) => {
+    const synced = syncCurrent();
     const next = {};
     for (const item of draft.items) {
       next[keyFor(item.chapter_id, item.content_type, item.language)] = { ...item };
+    }
+    const orphanedKeys = Object.keys(synced).filter((k) => !(k in next));
+    if (orphanedKeys.length > 0) {
+      toast(`Discarded ${orphanedKeys.length} pending item(s) not part of Draft ${draft.draft_index}`);
     }
     setWorkingSet(next);
     const first = draft.items[0];
