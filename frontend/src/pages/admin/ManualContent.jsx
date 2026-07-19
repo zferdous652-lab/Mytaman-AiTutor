@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, X, Upload, CheckCircle2, FileEdit, Pencil } from "lucide-react";
+import { Plus, X, Upload, CheckCircle2, FileEdit } from "lucide-react";
 import { api } from "@/lib/api";
 
 const TYPES = [
@@ -236,84 +236,15 @@ const MindmapBuilder = ({ mindmap, setMindmap, uploading, onUpload }) => {
   );
 };
 
-// ---------- Rendered content preview (per content type, not raw JSON) ----------
-const QUESTION_TYPE_LABEL = { mcq: "Multiple choice", true_false: "True / False", short_answer: "Short answer" };
+const keyFor = (chapterId, contentType, language) => `${chapterId}::${contentType}::${language}`;
 
-const ContentPreview = ({ draft }) => {
-  const { content_type, payload } = draft;
-
-  if (content_type === "summary") {
-    return <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{payload?.body}</p>;
-  }
-
-  if (content_type === "notes") {
-    return (
-      <ul className="space-y-1.5 text-sm text-white/80">
-        {(payload?.notes || []).map((n, i) => (
-          <li key={i} className="flex gap-2">
-            <span className="text-[#00f0ff]">•</span> <span>{n}</span>
-          </li>
-        ))}
-      </ul>
-    );
-  }
-
-  if (content_type === "quiz") {
-    return (
-      <div className="space-y-4">
-        {(payload?.questions || []).map((q, i) => (
-          <div key={i} className="text-sm">
-            <div className="text-white/90">
-              <span className="text-white/40 font-mono text-xs mr-1">Q{i + 1}.</span>
-              {q.question}
-              <span className="ml-2 text-[10px] uppercase tracking-widest text-white/30">{QUESTION_TYPE_LABEL[q.type]}</span>
-            </div>
-            {q.type === "mcq" && (
-              <ul className="mt-1 space-y-0.5 pl-5">
-                {(q.options || []).map((opt, oi) => (
-                  <li key={oi} className={opt === q.correct_answer ? "text-[#00ff66]" : "text-white/60"}>
-                    {opt === q.correct_answer ? "✓ " : "— "}{opt}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {q.type === "true_false" && (
-              <div className="mt-1 pl-5 text-[#00ff66]">Answer: {q.correct_answer?.toUpperCase()}</div>
-            )}
-            {q.type === "short_answer" && q.correct_answer && (
-              <div className="mt-1 pl-5 text-white/50">Reference answer: {q.correct_answer}</div>
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (content_type === "flashcards") {
-    return (
-      <div className="space-y-2">
-        {(payload?.cards || []).map((c, i) => (
-          <div key={i} className="rounded-xl border border-white/10 bg-white/5 p-3 grid grid-cols-2 gap-3 text-sm">
-            <div className="text-white/90">{c.front}</div>
-            <div className="text-white/60 border-l border-white/10 pl-3">{c.back}</div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (content_type === "mindmap") {
-    return (
-      <div>
-        {payload?.image_url && (
-          <img src={payload.image_url} alt="Mind map" className="w-full max-h-72 object-contain rounded-xl bg-black/30 border border-white/10" />
-        )}
-        {payload?.caption && <div className="mt-2 text-xs text-white/50">{payload.caption}</div>}
-      </div>
-    );
-  }
-
-  return null;
+const isMeaningful = (contentType, payload) => {
+  if (contentType === "summary") return !!(payload.body || "").trim();
+  if (contentType === "notes") return (payload.notes || []).some((n) => n.trim());
+  if (contentType === "quiz") return (payload.questions || []).some((q) => q.question?.trim());
+  if (contentType === "flashcards") return (payload.cards || []).some((c) => c.front?.trim() || c.back?.trim());
+  if (contentType === "mindmap") return !!payload.image_url;
+  return false;
 };
 
 const ManualContent = () => {
@@ -326,9 +257,12 @@ const ManualContent = () => {
   const [contentType, setContentType] = useState("summary");
   const [language, setLanguage] = useState("en");
   const [drafts, setDrafts] = useState([]);
-  const [previewDraft, setPreviewDraft] = useState(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // Pending content, accumulated client-side across chapters/types until "Save content"
+  // bundles it all into a single pack-level draft. Keyed by chapter+type+language.
+  const [workingSet, setWorkingSet] = useState({});
 
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [newChapterTitle, setNewChapterTitle] = useState("");
@@ -362,12 +296,86 @@ const ManualContent = () => {
   }, []);
   useEffect(() => { loadChapters(courseId); }, [courseId, loadChapters]);
 
-  const loadDrafts = useCallback(async () => {
-    if (!chapterId) { setDrafts([]); return; }
-    const { data } = await api.get("/content/drafts", { params: { chapter_id: chapterId, content_type: contentType, language } });
+  const loadDrafts = useCallback(async (pid) => {
+    if (!pid) { setDrafts([]); return; }
+    const { data } = await api.get("/content/drafts", { params: { pack_id: pid } });
     setDrafts(data);
+  }, []);
+  useEffect(() => { loadDrafts(packId); }, [packId, loadDrafts]);
+
+  // Hydrate the visible builder fields from the working set whenever the selected
+  // chapter/type/language changes (fires after any state batch that also updated workingSet).
+  useEffect(() => {
+    if (!chapterId) return;
+    const entry = workingSet[keyFor(chapterId, contentType, language)];
+    const p = entry?.payload || {};
+    if (contentType === "summary") setBody(p.body || "");
+    if (contentType === "notes") setNotes(p.notes?.length ? p.notes : [""]);
+    if (contentType === "quiz") {
+      setQuestions(
+        p.questions?.length
+          ? p.questions.map((q) => ({ ...q, options: q.options || ["", "", "", ""], correct_answer: q.correct_answer || "" }))
+          : [emptyQuestion()]
+      );
+    }
+    if (contentType === "flashcards") setCards(p.cards?.length ? p.cards : [{ front: "", back: "" }]);
+    if (contentType === "mindmap") setMindmap({ image_url: p.image_url || "", caption: p.caption || "" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chapterId, contentType, language]);
-  useEffect(() => { loadDrafts(); }, [loadDrafts]);
+
+  const selectedChapter = chapters.find((c) => c.id === chapterId);
+
+  const buildPayload = () => {
+    if (contentType === "summary") return { body };
+    if (contentType === "notes") return { notes: notes.map((n) => n.trim()).filter(Boolean) };
+    if (contentType === "quiz") {
+      return {
+        questions: questions.map((q) => ({
+          type: q.type,
+          question: q.question,
+          options: q.type === "mcq" ? q.options.filter((o) => o.trim() !== "") : undefined,
+          correct_answer: q.correct_answer || undefined,
+        })),
+      };
+    }
+    if (contentType === "flashcards") return { cards };
+    if (contentType === "mindmap") return { image_url: mindmap.image_url, caption: mindmap.caption || undefined };
+    return {};
+  };
+
+  // Persists whatever is currently in the builder fields into the working set (keyed by the
+  // CURRENT selection) and returns the updated set synchronously, so callers can switch
+  // selection right after without losing in-progress edits.
+  const syncCurrent = () => {
+    if (!chapterId) return workingSet;
+    const key = keyFor(chapterId, contentType, language);
+    const payload = buildPayload();
+    const next = { ...workingSet };
+    if (isMeaningful(contentType, payload)) {
+      next[key] = {
+        chapter_id: chapterId,
+        content_type: contentType,
+        language,
+        payload,
+        chapter_title: selectedChapter?.title,
+        course_title: courses.find((c) => c.id === courseId)?.title,
+      };
+    } else {
+      delete next[key];
+    }
+    setWorkingSet(next);
+    return next;
+  };
+
+  const switchPack = (pid) => {
+    if (Object.keys(workingSet).length > 0) toast("Switched Tutor Pack — pending items cleared.");
+    setWorkingSet({});
+    setPackId(pid);
+  };
+  const switchCourse = (cid) => { syncCurrent(); setCourseId(cid); };
+  const switchChapter = (cid) => { syncCurrent(); setChapterId(cid); };
+  const switchContentType = (ct) => { syncCurrent(); setContentType(ct); };
+  const switchLanguage = (l) => { syncCurrent(); setLanguage(l); };
 
   const addCourse = async () => {
     if (!newCourseTitle.trim() || !packId) return;
@@ -401,100 +409,77 @@ const ManualContent = () => {
     setUploading(false);
   };
 
-  const buildPayload = () => {
-    if (contentType === "summary") return { body };
-    if (contentType === "notes") return { notes: notes.map((n) => n.trim()).filter(Boolean) };
-    if (contentType === "quiz") {
-      return {
-        questions: questions.map((q) => ({
-          type: q.type,
-          question: q.question,
-          options: q.type === "mcq" ? q.options.filter((o) => o.trim() !== "") : undefined,
-          correct_answer: q.correct_answer || undefined,
-        })),
-      };
-    }
-    if (contentType === "flashcards") return { cards };
-    if (contentType === "mindmap") return { image_url: mindmap.image_url, caption: mindmap.caption || undefined };
-    return {};
+  const removePending = (key, e) => {
+    e.stopPropagation();
+    setWorkingSet((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
-  const validate = () => {
-    if (!chapterId) return "Select a chapter first.";
-    if (contentType === "summary") {
-      if (!body.trim()) return "Body cannot be empty.";
-    }
-    if (contentType === "notes") {
-      if (notes.every((n) => !n.trim())) return "Add at least one note.";
-    }
-    if (contentType === "quiz") {
-      if (questions.length === 0) return "Add at least one question.";
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        if (!q.question.trim()) return `Question ${i + 1} needs text.`;
-        if (q.type === "mcq") {
-          const opts = q.options.filter((o) => o.trim() !== "");
-          if (opts.length < 2) return `Question ${i + 1} needs at least 2 options.`;
-          if (!opts.includes(q.correct_answer)) return `Question ${i + 1} needs a correct answer marked.`;
-        }
-        if (q.type === "true_false" && !q.correct_answer) return `Question ${i + 1} needs True or False marked.`;
-      }
-    }
-    if (contentType === "flashcards") {
-      if (cards.length === 0) return "Add at least one flash card.";
-      if (cards.some((c) => !c.front.trim() || !c.back.trim())) return "Every flash card needs a front and back.";
-    }
-    if (contentType === "mindmap") {
-      if (!mindmap.image_url) return "Upload a mind map image first.";
-    }
-    return null;
+  const jumpToPending = (entry) => {
+    syncCurrent();
+    setCourseId((cur) => {
+      const owningCourse = courses.find((c) => c.id === entry.course_id) ? entry.course_id : cur;
+      return owningCourse;
+    });
+    setChapterId(entry.chapter_id);
+    setContentType(entry.content_type);
+    setLanguage(entry.language);
   };
 
   const save = async () => {
-    const err = validate();
-    if (err) { toast.error(err); return; }
+    const finalSet = syncCurrent();
+    const items = Object.values(finalSet);
+    if (items.length === 0) {
+      toast.error("Add content for at least one chapter before saving.");
+      return;
+    }
     setSaving(true);
     try {
-      const { data } = await api.post("/content/manual", {
-        chapter_id: chapterId,
-        content_type: contentType,
-        language,
-        payload: buildPayload(),
+      const { data } = await api.post("/content/drafts", {
+        pack_id: packId,
+        items: items.map((it) => ({
+          chapter_id: it.chapter_id,
+          content_type: it.content_type,
+          language: it.language,
+          payload: it.payload,
+        })),
       });
-      toast.success(`Draft ${data.draft_index} saved`);
-      setPreviewDraft(data);
-      await loadDrafts();
+      toast.success(`Draft ${data.draft_index} saved with ${data.items.length} item(s)`);
+      setWorkingSet({});
+      await loadDrafts(packId);
     } catch (err2) {
       toast.error(err2?.response?.data?.detail?.[0]?.msg || err2?.response?.data?.detail || "Save failed");
     }
     setSaving(false);
   };
 
-  const confirmDraft = async (id) => {
-    const { data } = await api.post(`/content/${id}/confirm`);
+  const confirmDraft = async (id, e) => {
+    e.stopPropagation();
+    const { data } = await api.post(`/content/drafts/${id}/confirm`);
     toast.success(`Draft ${data.draft_index} confirmed`);
-    await loadDrafts();
-    if (previewDraft?.id === id) setPreviewDraft(data);
+    await loadDrafts(packId);
   };
 
-  const editDraft = (d) => {
-    const p = d.payload || {};
-    if (d.content_type === "summary") setBody(p.body || "");
-    if (d.content_type === "notes") setNotes(p.notes?.length ? p.notes : [""]);
-    if (d.content_type === "quiz") {
-      setQuestions(
-        p.questions?.length
-          ? p.questions.map((q) => ({ ...q, options: q.options || ["", "", "", ""], correct_answer: q.correct_answer || "" }))
-          : [emptyQuestion()]
-      );
+  const loadDraftIntoWorkingSet = (draft) => {
+    const next = {};
+    for (const item of draft.items) {
+      next[keyFor(item.chapter_id, item.content_type, item.language)] = { ...item };
     }
-    if (d.content_type === "flashcards") setCards(p.cards?.length ? p.cards : [{ front: "", back: "" }]);
-    if (d.content_type === "mindmap") setMindmap({ image_url: p.image_url || "", caption: p.caption || "" });
-    setPreviewDraft(d);
-    toast.success(`Draft ${d.draft_index} loaded into editor — edit and Save to create a new version`);
+    setWorkingSet(next);
+    const first = draft.items[0];
+    if (first) {
+      setCourseId(first.course_id);
+      setChapterId(first.chapter_id);
+      setContentType(first.content_type);
+      setLanguage(first.language);
+    }
+    toast.success(`Draft ${draft.draft_index} loaded — browse chapters/types below to view or edit each item, then Save to create a new version`);
   };
 
-  const selectedChapter = chapters.find((c) => c.id === chapterId);
+  const pendingItems = Object.entries(workingSet);
 
   return (
     <div className="p-8 lg:p-12">
@@ -506,13 +491,13 @@ const ManualContent = () => {
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-white/60">Tutor Pack</label>
-              <select value={packId} onChange={(e) => setPackId(e.target.value)} className={inputCls} data-testid="mc-pack">
+              <select value={packId} onChange={(e) => switchPack(e.target.value)} className={inputCls} data-testid="mc-pack">
                 {packs.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             </div>
             <div>
               <label className="text-xs text-white/60">Content type</label>
-              <select value={contentType} onChange={(e) => setContentType(e.target.value)} className={inputCls} data-testid="mc-type">
+              <select value={contentType} onChange={(e) => switchContentType(e.target.value)} className={inputCls} data-testid="mc-type">
                 {TYPES.map((tp) => <option key={tp.v} value={tp.v}>{tp.label}</option>)}
               </select>
             </div>
@@ -521,7 +506,7 @@ const ManualContent = () => {
           <div>
             <label className="text-xs text-white/60">Course</label>
             <div className="mt-1 flex gap-2">
-              <select value={courseId} onChange={(e) => setCourseId(e.target.value)} className={inputCls + " flex-1"} data-testid="mc-course">
+              <select value={courseId} onChange={(e) => switchCourse(e.target.value)} className={inputCls + " flex-1"} data-testid="mc-course">
                 {courses.length === 0 && <option value="">No courses yet</option>}
                 {courses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
@@ -548,7 +533,7 @@ const ManualContent = () => {
                   key={l}
                   type="button"
                   data-testid={`mc-lang-${l}`}
-                  onClick={() => setLanguage(l)}
+                  onClick={() => switchLanguage(l)}
                   className={`px-3 py-1 rounded-full ${language === l ? "bg-[#00f0ff] text-black" : "text-white/70"}`}
                 >
                   {l.toUpperCase()}
@@ -560,19 +545,25 @@ const ManualContent = () => {
           <div>
             <label className="text-xs text-white/60">Chapters</label>
             <div className="mt-1 flex flex-wrap gap-2" data-testid="mc-chapters">
-              {chapters.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setChapterId(c.id)}
-                  className={`rounded-full px-4 py-1.5 text-xs border transition-colors ${
-                    chapterId === c.id ? "bg-[#00f0ff] text-black border-[#00f0ff]" : "border-white/15 text-white/70 hover:border-white/30"
-                  }`}
-                  data-testid={`mc-chapter-${c.id}`}
-                >
-                  {c.title}
-                </button>
-              ))}
+              {chapters.map((c) => {
+                const hasPending = Object.keys(workingSet).some((k) => k.startsWith(`${c.id}::`));
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => switchChapter(c.id)}
+                    className={`relative rounded-full px-4 py-1.5 text-xs border transition-colors ${
+                      chapterId === c.id ? "bg-[#00f0ff] text-black border-[#00f0ff]" : "border-white/15 text-white/70 hover:border-white/30"
+                    }`}
+                    data-testid={`mc-chapter-${c.id}`}
+                  >
+                    {c.title}
+                    {hasPending && (
+                      <span className={`ml-1.5 inline-block h-1.5 w-1.5 rounded-full ${chapterId === c.id ? "bg-black" : "bg-[#00f0ff]"}`} />
+                    )}
+                  </button>
+                );
+              })}
               {chapters.length === 0 && <span className="text-xs text-white/40">No chapters yet — add one below.</span>}
             </div>
             <div className="mt-2 flex gap-2">
@@ -621,10 +612,34 @@ const ManualContent = () => {
             </div>
           )}
 
+          {pendingItems.length > 0 && (
+            <div className="pt-2 border-t border-white/10">
+              <div className="text-xs text-white/60 mb-2">Pending in this draft ({pendingItems.length})</div>
+              <div className="flex flex-wrap gap-2" data-testid="pending-list">
+                {pendingItems.map(([key, entry]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => jumpToPending(entry)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
+                      key === keyFor(chapterId, contentType, language)
+                        ? "border-[#00f0ff] text-[#00f0ff]"
+                        : "border-white/15 text-white/70 hover:border-white/30"
+                    }`}
+                    data-testid={`pending-${key}`}
+                  >
+                    {entry.chapter_title} · {TYPES.find((t) => t.v === entry.content_type)?.label}
+                    <X size={11} onClick={(e) => removePending(key, e)} className="hover:text-white" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={save}
-            disabled={saving || !chapterId}
+            disabled={saving}
             className="inline-flex items-center gap-2 rounded-full bg-[#00f0ff] px-6 py-2.5 text-sm font-semibold text-black hover:bg-white transition-colors disabled:opacity-50"
             data-testid="mc-save"
           >
@@ -633,62 +648,41 @@ const ManualContent = () => {
           </button>
         </div>
 
-        <div className="lg:col-span-2 space-y-4">
-          <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6">
-            <div className="overline text-[#00f0ff] mb-3">Preview</div>
-            {!previewDraft && <div className="text-white/40 text-sm">Generated content will appear here.</div>}
-            {previewDraft && (
-              <div data-testid="mc-preview">
-                <div className="font-display text-lg text-white">{previewDraft.title}</div>
-                <div className="mt-1 text-xs font-mono text-white/50">
-                  Draft {previewDraft.draft_index} · {previewDraft.status}
-                </div>
-                <div className="mt-3 max-h-96 overflow-auto">
-                  <ContentPreview draft={previewDraft} />
-                </div>
-              </div>
-            )}
-          </div>
-
+        <div className="lg:col-span-2">
           <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6">
             <div className="overline text-[#00f0ff] mb-3">Drafts</div>
-            <div className="space-y-2 max-h-64 overflow-auto" data-testid="drafts-list">
+            <div className="space-y-2 max-h-[32rem] overflow-auto" data-testid="drafts-list">
               {drafts.map((d) => (
-                <div key={d.id} className="flex items-center justify-between gap-3 border-b border-white/5 pb-2">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewDraft(d)}
-                    className="text-left text-sm text-white hover:text-[#00f0ff] transition-colors"
-                    data-testid={`draft-${d.draft_index}`}
-                  >
-                    Draft {d.draft_index}
-                    <span className="ml-2 text-[10px] uppercase tracking-widest text-white/40">{d.status}</span>
-                  </button>
-                  <div className="flex items-center gap-3 shrink-0">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  key={d.id}
+                  onClick={() => loadDraftIntoWorkingSet(d)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") loadDraftIntoWorkingSet(d); }}
+                  className="w-full flex items-center justify-between gap-3 border-b border-white/5 pb-2 text-left hover:bg-white/5 rounded-lg px-1 -mx-1 transition-colors cursor-pointer"
+                  data-testid={`draft-${d.draft_index}`}
+                >
+                  <div>
+                    <div className="text-sm text-white">
+                      Draft {d.draft_index}
+                      <span className="ml-2 text-[10px] uppercase tracking-widest text-white/40">{d.status}</span>
+                    </div>
+                    <div className="text-[10px] text-white/40 mt-0.5">{d.items.length} item(s)</div>
+                  </div>
+                  {d.status === "confirmed" ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-[#00ff66] uppercase tracking-widest shrink-0">
+                      <CheckCircle2 size={12} /> Confirmed
+                    </span>
+                  ) : (
                     <button
                       type="button"
-                      onClick={() => editDraft(d)}
-                      className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-white/50 hover:text-[#00f0ff]"
-                      data-testid={`draft-${d.draft_index}-edit`}
-                      title="Load into editor"
+                      onClick={(e) => confirmDraft(d.id, e)}
+                      className="text-[10px] uppercase tracking-widest text-[#00f0ff] hover:underline shrink-0"
+                      data-testid={`draft-${d.draft_index}-confirm`}
                     >
-                      <Pencil size={11} /> Edit
+                      Confirm
                     </button>
-                    {d.status === "confirmed" ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-[#00ff66] uppercase tracking-widest">
-                        <CheckCircle2 size={12} /> Confirmed
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => confirmDraft(d.id)}
-                        className="text-[10px] uppercase tracking-widest text-[#00f0ff] hover:underline"
-                        data-testid={`draft-${d.draft_index}-confirm`}
-                      >
-                        Confirm
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
               ))}
               {drafts.length === 0 && <div className="text-xs text-white/40">No drafts yet.</div>}
