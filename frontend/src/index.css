@@ -1,0 +1,132 @@
+/* MYTAMAN AI Tutor — Global styles. Electric & Neon archetype. */
+@import url("https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700;800&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #050505;
+  --surface: #0a0514;
+  --surface-2: #120b24;
+  --primary: #00f0ff;
+  --secondary: #ff0055;
+  --tertiary: #8a2be2;
+  --text: #ffffff;
+  --text-2: #a0a0b0;
+  --text-3: #606070;
+}
+
+@layer base {
+  :root {
+    --background: 240 20% 4%;
+    --foreground: 0 0% 100%;
+    --card: 262 46% 8%;
+    --card-foreground: 0 0% 100%;
+    --popover: 262 46% 8%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 184 100% 50%;
+    --primary-foreground: 240 20% 4%;
+    --secondary: 340 100% 50%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 262 30% 15%;
+    --muted-foreground: 240 6% 65%;
+    --accent: 271 76% 53%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 262 40% 20%;
+    --input: 262 40% 15%;
+    --ring: 184 100% 50%;
+    --radius: 0.75rem;
+  }
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  font-family: "Outfit", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: radial-gradient(circle at 20% 10%, rgba(138, 43, 226, 0.15), transparent 50%),
+    radial-gradient(circle at 80% 90%, rgba(0, 240, 255, 0.08), transparent 55%), var(--bg);
+}
+
+.font-display {
+  font-family: "Unbounded", sans-serif;
+  letter-spacing: -0.02em;
+}
+.font-mono {
+  font-family: "JetBrains Mono", monospace;
+}
+
+.overline {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.glass {
+  background: rgba(10, 5, 20, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.neon-border {
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.12), inset 0 0 12px rgba(0, 240, 255, 0.06);
+}
+
+.neon-text {
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 40px rgba(0, 240, 255, 0.15);
+}
+
+.grid-bg {
+  background-image: linear-gradient(rgba(0, 240, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+.float-slow { animation: float 8s ease-in-out infinite; }
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 24px rgba(0, 240, 255, 0.2); }
+  50% { box-shadow: 0 0 48px rgba(0, 240, 255, 0.55); }
+}
+.pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
+
+::selection {
+  background: rgba(0, 240, 255, 0.35);
+  color: #fff;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #0a0514; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #00f0ff55, #8a2be255);
+  border-radius: 8px;
+}
+
+/* Input focus */
+input:focus, textarea:focus, select:focus {
+  outline: none;
+}
