@@ -1,21 +1,67 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Trash2, Send, CheckCircle2, FileEdit } from "lucide-react";
+import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
+
+const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Flashcards", mindmap: "Mind Map", notes: "Notes" };
 
 const Packs = () => {
   const { t } = useLang();
   const [packs, setPacks] = useState([]);
   const [form, setForm] = useState({ title: "", description: "", subject: "", grade: "", language: "both", tier: "basic" });
-  const [publishingId, setPublishingId] = useState(null);
+  const [reviewPack, setReviewPack] = useState(null);
+  const [confirmedDrafts, setConfirmedDrafts] = useState([]);
+  const [selectedDraftIds, setSelectedDraftIds] = useState([]);
+  const [loadingReview, setLoadingReview] = useState(false);
+  const [publishingSelection, setPublishingSelection] = useState(false);
 
   const load = async () => {
     const { data } = await api.get("/packs/list");
     setPacks(data);
   };
   useEffect(() => { load(); }, []);
+
+  const openReview = async (pack) => {
+    setReviewPack(pack);
+    setLoadingReview(true);
+    try {
+      const { data } = await api.get("/content/drafts", { params: { pack_id: pack.id } });
+      const confirmed = data.filter((d) => d.status === "confirmed");
+      setConfirmedDrafts(confirmed);
+      setSelectedDraftIds(confirmed.map((d) => d.id));
+    } catch (err) {
+      toast.error("Failed to load confirmed drafts");
+      setConfirmedDrafts([]);
+      setSelectedDraftIds([]);
+    }
+    setLoadingReview(false);
+  };
+
+  const closeReview = () => {
+    setReviewPack(null);
+    setConfirmedDrafts([]);
+    setSelectedDraftIds([]);
+  };
+
+  const toggleDraftSelection = (id) => {
+    setSelectedDraftIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const publishSelection = async () => {
+    if (!reviewPack || selectedDraftIds.length === 0) return;
+    setPublishingSelection(true);
+    try {
+      const { data } = await api.post(`/packs/${reviewPack.id}/publish`, { draft_ids: selectedDraftIds });
+      toast.success(`Published ${data.published_count} item(s) to students & parents`);
+      closeReview();
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Publish failed");
+    }
+    setPublishingSelection(false);
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -38,18 +84,6 @@ const Packs = () => {
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Delete failed");
     }
-  };
-
-  const publishPack = async (pack) => {
-    setPublishingId(pack.id);
-    try {
-      const { data } = await api.post(`/packs/${pack.id}/publish`);
-      toast.success(`Published ${data.published_count} item(s) to students & parents`);
-      load();
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || "Publish failed");
-    }
-    setPublishingId(null);
   };
 
   return (
@@ -100,7 +134,16 @@ const Packs = () => {
 
         <div className="lg:col-span-2 grid sm:grid-cols-2 gap-4" data-testid="packs-list">
           {packs.map((p) => (
-            <div key={p.id} className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5 flex flex-col" data-testid={`pack-card-${p.id}`}>
+            <div
+              key={p.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => openReview(p)}
+              onKeyDown={(e) => { if (e.key === "Enter") openReview(p); }}
+              className="text-left rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5 flex flex-col cursor-pointer hover:border-[#00f0ff]/40 transition-colors"
+              data-testid={`pack-card-${p.id}`}
+              title="Click to review confirmed drafts and publish"
+            >
               <div className="flex items-center justify-between">
                 <div className="overline text-[#00f0ff]">{p.tier}</div>
                 <div className="flex items-center gap-2">
@@ -119,6 +162,7 @@ const Packs = () => {
               <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between gap-2">
                 <Link
                   to={`/admin/manual?pack=${p.id}`}
+                  onClick={(e) => e.stopPropagation()}
                   className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-[#00f0ff] transition-colors"
                   data-testid={`pack-${p.id}-manage`}
                 >
@@ -127,17 +171,16 @@ const Packs = () => {
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => publishPack(p)}
-                    disabled={publishingId === p.id}
-                    className="inline-flex items-center gap-1 text-xs text-[#00f0ff] hover:underline disabled:opacity-50"
+                    onClick={(e) => { e.stopPropagation(); openReview(p); }}
+                    className="inline-flex items-center gap-1 text-xs text-[#00f0ff] hover:underline"
                     data-testid={`pack-${p.id}-publish`}
-                    title="Publish confirmed content to students & parents"
+                    title="Review confirmed drafts & publish"
                   >
-                    <Send size={13} /> {publishingId === p.id ? "Publishing…" : "Publish"}
+                    <Send size={13} /> Review & Publish
                   </button>
                   <button
                     type="button"
-                    onClick={() => deletePack(p)}
+                    onClick={(e) => { e.stopPropagation(); deletePack(p); }}
                     className="text-white/40 hover:text-red-400"
                     data-testid={`pack-${p.id}-delete`}
                     title="Delete pack"
@@ -150,6 +193,94 @@ const Packs = () => {
           ))}
         </div>
       </div>
+
+      {reviewPack && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={closeReview}
+          data-testid="publish-review-modal"
+        >
+          <div
+            className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-white/10 bg-[#0a0514] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between p-6 border-b border-white/10">
+              <div>
+                <div className="overline text-[#00f0ff]">Publish review</div>
+                <div className="font-display text-xl text-white mt-1 tracking-tight">{reviewPack.title}</div>
+                <p className="text-xs text-white/50 mt-1">
+                  Select which confirmed drafts to push live. Unselected drafts stay confirmed but won't be published.
+                </p>
+              </div>
+              <button type="button" onClick={closeReview} className="text-white/40 hover:text-white" data-testid="publish-review-close">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+              {loadingReview && <div className="text-sm text-white/50">Loading confirmed drafts…</div>}
+
+              {!loadingReview && confirmedDrafts.length === 0 && (
+                <div className="text-sm text-white/50 flex flex-col items-center text-center py-10 gap-2">
+                  <ClipboardCheck size={28} className="text-white/20" />
+                  No confirmed drafts yet for this pack. Confirm a draft from Manual Content first.
+                </div>
+              )}
+
+              {confirmedDrafts.map((d) => {
+                const checked = selectedDraftIds.includes(d.id);
+                return (
+                  <label
+                    key={d.id}
+                    className={`block rounded-xl border p-4 cursor-pointer transition-colors ${
+                      checked ? "border-[#00f0ff]/50 bg-[#00f0ff]/5" : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                    }`}
+                    data-testid={`review-draft-${d.id}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleDraftSelection(d.id)}
+                        className="mt-1 accent-[#00f0ff]"
+                        data-testid={`review-draft-${d.id}-checkbox`}
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm text-white font-medium">{d.name || `Draft ${d.draft_index}`}</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {d.items.map((it, i) => (
+                            <span
+                              key={i}
+                              className="text-[10px] uppercase tracking-wide text-white/60 bg-white/5 border border-white/10 rounded-full px-2 py-0.5"
+                            >
+                              {it.chapter_title} · {CONTENT_TYPE_LABELS[it.content_type] || it.content_type} · {it.language.toUpperCase()}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {confirmedDrafts.length > 0 && (
+              <div className="p-6 border-t border-white/10 flex items-center justify-between gap-3">
+                <span className="text-xs text-white/50">{selectedDraftIds.length} of {confirmedDrafts.length} selected</span>
+                <button
+                  type="button"
+                  onClick={publishSelection}
+                  disabled={selectedDraftIds.length === 0 || publishingSelection}
+                  className="inline-flex items-center gap-2 rounded-full bg-[#00f0ff] px-5 py-2 text-sm font-semibold text-black hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  data-testid="publish-review-submit"
+                >
+                  <Send size={14} /> {publishingSelection ? "Publishing…" : "Publish selected"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
