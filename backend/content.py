@@ -172,6 +172,7 @@ class PackDraftOut(BaseModel):
     pack_id: str
     draft_index: int
     status: str
+    name: Optional[str] = None
     items: List[DraftItemOut]
     created_at: str
 
@@ -225,6 +226,21 @@ async def list_pack_drafts(pack_id: str, _: dict = Depends(require_role("admin")
 async def confirm_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
     res = await db.pack_drafts.find_one_and_update(
         {"id": draft_id}, {"$set": {"status": "confirmed"}}, return_document=True, projection={"_id": 0}
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
+
+
+class RenameDraftIn(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=100)
+
+
+@router.patch("/drafts/{draft_id}", response_model=PackDraftOut)
+async def rename_pack_draft(draft_id: str, payload: RenameDraftIn, _: dict = Depends(require_role("admin"))):
+    name = payload.name.strip() if payload.name and payload.name.strip() else None
+    res = await db.pack_drafts.find_one_and_update(
+        {"id": draft_id}, {"$set": {"name": name}}, return_document=True, projection={"_id": 0}
     )
     if not res:
         raise HTTPException(status_code=404, detail="Draft not found")
