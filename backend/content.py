@@ -202,11 +202,14 @@ async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("ad
             "payload": validated_payload,
         })
 
-    existing_count = await db.pack_drafts.count_documents({"pack_id": payload.pack_id})
+    last = await db.pack_drafts.find_one(
+        {"pack_id": payload.pack_id}, {"_id": 0, "draft_index": 1}, sort=[("draft_index", -1)]
+    )
+    next_index = (last["draft_index"] if last else 0) + 1
     doc = {
         "id": str(uuid.uuid4()),
         "pack_id": payload.pack_id,
-        "draft_index": existing_count + 1,
+        "draft_index": next_index,
         "status": "draft",
         "marked": False,
         "items": items_out,
