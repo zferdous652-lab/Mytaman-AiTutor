@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { Trash2, Send, CheckCircle2, FileEdit } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -7,6 +9,7 @@ const Packs = () => {
   const { t } = useLang();
   const [packs, setPacks] = useState([]);
   const [form, setForm] = useState({ title: "", description: "", subject: "", grade: "", language: "both", tier: "basic" });
+  const [publishingId, setPublishingId] = useState(null);
 
   const load = async () => {
     const { data } = await api.get("/packs/list");
@@ -24,6 +27,29 @@ const Packs = () => {
     } catch (err) {
       toast.error("Failed");
     }
+  };
+
+  const deletePack = async (pack) => {
+    if (!window.confirm(`Delete "${pack.title}"? This removes all its courses, chapters, content, and drafts. This cannot be undone.`)) return;
+    try {
+      await api.delete(`/packs/${pack.id}`);
+      toast.success(`"${pack.title}" deleted`);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Delete failed");
+    }
+  };
+
+  const publishPack = async (pack) => {
+    setPublishingId(pack.id);
+    try {
+      const { data } = await api.post(`/packs/${pack.id}/publish`);
+      toast.success(`Published ${data.published_count} item(s) to students & parents`);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Publish failed");
+    }
+    setPublishingId(null);
   };
 
   return (
@@ -74,14 +100,52 @@ const Packs = () => {
 
         <div className="lg:col-span-2 grid sm:grid-cols-2 gap-4" data-testid="packs-list">
           {packs.map((p) => (
-            <div key={p.id} className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5">
+            <div key={p.id} className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5 flex flex-col" data-testid={`pack-card-${p.id}`}>
               <div className="flex items-center justify-between">
                 <div className="overline text-[#00f0ff]">{p.tier}</div>
-                <div className="text-[10px] uppercase tracking-widest text-white/40">{p.language.toUpperCase()}</div>
+                <div className="flex items-center gap-2">
+                  {p.published && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-[#00ff66] uppercase tracking-widest">
+                      <CheckCircle2 size={11} /> Published
+                    </span>
+                  )}
+                  <div className="text-[10px] uppercase tracking-widest text-white/40">{p.language.toUpperCase()}</div>
+                </div>
               </div>
               <div className="font-display text-lg text-white mt-2 tracking-tight">{p.title}</div>
               <div className="text-xs text-white/50 mt-1">{p.subject} · {p.grade}</div>
-              <p className="text-sm text-white/70 mt-3 leading-relaxed">{p.description}</p>
+              <p className="text-sm text-white/70 mt-3 leading-relaxed flex-1">{p.description}</p>
+
+              <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between gap-2">
+                <Link
+                  to={`/admin/manual?pack=${p.id}`}
+                  className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-[#00f0ff] transition-colors"
+                  data-testid={`pack-${p.id}-manage`}
+                >
+                  <FileEdit size={13} /> Manage content
+                </Link>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => publishPack(p)}
+                    disabled={publishingId === p.id}
+                    className="inline-flex items-center gap-1 text-xs text-[#00f0ff] hover:underline disabled:opacity-50"
+                    data-testid={`pack-${p.id}-publish`}
+                    title="Publish confirmed content to students & parents"
+                  >
+                    <Send size={13} /> {publishingId === p.id ? "Publishing…" : "Publish"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deletePack(p)}
+                    className="text-white/40 hover:text-red-400"
+                    data-testid={`pack-${p.id}-delete`}
+                    title="Delete pack"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
             </div>
           ))}
         </div>

@@ -52,6 +52,9 @@ __pycache__/
 venv/
 .venv/
 
+# Uploaded user content (persisted via Docker volume, not committed)
+backend/uploads/
+
 # Development tools
 chainlit.md
 .chainlit

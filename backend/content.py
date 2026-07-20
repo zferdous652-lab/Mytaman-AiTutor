@@ -1,10 +1,11 @@
 """Content generation & storage endpoints."""
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal, Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel, Field, ValidationError
 
 from db import db
 from auth import require_role, get_current_user
@@ -32,11 +33,16 @@ class GenerateIn(BaseModel):
 
 class ContentOut(BaseModel):
     id: str
-    pack_id: str
-    title: str
+    pack_id: Optional[str] = None
+    chapter_id: Optional[str] = None
+    course_id: Optional[str] = None
+    title: Optional[str] = None
     content_type: ContentType
     language: str
-    body: str
+    body: Optional[str] = None
+    payload: Optional[dict] = None
+    status: Optional[str] = None
+    draft_index: Optional[int] = None
     provider: Optional[str] = None
     model: Optional[str] = None
     published: bool
@@ -63,35 +69,209 @@ async def generate(payload: GenerateIn, user: dict = Depends(require_role("admin
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.contents.insert_one(doc)
-    return ContentOut(**{k: doc[k] for k in ContentOut.model_fields.keys()})
+    return ContentOut(**{k: doc.get(k) for k in ContentOut.model_fields.keys()})
 
 
-class ManualIn(BaseModel):
-    pack_id: str
-    title: str
+# ---------- Manual content (chapter-based, typed payload, draft/confirm) ----------
+
+QuestionType = Literal["mcq", "true_false", "short_answer"]
+
+
+class QuizQuestion(BaseModel):
+    type: QuestionType
+    question: str = Field(min_length=1)
+    options: Optional[List[str]] = None
+    correct_answer: Optional[str] = None
+
+    def validate_shape(self, index: int):
+        if self.type == "mcq":
+            if not self.options or len(self.options) < 2:
+                raise ValueError(f"Question {index}: MCQ needs at least 2 options")
+            if self.correct_answer not in self.options:
+                raise ValueError(f"Question {index}: correct_answer must match one of the options")
+        elif self.type == "true_false":
+            if self.correct_answer not in ("true", "false"):
+                raise ValueError(f"Question {index}: true_false correct_answer must be 'true' or 'false'")
+
+
+class QuizPayload(BaseModel):
+    questions: List[QuizQuestion] = Field(min_length=1, max_length=40)
+
+
+class FlashCard(BaseModel):
+    front: str = Field(min_length=1)
+    back: str = Field(min_length=1)
+
+
+class FlashcardsPayload(BaseModel):
+    cards: List[FlashCard] = Field(min_length=1, max_length=200)
+
+
+class MindmapPayload(BaseModel):
+    image_url: str = Field(min_length=1)
+    caption: Optional[str] = None
+
+
+class TextPayload(BaseModel):
+    body: str = Field(min_length=1)
+
+
+class NotesPayload(BaseModel):
+    notes: List[str] = Field(min_length=1, max_length=200)
+
+    def validate_shape(self):
+        if any(not n.strip() for n in self.notes):
+            raise ValueError("Notes cannot be empty")
+
+
+def _validate_payload(content_type: str, payload: dict) -> dict:
+    try:
+        if content_type == "quiz":
+            parsed = QuizPayload(**payload)
+            for i, q in enumerate(parsed.questions, start=1):
+                q.validate_shape(i)
+            return parsed.model_dump()
+        if content_type == "flashcards":
+            return FlashcardsPayload(**payload).model_dump()
+        if content_type == "mindmap":
+            return MindmapPayload(**payload).model_dump()
+        if content_type == "notes":
+            parsed = NotesPayload(**payload)
+            parsed.validate_shape()
+            return parsed.model_dump()
+        # summary
+        return TextPayload(**payload).model_dump()
+    except (ValidationError, ValueError) as e:
+        raise HTTPException(status_code=422, detail=f"Invalid payload for {content_type}: {e}")
+
+
+class DraftItemIn(BaseModel):
+    chapter_id: str
     content_type: ContentType
-    body: str
     language: Literal["en", "bm"] = "en"
+    payload: dict
 
 
-@router.post("/manual", response_model=ContentOut)
-async def manual(payload: ManualIn, user: dict = Depends(require_role("admin"))):
+class SaveDraftIn(BaseModel):
+    pack_id: str
+    items: List[DraftItemIn] = Field(min_length=1)
+
+
+class DraftItemOut(BaseModel):
+    chapter_id: str
+    course_id: str
+    course_title: str
+    chapter_title: str
+    content_type: ContentType
+    language: str
+    payload: dict
+
+
+class PackDraftOut(BaseModel):
+    id: str
+    pack_id: str
+    draft_index: int
+    status: str
+    marked: bool = False
+    items: List[DraftItemOut]
+    created_at: str
+
+
+@router.post("/drafts", response_model=PackDraftOut)
+async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("admin"))):
+    pack = await db.packs.find_one({"id": payload.pack_id}, {"_id": 0})
+    if not pack:
+        raise HTTPException(status_code=404, detail="Tutor Pack not found")
+
+    items_out = []
+    for item in payload.items:
+        chapter = await db.chapters.find_one({"id": item.chapter_id}, {"_id": 0})
+        if not chapter:
+            raise HTTPException(status_code=404, detail=f"Chapter {item.chapter_id} not found")
+        course = await db.courses.find_one({"id": chapter["course_id"]}, {"_id": 0})
+        if not course or course["pack_id"] != payload.pack_id:
+            raise HTTPException(status_code=400, detail=f"Chapter {item.chapter_id} does not belong to this Tutor Pack")
+        validated_payload = _validate_payload(item.content_type, item.payload)
+        items_out.append({
+            "chapter_id": item.chapter_id,
+            "course_id": course["id"],
+            "course_title": course["title"],
+            "chapter_title": chapter["title"],
+            "content_type": item.content_type,
+            "language": item.language,
+            "payload": validated_payload,
+        })
+
+    existing_count = await db.pack_drafts.count_documents({"pack_id": payload.pack_id})
     doc = {
         "id": str(uuid.uuid4()),
         "pack_id": payload.pack_id,
-        "title": payload.title,
-        "content_type": payload.content_type,
-        "language": payload.language,
-        "body": payload.body,
-        "provider": None,
-        "model": None,
-        "published": False,
+        "draft_index": existing_count + 1,
+        "status": "draft",
+        "marked": False,
+        "items": items_out,
         "created_by": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.contents.insert_one(doc)
-    return ContentOut(**{k: doc[k] for k in ContentOut.model_fields.keys()})
+    await db.pack_drafts.insert_one(doc)
+    return PackDraftOut(**{k: doc.get(k) for k in PackDraftOut.model_fields.keys()})
 
+
+@router.get("/drafts", response_model=List[PackDraftOut])
+async def list_pack_drafts(pack_id: str, _: dict = Depends(require_role("admin"))):
+    docs = await db.pack_drafts.find({"pack_id": pack_id}, {"_id": 0}).sort("draft_index", 1).to_list(200)
+    return [PackDraftOut(**{k: d.get(k) for k in PackDraftOut.model_fields.keys()}) for d in docs]
+
+
+@router.post("/drafts/{draft_id}/confirm", response_model=PackDraftOut)
+async def confirm_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
+    res = await db.pack_drafts.find_one_and_update(
+        {"id": draft_id}, {"$set": {"status": "confirmed"}}, return_document=True, projection={"_id": 0}
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
+
+
+@router.post("/drafts/{draft_id}/mark", response_model=PackDraftOut)
+async def toggle_mark_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
+    draft = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    res = await db.pack_drafts.find_one_and_update(
+        {"id": draft_id}, {"$set": {"marked": not draft.get("marked", False)}}, return_document=True, projection={"_id": 0}
+    )
+    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
+
+
+@router.delete("/drafts/{draft_id}")
+async def delete_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
+    res = await db.pack_drafts.delete_one({"id": draft_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return {"ok": True}
+
+
+UPLOAD_DIR = Path(__file__).parent / "uploads" / "mindmaps"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"}
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+@router.post("/upload-image")
+async def upload_image(file: UploadFile = File(...), _: dict = Depends(require_role("admin"))):
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported image type. Use PNG, JPEG, WEBP, or GIF.")
+    data = await file.read()
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
+    ext = Path(file.filename or "").suffix or ".png"
+    fname = f"{uuid.uuid4()}{ext}"
+    (UPLOAD_DIR / fname).write_bytes(data)
+    return {"url": f"/api/uploads/mindmaps/{fname}"}
+
+
+# ---------- Shared list / publish / stats ----------
 
 @router.get("/list", response_model=List[ContentOut])
 async def list_content(pack_id: Optional[str] = None, only_published: bool = False, user: dict = Depends(get_current_user)):
