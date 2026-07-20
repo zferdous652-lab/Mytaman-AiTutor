@@ -251,12 +251,15 @@ async def duplicate_pack_draft(draft_id: str, user: dict = Depends(require_role(
     source = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
     if not source:
         raise HTTPException(status_code=404, detail="Draft not found")
-    existing_count = await db.pack_drafts.count_documents({"pack_id": source["pack_id"]})
+    last = await db.pack_drafts.find_one(
+        {"pack_id": source["pack_id"]}, {"_id": 0, "draft_index": 1}, sort=[("draft_index", -1)]
+    )
+    next_index = (last["draft_index"] if last else 0) + 1
     source_label = source.get("name") or f"Draft {source['draft_index']}"
     doc = {
         "id": str(uuid.uuid4()),
         "pack_id": source["pack_id"],
-        "draft_index": existing_count + 1,
+        "draft_index": next_index,
         "status": "draft",
         "name": f"{source_label} (copy)",
         "items": source["items"],
