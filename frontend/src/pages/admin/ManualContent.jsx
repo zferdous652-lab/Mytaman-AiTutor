@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
-import { Plus, X, Upload, CheckCircle2, FileEdit } from "lucide-react";
+import { Plus, X, Upload, CheckCircle2, FileEdit, Star, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 
 const TYPES = [
@@ -267,6 +267,7 @@ const ManualContent = () => {
   // highlight it -- also doubles as a diagnostic: if the highlight moves but the fields
   // don't, the bug is in hydration; if the highlight doesn't move, it's a click/event bug.
   const [activeDraftId, setActiveDraftId] = useState(null);
+  const [draftSort, setDraftSort] = useState("number");
 
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [newChapterTitle, setNewChapterTitle] = useState("");
@@ -493,6 +494,31 @@ const ManualContent = () => {
     await loadDrafts(packId);
   };
 
+  const toggleMarkDraft = async (id, e) => {
+    e.stopPropagation();
+    const { data } = await api.post(`/content/drafts/${id}/mark`);
+    toast.success(data.marked ? `Draft ${data.draft_index} marked` : `Draft ${data.draft_index} unmarked`);
+    await loadDrafts(packId);
+  };
+
+  const deleteDraft = async (draft, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete Draft ${draft.draft_index}? This cannot be undone.`)) return;
+    await api.delete(`/content/drafts/${draft.id}`);
+    toast.success(`Draft ${draft.draft_index} deleted`);
+    if (activeDraftId === draft.id) {
+      setActiveDraftId(null);
+      setWorkingSet({});
+    }
+    await loadDrafts(packId);
+  };
+
+  const sortedDrafts = [...drafts].sort((a, b) => {
+    if (draftSort === "newest") return new Date(b.created_at) - new Date(a.created_at);
+    if (draftSort === "marked") return (b.marked === true) - (a.marked === true) || a.draft_index - b.draft_index;
+    return a.draft_index - b.draft_index;
+  });
+
   const loadDraftIntoWorkingSet = (draft) => {
     const synced = syncCurrent();
     const next = {};
@@ -687,9 +713,21 @@ const ManualContent = () => {
 
         <div className="lg:col-span-2">
           <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6">
-            <div className="overline text-[#00f0ff] mb-3">Drafts</div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="overline text-[#00f0ff]">Drafts</div>
+              <select
+                value={draftSort}
+                onChange={(e) => setDraftSort(e.target.value)}
+                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-widest text-white/60"
+                data-testid="draft-sort"
+              >
+                <option value="number">Draft number</option>
+                <option value="newest">Newest first</option>
+                <option value="marked">Marked first</option>
+              </select>
+            </div>
             <div className="space-y-2 max-h-[32rem] overflow-auto" data-testid="drafts-list">
-              {drafts.map((d) => {
+              {sortedDrafts.map((d) => {
                 const isActive = d.id === activeDraftId;
                 return (
                 <div
@@ -712,20 +750,40 @@ const ManualContent = () => {
                     </div>
                     <div className="text-[10px] text-white/40 mt-0.5">{d.items.length} item(s)</div>
                   </div>
-                  {d.status === "confirmed" ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-[#00ff66] uppercase tracking-widest shrink-0">
-                      <CheckCircle2 size={12} /> Confirmed
-                    </span>
-                  ) : (
+                  <div className="flex items-center gap-3 shrink-0">
                     <button
                       type="button"
-                      onClick={(e) => confirmDraft(d.id, e)}
-                      className="text-[10px] uppercase tracking-widest text-[#00f0ff] hover:underline shrink-0"
-                      data-testid={`draft-${d.draft_index}-confirm`}
+                      onClick={(e) => toggleMarkDraft(d.id, e)}
+                      className={`hover:text-[#ffd23f] ${d.marked ? "text-[#ffd23f]" : "text-white/30"}`}
+                      data-testid={`draft-${d.draft_index}-mark`}
+                      title={d.marked ? "Unmark" : "Mark"}
                     >
-                      Confirm
+                      <Star size={13} fill={d.marked ? "currentColor" : "none"} />
                     </button>
-                  )}
+                    {d.status === "confirmed" ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-[#00ff66] uppercase tracking-widest">
+                        <CheckCircle2 size={12} /> Confirmed
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => confirmDraft(d.id, e)}
+                        className="text-[10px] uppercase tracking-widest text-[#00f0ff] hover:underline"
+                        data-testid={`draft-${d.draft_index}-confirm`}
+                      >
+                        Confirm
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => deleteDraft(d, e)}
+                      className="text-white/30 hover:text-red-400"
+                      data-testid={`draft-${d.draft_index}-delete`}
+                      title="Delete"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
                 );
               })}
