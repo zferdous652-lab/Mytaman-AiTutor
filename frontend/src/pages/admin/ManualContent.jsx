@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Plus, X, Upload, CheckCircle2, FileEdit, ListChecks, Trash2, MoreVertical, XCircle, Pencil, Copy } from "lucide-react";
@@ -273,6 +274,52 @@ const ManualContent = () => {
   const [markMode, setMarkMode] = useState(false);
   const [selectedDraftIds, setSelectedDraftIds] = useState(new Set());
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [menuAnchor, setMenuAnchor] = useState(null);
+
+  // Resizable split between the form and the Drafts panel (desktop only -- narrower
+  // viewports keep the original stacked layout via CSS grid).
+  const splitContainerRef = useRef(null);
+  const resizingRef = useRef(false);
+  const [draftsPanelPct, setDraftsPanelPct] = useState(40);
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : true
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const handler = (e) => setIsDesktop(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  const startResize = (e) => {
+    e.preventDefault();
+    resizingRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  useEffect(() => {
+    const onMouseMove = (e) => {
+      if (!resizingRef.current || !splitContainerRef.current) return;
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      const pct = ((rect.right - e.clientX) / rect.width) * 100;
+      setDraftsPanelPct(Math.min(60, Math.max(25, pct)));
+    };
+    const onMouseUp = () => {
+      if (resizingRef.current) {
+        resizingRef.current = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
   const [renamingDraftId, setRenamingDraftId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
 
@@ -625,8 +672,12 @@ const ManualContent = () => {
       <div className="overline text-[#00f0ff]">Manual content</div>
       <h1 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mt-2 mb-8">Set up content manually</h1>
 
-      <div className="grid lg:grid-cols-5 gap-6">
-        <div className="lg:col-span-3 space-y-4 rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6" data-testid="manual-form">
+      <div ref={splitContainerRef} className={isDesktop ? "flex items-start" : "grid gap-6"}>
+        <div
+          className="space-y-4 rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6"
+          style={isDesktop ? { width: `calc(${100 - draftsPanelPct}% - 10px)`, flexShrink: 0 } : undefined}
+          data-testid="manual-form"
+        >
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-white/60">Tutor Pack</label>
@@ -787,7 +838,19 @@ const ManualContent = () => {
           </button>
         </div>
 
-        <div className="lg:col-span-2">
+        {isDesktop && (
+          <div
+            onMouseDown={startResize}
+            onDoubleClick={() => setDraftsPanelPct(40)}
+            className="w-5 shrink-0 self-stretch cursor-col-resize flex items-center justify-center group"
+            data-testid="mc-resize-handle"
+            title="Drag to resize · double-click to reset"
+          >
+            <div className="w-1 h-16 rounded-full bg-white/10 group-hover:bg-[#00f0ff]/60 transition-colors" />
+          </div>
+        )}
+
+        <div style={isDesktop ? { width: `${draftsPanelPct}%`, flexShrink: 0 } : undefined} className={isDesktop ? undefined : "mt-6"}>
           <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="overline text-[#00f0ff]">Drafts</div>
@@ -837,7 +900,11 @@ const ManualContent = () => {
               </div>
             )}
 
-            <div className="space-y-2 max-h-[32rem] overflow-auto" data-testid="drafts-list">
+            <div
+              className="space-y-2 max-h-[32rem] overflow-auto"
+              onScroll={() => { setOpenMenuId(null); setMenuAnchor(null); }}
+              data-testid="drafts-list"
+            >
               {sortedDrafts.map((d) => {
                 const isActive = d.id === activeDraftId;
                 const isSelected = selectedDraftIds.has(d.id);
@@ -912,17 +979,28 @@ const ManualContent = () => {
                       )}
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : d.id); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isMenuOpen) {
+                            setOpenMenuId(null);
+                            setMenuAnchor(null);
+                          } else {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setMenuAnchor({ top: rect.bottom + 4, left: rect.right - 160 });
+                            setOpenMenuId(d.id);
+                          }
+                        }}
                         className="text-white/40 hover:text-white p-1"
                         data-testid={`draft-${d.draft_index}-menu`}
                         title="Actions"
                       >
                         <MoreVertical size={15} />
                       </button>
-                      {isMenuOpen && (
+                      {isMenuOpen && menuAnchor && createPortal(
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute right-0 top-full mt-1 z-20 w-40 rounded-xl border border-white/10 bg-[#120a1f] shadow-xl py-1"
+                          style={{ position: "fixed", top: menuAnchor.top, left: menuAnchor.left }}
+                          className="z-50 w-40 rounded-xl border border-white/10 bg-[#120a1f] shadow-xl py-1"
                           data-testid={`draft-${d.draft_index}-menu-dropdown`}
                         >
                           <button
@@ -967,7 +1045,8 @@ const ManualContent = () => {
                           >
                             <Trash2 size={13} /> Delete
                           </button>
-                        </div>
+                        </div>,
+                        document.body
                       )}
                     </div>
                   )}
