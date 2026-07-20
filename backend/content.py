@@ -370,6 +370,12 @@ async def mark_complete(content_id: str, user: dict = Depends(get_current_user))
     return {"ok": True}
 
 
+@router.delete("/{content_id}/complete")
+async def mark_incomplete(content_id: str, user: dict = Depends(get_current_user)):
+    await db.progress.delete_one({"user_id": user["id"], "content_id": content_id})
+    return {"ok": True}
+
+
 @router.get("/progress")
 async def get_progress(pack_id: str, user: dict = Depends(get_current_user)):
     docs = await db.progress.find({"user_id": user["id"], "pack_id": pack_id}, {"_id": 0, "content_id": 1}).to_list(500)

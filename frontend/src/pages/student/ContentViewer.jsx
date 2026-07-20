@@ -174,7 +174,7 @@ const RENDERERS = {
   flashcards: FlashcardsView,
 };
 
-const ContentViewer = ({ content, onClose, onComplete }) => {
+const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete }) => {
   if (!content) return null;
   const Renderer = RENDERERS[content.content_type];
 
@@ -182,6 +182,15 @@ const ContentViewer = ({ content, onClose, onComplete }) => {
     try {
       await api.post(`/content/${content.id}/complete`);
       onComplete?.(content.id);
+    } catch (e) {
+      // best-effort — completion tracking shouldn't block reading content
+    }
+  };
+
+  const markIncomplete = async () => {
+    try {
+      await api.delete(`/content/${content.id}/complete`);
+      onUncomplete?.(content.id);
     } catch (e) {
       // best-effort — completion tracking shouldn't block reading content
     }
@@ -196,9 +205,14 @@ const ContentViewer = ({ content, onClose, onComplete }) => {
         {content.content_type === "quiz" ? <QuizView content={content} onSubmit={markComplete} /> : Renderer ? <Renderer content={content} /> : <div className="text-sm text-white/40">Unsupported content type.</div>}
 
         <div className="mt-6 flex gap-3">
-          {content.content_type !== "quiz" && (
+          {content.content_type !== "quiz" && !done && (
             <button data-testid="mark-complete" onClick={markComplete} className="rounded-full bg-[#00f0ff]/10 border border-[#00f0ff]/40 px-5 py-2 text-sm text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-colors">
               Mark as complete
+            </button>
+          )}
+          {done && (
+            <button data-testid="mark-incomplete" onClick={markIncomplete} className="rounded-full border border-white/15 px-5 py-2 text-sm text-white/70 hover:border-[#ff0055] hover:text-[#ff0055] transition-colors">
+              Mark as incomplete
             </button>
           )}
           <button data-testid="modal-close" onClick={onClose} className="rounded-full border border-white/15 px-5 py-2 text-sm text-white/80 hover:border-[#00f0ff] hover:text-[#00f0ff] transition-colors">

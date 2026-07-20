@@ -73,6 +73,7 @@ const StudentHome = () => {
   }, [active]);
 
   const markComplete = (contentId) => setCompleted((prev) => new Set(prev).add(contentId));
+  const markIncomplete = (contentId) => setCompleted((prev) => { const next = new Set(prev); next.delete(contentId); return next; });
 
   if (loading) {
     return <div className="p-8 lg:p-12 text-sm text-white/40">Loading…</div>;
@@ -187,7 +188,13 @@ const StudentHome = () => {
         {visibleItems.length === 0 && <div className="text-sm text-white/40">No published content yet in this pack.</div>}
       </div>
 
-      <ContentViewer content={selected} onClose={() => setSelected(null)} onComplete={markComplete} />
+      <ContentViewer
+        content={selected}
+        done={selected ? completed.has(selected.id) : false}
+        onClose={() => setSelected(null)}
+        onComplete={markComplete}
+        onUncomplete={markIncomplete}
+      />
     </div>
   );
 };
