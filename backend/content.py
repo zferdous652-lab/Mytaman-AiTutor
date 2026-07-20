@@ -172,7 +172,7 @@ class PackDraftOut(BaseModel):
     pack_id: str
     draft_index: int
     status: str
-    marked: bool = False
+    name: Optional[str] = None
     items: List[DraftItemOut]
     created_at: str
 
@@ -208,7 +208,6 @@ async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("ad
         "pack_id": payload.pack_id,
         "draft_index": existing_count + 1,
         "status": "draft",
-        "marked": False,
         "items": items_out,
         "created_by": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -233,14 +232,50 @@ async def confirm_pack_draft(draft_id: str, _: dict = Depends(require_role("admi
     return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
 
 
-@router.post("/drafts/{draft_id}/mark", response_model=PackDraftOut)
-async def toggle_mark_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
-    draft = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
-    if not draft:
-        raise HTTPException(status_code=404, detail="Draft not found")
+@router.post("/drafts/{draft_id}/deny", response_model=PackDraftOut)
+async def deny_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
+    """Reverts a confirmed draft back to draft status -- the inverse of Confirm."""
     res = await db.pack_drafts.find_one_and_update(
-        {"id": draft_id}, {"$set": {"marked": not draft.get("marked", False)}}, return_document=True, projection={"_id": 0}
+        {"id": draft_id}, {"$set": {"status": "draft"}}, return_document=True, projection={"_id": 0}
     )
+    if not res:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
+
+
+@router.post("/drafts/{draft_id}/duplicate", response_model=PackDraftOut)
+async def duplicate_pack_draft(draft_id: str, user: dict = Depends(require_role("admin"))):
+    source = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
+    if not source:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    existing_count = await db.pack_drafts.count_documents({"pack_id": source["pack_id"]})
+    source_label = source.get("name") or f"Draft {source['draft_index']}"
+    doc = {
+        "id": str(uuid.uuid4()),
+        "pack_id": source["pack_id"],
+        "draft_index": existing_count + 1,
+        "status": "draft",
+        "name": f"{source_label} (copy)",
+        "items": source["items"],
+        "created_by": user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.pack_drafts.insert_one(doc)
+    return PackDraftOut(**{k: doc.get(k) for k in PackDraftOut.model_fields.keys()})
+
+
+class RenameDraftIn(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=100)
+
+
+@router.patch("/drafts/{draft_id}", response_model=PackDraftOut)
+async def rename_pack_draft(draft_id: str, payload: RenameDraftIn, _: dict = Depends(require_role("admin"))):
+    name = payload.name.strip() if payload.name and payload.name.strip() else None
+    res = await db.pack_drafts.find_one_and_update(
+        {"id": draft_id}, {"$set": {"name": name}}, return_document=True, projection={"_id": 0}
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Draft not found")
     return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
 
 
@@ -250,6 +285,16 @@ async def delete_pack_draft(draft_id: str, _: dict = Depends(require_role("admin
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Draft not found")
     return {"ok": True}
+
+
+class BulkDeleteDraftsIn(BaseModel):
+    ids: List[str] = Field(min_length=1)
+
+
+@router.post("/drafts/bulk-delete")
+async def bulk_delete_pack_drafts(payload: BulkDeleteDraftsIn, _: dict = Depends(require_role("admin"))):
+    res = await db.pack_drafts.delete_many({"id": {"$in": payload.ids}})
+    return {"ok": True, "deleted_count": res.deleted_count}
 
 
 UPLOAD_DIR = Path(__file__).parent / "uploads" / "mindmaps"
