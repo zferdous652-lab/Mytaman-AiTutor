@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, X, Upload, CheckCircle2, FileEdit, ListChecks, Trash2 } from "lucide-react";
+import { Plus, X, Upload, CheckCircle2, FileEdit, ListChecks, Trash2, MoreVertical, XCircle, Pencil, Copy } from "lucide-react";
 import { api } from "@/lib/api";
 
 const TYPES = [
@@ -272,6 +272,9 @@ const ManualContent = () => {
   const [draftSort, setDraftSort] = useState("number");
   const [markMode, setMarkMode] = useState(false);
   const [selectedDraftIds, setSelectedDraftIds] = useState(new Set());
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const [renamingDraftId, setRenamingDraftId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [newChapterTitle, setNewChapterTitle] = useState("");
@@ -497,17 +500,51 @@ const ManualContent = () => {
   };
 
   const confirmDraft = async (id, e) => {
-    e.stopPropagation();
+    e?.stopPropagation();
     const { data } = await api.post(`/content/drafts/${id}/confirm`);
     toast.success(`Draft ${data.draft_index} confirmed`);
+    setOpenMenuId(null);
     await loadDrafts(packId);
   };
 
+  const denyDraft = async (id, e) => {
+    e?.stopPropagation();
+    const { data } = await api.post(`/content/drafts/${id}/deny`);
+    toast.success(`Draft ${data.draft_index} denied — reverted to draft`);
+    setOpenMenuId(null);
+    await loadDrafts(packId);
+  };
+
+  const duplicateDraft = async (id, e) => {
+    e?.stopPropagation();
+    const { data } = await api.post(`/content/drafts/${id}/duplicate`);
+    toast.success(`Duplicated as Draft ${data.draft_index}`);
+    setOpenMenuId(null);
+    await loadDrafts(packId);
+  };
+
+  const startRename = (draft, e) => {
+    e?.stopPropagation();
+    setRenamingDraftId(draft.id);
+    setRenameValue(draft.name || "");
+    setOpenMenuId(null);
+  };
+
+  const submitRename = async (draftId) => {
+    const { data } = await api.patch(`/content/drafts/${draftId}`, { name: renameValue });
+    toast.success(`Draft ${data.draft_index} renamed`);
+    setRenamingDraftId(null);
+    await loadDrafts(packId);
+  };
+
+  const cancelRename = () => setRenamingDraftId(null);
+
   const deleteDraft = async (draft, e) => {
-    e.stopPropagation();
+    e?.stopPropagation();
     if (!window.confirm(`Delete Draft ${draft.draft_index}? This cannot be undone.`)) return;
     await api.delete(`/content/drafts/${draft.id}`);
     toast.success(`Draft ${draft.draft_index} deleted`);
+    setOpenMenuId(null);
     if (activeDraftId === draft.id) {
       setActiveDraftId(null);
       setWorkingSet({});
@@ -518,6 +555,8 @@ const ManualContent = () => {
   const toggleSelectMode = () => {
     setMarkMode((m) => !m);
     setSelectedDraftIds(new Set());
+    setOpenMenuId(null);
+    setRenamingDraftId(null);
   };
 
   const toggleSelectDraft = (id, e) => {
@@ -802,24 +841,33 @@ const ManualContent = () => {
               {sortedDrafts.map((d) => {
                 const isActive = d.id === activeDraftId;
                 const isSelected = selectedDraftIds.has(d.id);
+                const isRenaming = renamingDraftId === d.id;
+                const isMenuOpen = openMenuId === d.id;
                 return (
                 <div
                   role="button"
                   tabIndex={0}
                   key={d.id}
-                  onClick={() => (markMode ? setSelectedDraftIds((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(d.id)) next.delete(d.id); else next.add(d.id);
-                    return next;
-                  }) : loadDraftIntoWorkingSet(d))}
+                  onClick={() => {
+                    setOpenMenuId(null);
+                    if (markMode) {
+                      setSelectedDraftIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(d.id)) next.delete(d.id); else next.add(d.id);
+                        return next;
+                      });
+                    } else if (!isRenaming) {
+                      loadDraftIntoWorkingSet(d);
+                    }
+                  }}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") loadDraftIntoWorkingSet(d); }}
-                  className={`w-full flex items-center justify-between gap-3 border pb-2 pt-2 rounded-lg px-3 -mx-1 transition-colors cursor-pointer ${
+                  className={`relative w-full flex items-center justify-between gap-3 border pb-2 pt-2 rounded-lg px-3 -mx-1 transition-colors cursor-pointer ${
                     isSelected ? "border-red-400/60 bg-red-400/10" : isActive ? "border-[#00f0ff] bg-[#00f0ff]/10" : "border-transparent border-b-white/5 hover:bg-white/5"
                   }`}
                   data-testid={`draft-${d.draft_index}`}
                   data-active={isActive}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     {markMode && (
                       <input
                         type="checkbox"
@@ -829,40 +877,98 @@ const ManualContent = () => {
                         data-testid={`draft-${d.draft_index}-checkbox`}
                       />
                     )}
-                    <div>
-                      <div className="text-sm text-white flex items-center gap-1.5">
-                        {isActive && <span className="h-1.5 w-1.5 rounded-full bg-[#00f0ff]" />}
-                        Draft {d.draft_index}
-                        <span className="ml-1 text-[10px] uppercase tracking-widest text-white/40">{d.status}</span>
-                      </div>
+                    <div className="min-w-0">
+                      {isRenaming ? (
+                        <input
+                          autoFocus
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") submitRename(d.id);
+                            if (e.key === "Escape") cancelRename();
+                          }}
+                          onBlur={() => submitRename(d.id)}
+                          placeholder={`Draft ${d.draft_index}`}
+                          className="rounded-lg border border-[#00f0ff]/40 bg-white/5 px-2 py-1 text-sm text-white w-40"
+                          data-testid={`draft-${d.draft_index}-rename-input`}
+                        />
+                      ) : (
+                        <div className="text-sm text-white flex items-center gap-1.5 truncate">
+                          {isActive && <span className="h-1.5 w-1.5 rounded-full bg-[#00f0ff] shrink-0" />}
+                          <span className="truncate">{d.name || `Draft ${d.draft_index}`}</span>
+                          <span className="ml-1 text-[10px] uppercase tracking-widest text-white/40 shrink-0">{d.status}</span>
+                        </div>
+                      )}
                       <div className="text-[10px] text-white/40 mt-0.5">{d.items.length} item(s)</div>
                     </div>
                   </div>
-                  {!markMode && (
-                    <div className="flex items-center gap-3 shrink-0">
-                      {d.status === "confirmed" ? (
+                  {!markMode && !isRenaming && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      {d.status === "confirmed" && (
                         <span className="inline-flex items-center gap-1 text-[10px] text-[#00ff66] uppercase tracking-widest">
                           <CheckCircle2 size={12} /> Confirmed
                         </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={(e) => confirmDraft(d.id, e)}
-                          className="text-[10px] uppercase tracking-widest text-[#00f0ff] hover:underline"
-                          data-testid={`draft-${d.draft_index}-confirm`}
-                        >
-                          Confirm
-                        </button>
                       )}
                       <button
                         type="button"
-                        onClick={(e) => deleteDraft(d, e)}
-                        className="text-white/30 hover:text-red-400"
-                        data-testid={`draft-${d.draft_index}-delete`}
-                        title="Delete"
+                        onClick={(e) => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : d.id); }}
+                        className="text-white/40 hover:text-white p-1"
+                        data-testid={`draft-${d.draft_index}-menu`}
+                        title="Actions"
                       >
-                        <Trash2 size={13} />
+                        <MoreVertical size={15} />
                       </button>
+                      {isMenuOpen && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-0 top-full mt-1 z-20 w-40 rounded-xl border border-white/10 bg-[#120a1f] shadow-xl py-1"
+                          data-testid={`draft-${d.draft_index}-menu-dropdown`}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => confirmDraft(d.id, e)}
+                            disabled={d.status === "confirmed"}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-white/80 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                            data-testid={`draft-${d.draft_index}-action-confirm`}
+                          >
+                            <CheckCircle2 size={13} /> Confirm
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => denyDraft(d.id, e)}
+                            disabled={d.status !== "confirmed"}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-white/80 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                            data-testid={`draft-${d.draft_index}-action-deny`}
+                          >
+                            <XCircle size={13} /> Deny
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => startRename(d, e)}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-white/80 hover:bg-white/5"
+                            data-testid={`draft-${d.draft_index}-action-rename`}
+                          >
+                            <Pencil size={13} /> Rename
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => duplicateDraft(d.id, e)}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-white/80 hover:bg-white/5"
+                            data-testid={`draft-${d.draft_index}-action-duplicate`}
+                          >
+                            <Copy size={13} /> Duplicate
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => deleteDraft(d, e)}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-400/10"
+                            data-testid={`draft-${d.draft_index}-action-delete`}
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -232,6 +232,38 @@ async def confirm_pack_draft(draft_id: str, _: dict = Depends(require_role("admi
     return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
 
 
+@router.post("/drafts/{draft_id}/deny", response_model=PackDraftOut)
+async def deny_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
+    """Reverts a confirmed draft back to draft status -- the inverse of Confirm."""
+    res = await db.pack_drafts.find_one_and_update(
+        {"id": draft_id}, {"$set": {"status": "draft"}}, return_document=True, projection={"_id": 0}
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
+
+
+@router.post("/drafts/{draft_id}/duplicate", response_model=PackDraftOut)
+async def duplicate_pack_draft(draft_id: str, user: dict = Depends(require_role("admin"))):
+    source = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
+    if not source:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    existing_count = await db.pack_drafts.count_documents({"pack_id": source["pack_id"]})
+    source_label = source.get("name") or f"Draft {source['draft_index']}"
+    doc = {
+        "id": str(uuid.uuid4()),
+        "pack_id": source["pack_id"],
+        "draft_index": existing_count + 1,
+        "status": "draft",
+        "name": f"{source_label} (copy)",
+        "items": source["items"],
+        "created_by": user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.pack_drafts.insert_one(doc)
+    return PackDraftOut(**{k: doc.get(k) for k in PackDraftOut.model_fields.keys()})
+
+
 class RenameDraftIn(BaseModel):
     name: Optional[str] = Field(default=None, max_length=100)
 
