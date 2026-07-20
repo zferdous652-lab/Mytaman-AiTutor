@@ -69,11 +69,16 @@ async def delete_pack(pack_id: str, _: dict = Depends(require_role("admin"))):
     return {"ok": True}
 
 
+class PublishIn(BaseModel):
+    draft_ids: Optional[List[str]] = None
+
+
 @router.post("/{pack_id}/publish")
-async def publish_pack(pack_id: str, user: dict = Depends(require_role("admin"))):
+async def publish_pack(pack_id: str, payload: PublishIn = PublishIn(), user: dict = Depends(require_role("admin"))):
     """Publish a Tutor Pack's confirmed manual content to students/parents.
 
-    Takes every confirmed draft bundle for this pack and, per (chapter, content type,
+    Takes the confirmed draft bundles for this pack -- either every confirmed draft,
+    or only the ones the admin picked via draft_ids -- and, per (chapter, content type,
     language) slot, keeps only the item from the highest draft_index -- i.e. the latest
     confirmed version of each piece of content -- then upserts those into the contents
     collection with published=True, which is what the student/parent-facing content
@@ -83,9 +88,10 @@ async def publish_pack(pack_id: str, user: dict = Depends(require_role("admin"))
     if not pack:
         raise HTTPException(status_code=404, detail="Tutor Pack not found")
 
-    confirmed = await db.pack_drafts.find(
-        {"pack_id": pack_id, "status": "confirmed"}, {"_id": 0}
-    ).sort("draft_index", 1).to_list(500)
+    query = {"pack_id": pack_id, "status": "confirmed"}
+    if payload.draft_ids is not None:
+        query["id"] = {"$in": payload.draft_ids}
+    confirmed = await db.pack_drafts.find(query, {"_id": 0}).sort("draft_index", 1).to_list(500)
     if not confirmed:
         raise HTTPException(
             status_code=400,
