@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Plus, X, Upload, CheckCircle2, FileEdit, Star, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -248,6 +249,7 @@ const isMeaningful = (contentType, payload) => {
 };
 
 const ManualContent = () => {
+  const [searchParams] = useSearchParams();
   const [packs, setPacks] = useState([]);
   const [packId, setPackId] = useState("");
   const [courses, setCourses] = useState([]);
@@ -281,7 +283,12 @@ const ManualContent = () => {
   const loadPacks = async () => {
     const { data } = await api.get("/packs/list");
     setPacks(data);
-    if (data[0] && !packId) setPackId(data[0].id);
+    const requested = searchParams.get("pack");
+    if (requested && data.find((p) => p.id === requested)) {
+      setPackId(requested);
+    } else if (data[0] && !packId) {
+      setPackId(data[0].id);
+    }
   };
   useEffect(() => { loadPacks(); }, []); // eslint-disable-line
 
