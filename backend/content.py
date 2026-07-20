@@ -172,7 +172,6 @@ class PackDraftOut(BaseModel):
     pack_id: str
     draft_index: int
     status: str
-    marked: bool = False
     items: List[DraftItemOut]
     created_at: str
 
@@ -208,7 +207,6 @@ async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("ad
         "pack_id": payload.pack_id,
         "draft_index": existing_count + 1,
         "status": "draft",
-        "marked": False,
         "items": items_out,
         "created_by": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -233,23 +231,22 @@ async def confirm_pack_draft(draft_id: str, _: dict = Depends(require_role("admi
     return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
 
 
-@router.post("/drafts/{draft_id}/mark", response_model=PackDraftOut)
-async def toggle_mark_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
-    draft = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
-    if not draft:
-        raise HTTPException(status_code=404, detail="Draft not found")
-    res = await db.pack_drafts.find_one_and_update(
-        {"id": draft_id}, {"$set": {"marked": not draft.get("marked", False)}}, return_document=True, projection={"_id": 0}
-    )
-    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
-
-
 @router.delete("/drafts/{draft_id}")
 async def delete_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
     res = await db.pack_drafts.delete_one({"id": draft_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Draft not found")
     return {"ok": True}
+
+
+class BulkDeleteDraftsIn(BaseModel):
+    ids: List[str] = Field(min_length=1)
+
+
+@router.post("/drafts/bulk-delete")
+async def bulk_delete_pack_drafts(payload: BulkDeleteDraftsIn, _: dict = Depends(require_role("admin"))):
+    res = await db.pack_drafts.delete_many({"id": {"$in": payload.ids}})
+    return {"ok": True, "deleted_count": res.deleted_count}
 
 
 UPLOAD_DIR = Path(__file__).parent / "uploads" / "mindmaps"

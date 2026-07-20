@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, X, Upload, CheckCircle2, FileEdit, Star, Trash2 } from "lucide-react";
+import { Plus, X, Upload, CheckCircle2, FileEdit, ListChecks, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 
 const TYPES = [
@@ -270,6 +270,8 @@ const ManualContent = () => {
   // don't, the bug is in hydration; if the highlight doesn't move, it's a click/event bug.
   const [activeDraftId, setActiveDraftId] = useState(null);
   const [draftSort, setDraftSort] = useState("number");
+  const [markMode, setMarkMode] = useState(false);
+  const [selectedDraftIds, setSelectedDraftIds] = useState(new Set());
 
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [newChapterTitle, setNewChapterTitle] = useState("");
@@ -501,13 +503,6 @@ const ManualContent = () => {
     await loadDrafts(packId);
   };
 
-  const toggleMarkDraft = async (id, e) => {
-    e.stopPropagation();
-    const { data } = await api.post(`/content/drafts/${id}/mark`);
-    toast.success(data.marked ? `Draft ${data.draft_index} marked` : `Draft ${data.draft_index} unmarked`);
-    await loadDrafts(packId);
-  };
-
   const deleteDraft = async (draft, e) => {
     e.stopPropagation();
     if (!window.confirm(`Delete Draft ${draft.draft_index}? This cannot be undone.`)) return;
@@ -520,9 +515,44 @@ const ManualContent = () => {
     await loadDrafts(packId);
   };
 
+  const toggleSelectMode = () => {
+    setMarkMode((m) => !m);
+    setSelectedDraftIds(new Set());
+  };
+
+  const toggleSelectDraft = (id, e) => {
+    e.stopPropagation();
+    setSelectedDraftIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedDraftIds((prev) =>
+      prev.size === sortedDrafts.length ? new Set() : new Set(sortedDrafts.map((d) => d.id))
+    );
+  };
+
+  const bulkDeleteSelected = async () => {
+    const ids = Array.from(selectedDraftIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} selected draft(s)? This cannot be undone.`)) return;
+    const { data } = await api.post("/content/drafts/bulk-delete", { ids });
+    toast.success(`Deleted ${data.deleted_count} draft(s)`);
+    if (ids.includes(activeDraftId)) {
+      setActiveDraftId(null);
+      setWorkingSet({});
+    }
+    setSelectedDraftIds(new Set());
+    setMarkMode(false);
+    await loadDrafts(packId);
+  };
+
   const sortedDrafts = [...drafts].sort((a, b) => {
     if (draftSort === "newest") return new Date(b.created_at) - new Date(a.created_at);
-    if (draftSort === "marked") return (b.marked === true) - (a.marked === true) || a.draft_index - b.draft_index;
     return a.draft_index - b.draft_index;
   });
 
@@ -722,75 +752,119 @@ const ManualContent = () => {
           <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="overline text-[#00f0ff]">Drafts</div>
-              <select
-                value={draftSort}
-                onChange={(e) => setDraftSort(e.target.value)}
-                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-widest text-white/60"
-                data-testid="draft-sort"
-              >
-                <option value="number">Draft number</option>
-                <option value="newest">Newest first</option>
-                <option value="marked">Marked first</option>
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  value={draftSort}
+                  onChange={(e) => setDraftSort(e.target.value)}
+                  className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase tracking-widest text-white/60"
+                  data-testid="draft-sort"
+                >
+                  <option value="number">Draft number</option>
+                  <option value="newest">Newest first</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={toggleSelectMode}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] uppercase tracking-widest transition-colors ${
+                    markMode ? "border-[#00f0ff] text-[#00f0ff] bg-[#00f0ff]/10" : "border-white/10 text-white/60 hover:border-white/30"
+                  }`}
+                  data-testid="draft-mark-mode"
+                >
+                  <ListChecks size={12} /> Mark
+                </button>
+              </div>
             </div>
+
+            {markMode && (
+              <div className="flex items-center justify-between mb-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                <label className="flex items-center gap-2 text-xs text-white/70 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sortedDrafts.length > 0 && selectedDraftIds.size === sortedDrafts.length}
+                    onChange={toggleSelectAll}
+                    data-testid="draft-select-all"
+                  />
+                  Select all ({selectedDraftIds.size}/{sortedDrafts.length})
+                </label>
+                <button
+                  type="button"
+                  onClick={bulkDeleteSelected}
+                  disabled={selectedDraftIds.size === 0}
+                  className="inline-flex items-center gap-1 text-xs text-red-400 hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+                  data-testid="draft-bulk-delete"
+                >
+                  <Trash2 size={12} /> Delete selected ({selectedDraftIds.size})
+                </button>
+              </div>
+            )}
+
             <div className="space-y-2 max-h-[32rem] overflow-auto" data-testid="drafts-list">
               {sortedDrafts.map((d) => {
                 const isActive = d.id === activeDraftId;
+                const isSelected = selectedDraftIds.has(d.id);
                 return (
                 <div
                   role="button"
                   tabIndex={0}
                   key={d.id}
-                  onClick={() => loadDraftIntoWorkingSet(d)}
+                  onClick={() => (markMode ? setSelectedDraftIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(d.id)) next.delete(d.id); else next.add(d.id);
+                    return next;
+                  }) : loadDraftIntoWorkingSet(d))}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") loadDraftIntoWorkingSet(d); }}
                   className={`w-full flex items-center justify-between gap-3 border pb-2 pt-2 rounded-lg px-3 -mx-1 transition-colors cursor-pointer ${
-                    isActive ? "border-[#00f0ff] bg-[#00f0ff]/10" : "border-transparent border-b-white/5 hover:bg-white/5"
+                    isSelected ? "border-red-400/60 bg-red-400/10" : isActive ? "border-[#00f0ff] bg-[#00f0ff]/10" : "border-transparent border-b-white/5 hover:bg-white/5"
                   }`}
                   data-testid={`draft-${d.draft_index}`}
                   data-active={isActive}
                 >
-                  <div>
-                    <div className="text-sm text-white flex items-center gap-1.5">
-                      {isActive && <span className="h-1.5 w-1.5 rounded-full bg-[#00f0ff]" />}
-                      Draft {d.draft_index}
-                      <span className="ml-1 text-[10px] uppercase tracking-widest text-white/40">{d.status}</span>
+                  <div className="flex items-center gap-2">
+                    {markMode && (
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => toggleSelectDraft(d.id, e)}
+                        onClick={(e) => e.stopPropagation()}
+                        data-testid={`draft-${d.draft_index}-checkbox`}
+                      />
+                    )}
+                    <div>
+                      <div className="text-sm text-white flex items-center gap-1.5">
+                        {isActive && <span className="h-1.5 w-1.5 rounded-full bg-[#00f0ff]" />}
+                        Draft {d.draft_index}
+                        <span className="ml-1 text-[10px] uppercase tracking-widest text-white/40">{d.status}</span>
+                      </div>
+                      <div className="text-[10px] text-white/40 mt-0.5">{d.items.length} item(s)</div>
                     </div>
-                    <div className="text-[10px] text-white/40 mt-0.5">{d.items.length} item(s)</div>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <button
-                      type="button"
-                      onClick={(e) => toggleMarkDraft(d.id, e)}
-                      className={`hover:text-[#ffd23f] ${d.marked ? "text-[#ffd23f]" : "text-white/30"}`}
-                      data-testid={`draft-${d.draft_index}-mark`}
-                      title={d.marked ? "Unmark" : "Mark"}
-                    >
-                      <Star size={13} fill={d.marked ? "currentColor" : "none"} />
-                    </button>
-                    {d.status === "confirmed" ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-[#00ff66] uppercase tracking-widest">
-                        <CheckCircle2 size={12} /> Confirmed
-                      </span>
-                    ) : (
+                  {!markMode && (
+                    <div className="flex items-center gap-3 shrink-0">
+                      {d.status === "confirmed" ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-[#00ff66] uppercase tracking-widest">
+                          <CheckCircle2 size={12} /> Confirmed
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => confirmDraft(d.id, e)}
+                          className="text-[10px] uppercase tracking-widest text-[#00f0ff] hover:underline"
+                          data-testid={`draft-${d.draft_index}-confirm`}
+                        >
+                          Confirm
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={(e) => confirmDraft(d.id, e)}
-                        className="text-[10px] uppercase tracking-widest text-[#00f0ff] hover:underline"
-                        data-testid={`draft-${d.draft_index}-confirm`}
+                        onClick={(e) => deleteDraft(d, e)}
+                        className="text-white/30 hover:text-red-400"
+                        data-testid={`draft-${d.draft_index}-delete`}
+                        title="Delete"
                       >
-                        Confirm
+                        <Trash2 size={13} />
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={(e) => deleteDraft(d, e)}
-                      className="text-white/30 hover:text-red-400"
-                      data-testid={`draft-${d.draft_index}-delete`}
-                      title="Delete"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
                 );
               })}
