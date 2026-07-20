@@ -66,17 +66,18 @@ memory/PRD.md     # Product requirements & backlog
 DEPLOY.md         # Azure VM Docker deployment guide
 ```
 
-## Local development
+## Deploying to an Azure VM
 
-Backend and frontend each run independently — see inline comments in `docker-compose.yml` for env vars (`JWT_SECRET`, `FERNET_KEY`, `MONGO_URL`, AI provider keys). For a full containerized deploy, follow [`DEPLOY.md`](./DEPLOY.md).
+The full stack ships as three Docker containers (Mongo, FastAPI backend, Nginx-served React frontend), orchestrated by `docker-compose.yml`. Summary of the flow — full details, prerequisites, and hardening notes are in [`DEPLOY.md`](./DEPLOY.md):
 
-Seeded demo accounts (created on first backend boot):
+1. **Provision the VM** — an Ubuntu 22.04/24.04 Azure VM with Docker Engine + Compose plugin installed, and the app port opened on both the Azure NSG and the Ubuntu firewall (`ufw allow 3000/tcp`).
+2. **Clone the repo** onto the VM.
+3. **Configure environment** — copy `.env.example` to `.env` and fill in `JWT_SECRET`, `FERNET_KEY`, `APP_PORT`, and any AI provider keys.
+4. **Build & run** — `docker compose up -d --build`, then check `docker compose ps` / `docker compose logs -f backend`.
+5. **Open the app** at `http://<vm-public-ip>:<APP_PORT>`.
+6. **Redeploy after changes** — `git pull && docker compose up -d --build`.
 
-| Role    | Email                 | Password        |
-|---------|-----------------------|-----------------|
-| Admin   | admin@mytaman.ai      | Admin@12345     |
-| Parent  | parent@mytaman.ai     | Parent@12345    |
-| Student | student@mytaman.ai    | Student@12345   |
+See [`DEPLOY.md`](./DEPLOY.md) for the complete prerequisite install steps, environment variable reference, common commands (rebuild a single service, wipe the database, shell into a container), and production-hardening suggestions (TLS termination, managed MongoDB, restricting CORS).
 
 ## Roadmap
 
