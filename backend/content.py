@@ -300,6 +300,31 @@ async def delete_content(content_id: str, _: dict = Depends(require_role("admin"
     return {"ok": True}
 
 
+@router.post("/{content_id}/complete")
+async def mark_complete(content_id: str, user: dict = Depends(get_current_user)):
+    content = await db.contents.find_one({"id": content_id, "published": True}, {"_id": 0})
+    if not content:
+        raise HTTPException(status_code=404, detail="Not found")
+    await db.progress.update_one(
+        {"user_id": user["id"], "content_id": content_id},
+        {"$setOnInsert": {
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "pack_id": content["pack_id"],
+            "content_id": content_id,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@router.get("/progress")
+async def get_progress(pack_id: str, user: dict = Depends(get_current_user)):
+    docs = await db.progress.find({"user_id": user["id"], "pack_id": pack_id}, {"_id": 0, "content_id": 1}).to_list(500)
+    return {"completed_ids": [d["content_id"] for d in docs]}
+
+
 @router.get("/stats")
 async def stats(_: dict = Depends(require_role("admin"))):
     total = await db.contents.count_documents({})

@@ -1,25 +1,82 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Check } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
+import ContentViewer from "./ContentViewer";
+
+const ContentCard = ({ content, done, onOpen }) => (
+  <button
+    onClick={onOpen}
+    data-testid={`content-${content.id}`}
+    className={`text-left rounded-2xl border p-5 transition-colors ${
+      done ? "border-emerald-400/30 bg-emerald-400/5 hover:border-emerald-400/50" : "border-white/10 bg-[#0a0514]/60 hover:border-[#00f0ff]/40"
+    }`}
+  >
+    <div className="flex justify-between items-start gap-2">
+      <div className="overline text-[#00f0ff]">{content.content_type} · {content.language}</div>
+      {done && <Check size={14} className="text-emerald-400 shrink-0" />}
+    </div>
+    <div className="mt-2 font-display text-lg tracking-tight text-white">{content.title}</div>
+    <div className="mt-3 h-1.5 bg-white/5 rounded-full overflow-hidden">
+      <div className={`h-full ${done ? "bg-emerald-400 w-full" : "bg-gradient-to-r from-[#00f0ff] to-[#8a2be2] w-0"}`} />
+    </div>
+    <div className="mt-2 text-xs text-white/40">{done ? "Completed" : "Tap to open"}</div>
+  </button>
+);
+
+const LANG_FILTERS = ["all", "en", "bm"];
 
 const StudentHome = () => {
   const { t } = useLang();
   const [mine, setMine] = useState([]);
   const [active, setActive] = useState(null);
+  const [courses, setCourses] = useState([]);
+  const [chaptersByCourse, setChaptersByCourse] = useState({});
   const [items, setItems] = useState([]);
+  const [completed, setCompleted] = useState(new Set());
   const [selected, setSelected] = useState(null);
+  const [langFilter, setLangFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
 
   const load = async () => {
     const { data } = await api.get("/packs/mine");
     setMine(data);
     if (data[0]) setActive(data[0]);
+    setLoading(false);
   };
   useEffect(() => { load(); }, []);
+
   useEffect(() => {
-    if (!active) { setItems([]); return; }
-    api.get(`/content/list?pack_id=${active.id}&only_published=true`).then((r) => setItems(r.data));
+    if (!active) {
+      setItems([]);
+      setCourses([]);
+      setChaptersByCourse({});
+      setCompleted(new Set());
+      return;
+    }
+    (async () => {
+      const [itemsRes, coursesRes, progressRes] = await Promise.all([
+        api.get(`/content/list?pack_id=${active.id}&only_published=true`),
+        api.get(`/courses/list?pack_id=${active.id}`),
+        api.get(`/content/progress?pack_id=${active.id}`),
+      ]);
+      setItems(itemsRes.data);
+      setCourses(coursesRes.data);
+      setCompleted(new Set(progressRes.data.completed_ids));
+
+      const chapterLists = await Promise.all(coursesRes.data.map((c) => api.get(`/chapters/list?course_id=${c.id}`)));
+      const map = {};
+      coursesRes.data.forEach((c, i) => { map[c.id] = chapterLists[i].data; });
+      setChaptersByCourse(map);
+    })();
   }, [active]);
+
+  const markComplete = (contentId) => setCompleted((prev) => new Set(prev).add(contentId));
+
+  if (loading) {
+    return <div className="p-8 lg:p-12 text-sm text-white/40">Loading…</div>;
+  }
 
   if (mine.length === 0) {
     return (
@@ -31,6 +88,15 @@ const StudentHome = () => {
       </div>
     );
   }
+
+  const visibleItems = items.filter((it) => langFilter === "all" || it.language === langFilter);
+  const progressPct = items.length ? Math.round((completed.size / items.length) * 100) : 0;
+
+  const itemsByChapter = {};
+  visibleItems.forEach((it) => {
+    const key = it.chapter_id || "other";
+    (itemsByChapter[key] = itemsByChapter[key] || []).push(it);
+  });
 
   return (
     <div className="p-8 lg:p-12">
@@ -52,35 +118,76 @@ const StudentHome = () => {
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4" data-testid="content-grid">
-        {items.map((c) => (
-          <button
-            key={c.id}
-            data-testid={`content-${c.id}`}
-            onClick={() => setSelected(c)}
-            className="text-left rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5 hover:border-[#00f0ff]/40 transition-colors"
-          >
-            <div className="overline text-[#00f0ff]">{c.content_type} · {c.language}</div>
-            <div className="mt-2 font-display text-lg tracking-tight text-white">{c.title}</div>
-            <div className="mt-3 h-1.5 bg-white/5 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-[#00f0ff] to-[#8a2be2] w-1/3" />
+      {active && (
+        <div className="mb-8 flex flex-wrap items-center gap-6">
+          <div className="flex-1 min-w-[200px] max-w-xs">
+            <div className="flex justify-between text-xs text-white/50 mb-1">
+              <span>Progress</span>
+              <span data-testid="progress-pct">{progressPct}%</span>
             </div>
-            <div className="mt-2 text-xs text-white/40">Tap to open</div>
-          </button>
-        ))}
-        {items.length === 0 && <div className="text-sm text-white/40">No published content yet in this pack.</div>}
-      </div>
-
-      {selected && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-md p-6" onClick={() => setSelected(null)}>
-          <div className="max-w-2xl w-full glass rounded-2xl p-8" onClick={(e) => e.stopPropagation()} data-testid="content-modal">
-            <div className="overline text-[#00f0ff]">{selected.content_type}</div>
-            <div className="font-display text-2xl tracking-tighter text-white mt-2">{selected.title}</div>
-            <pre className="mt-5 whitespace-pre-wrap text-sm text-white/80 font-mono leading-relaxed max-h-[60vh] overflow-auto">{selected.body}</pre>
-            <button data-testid="modal-close" onClick={() => setSelected(null)} className="mt-6 rounded-full border border-white/15 px-5 py-2 text-sm text-white/80 hover:border-[#00f0ff] hover:text-[#00f0ff] transition-colors">Close</button>
+            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-[#00f0ff] to-[#8a2be2] transition-all" style={{ width: `${progressPct}%` }} />
+            </div>
+          </div>
+          <div className="flex gap-1" data-testid="lang-filter">
+            {LANG_FILTERS.map((l) => (
+              <button
+                key={l}
+                onClick={() => setLangFilter(l)}
+                className={`rounded-full px-3 py-1 text-xs uppercase border transition-colors ${
+                  langFilter === l ? "border-[#00f0ff] text-[#00f0ff]" : "border-white/10 text-white/50 hover:border-white/30"
+                }`}
+              >
+                {l}
+              </button>
+            ))}
           </div>
         </div>
       )}
+
+      <div className="space-y-8">
+        {courses.map((course) => {
+          const chapters = chaptersByCourse[course.id] || [];
+          const hasItems = chapters.some((ch) => itemsByChapter[ch.id]?.length);
+          if (!hasItems) return null;
+          return (
+            <div key={course.id}>
+              <h2 className="font-display text-lg text-white mb-3">{course.title}</h2>
+              <div className="space-y-5">
+                {chapters.map((ch) => {
+                  const chItems = itemsByChapter[ch.id] || [];
+                  if (chItems.length === 0) return null;
+                  return (
+                    <div key={ch.id}>
+                      <div className="text-sm text-white/60 mb-2">{ch.title}</div>
+                      <div className="grid lg:grid-cols-3 gap-4" data-testid="content-grid">
+                        {chItems.map((c) => (
+                          <ContentCard key={c.id} content={c} done={completed.has(c.id)} onOpen={() => setSelected(c)} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+
+        {itemsByChapter.other?.length > 0 && (
+          <div>
+            <h2 className="font-display text-lg text-white mb-3">Other content</h2>
+            <div className="grid lg:grid-cols-3 gap-4">
+              {itemsByChapter.other.map((c) => (
+                <ContentCard key={c.id} content={c} done={completed.has(c.id)} onOpen={() => setSelected(c)} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {visibleItems.length === 0 && <div className="text-sm text-white/40">No published content yet in this pack.</div>}
+      </div>
+
+      <ContentViewer content={selected} onClose={() => setSelected(null)} onComplete={markComplete} />
     </div>
   );
 };
