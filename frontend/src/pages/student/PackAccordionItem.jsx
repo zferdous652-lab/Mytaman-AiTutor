@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Check } from "lucide-react";
+import { ChevronDown, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import ContentViewer from "./ContentViewer";
 
@@ -24,56 +24,34 @@ const ContentCard = ({ content, done, onOpen }) => (
 );
 
 const LANG_FILTERS = ["all", "en", "bm"];
-const OTHER_MODULE_KEY = "__ungrouped";
 
-// A chapter row inside an expanded module -- collapsed by default, reveals its content-type
-// cards when opened. Chapter identity comes straight off published content (chapter_id +
-// title = chapter_title, set by publish_pack), no separate courses/chapters fetch needed.
-const ChapterRow = ({ chapterId, title, items, completed, onOpenContent, isOpen, onToggle }) => (
-  <div className="rounded-xl border border-white/8 overflow-hidden" data-testid={`chapter-${chapterId}`}>
-    <button
-      type="button"
-      onClick={onToggle}
-      data-testid={`chapter-toggle-${chapterId}`}
-      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors"
-    >
-      <span className="text-sm text-white/80">{title}</span>
-      <span className="flex items-center gap-2 text-xs text-white/30">
-        {items.length} item{items.length === 1 ? "" : "s"}
-        <ChevronRight size={14} className={`transition-transform ${isOpen ? "rotate-90" : ""}`} />
-      </span>
-    </button>
-    {isOpen && (
-      <div className="grid lg:grid-cols-3 gap-4 px-4 pb-4" data-testid="content-grid">
-        {items.map((c) => (
-          <ContentCard key={c.id} content={c} done={completed.has(c.id)} onOpen={() => onOpenContent(c)} />
-        ))}
-      </div>
-    )}
-  </div>
-);
-
-// One row in the "My learning" accordion. Fetches its pack's published content + progress
-// lazily, only once expanded, then groups it Module -> Chapter (a "Module" is a published
-// draft bundle from Manual Content).
+// One row in the "My learning" accordion. Fetches its pack's courses/chapters/content/
+// progress lazily, only once expanded, so collapsed packs cost nothing.
 const PackAccordionItem = ({ pack, expanded, onToggle }) => {
   const [loaded, setLoaded] = useState(false);
+  const [courses, setCourses] = useState([]);
+  const [chaptersByCourse, setChaptersByCourse] = useState({});
   const [items, setItems] = useState([]);
   const [completed, setCompleted] = useState(new Set());
   const [selected, setSelected] = useState(null);
   const [langFilter, setLangFilter] = useState("all");
-  const [openModuleId, setOpenModuleId] = useState(null);
-  const [openChapterIds, setOpenChapterIds] = useState(new Set());
 
   useEffect(() => {
     if (!expanded || loaded) return;
     (async () => {
-      const [itemsRes, progressRes] = await Promise.all([
+      const [itemsRes, coursesRes, progressRes] = await Promise.all([
         api.get(`/content/list?pack_id=${pack.id}&only_published=true`),
+        api.get(`/courses/list?pack_id=${pack.id}`),
         api.get(`/content/progress?pack_id=${pack.id}`),
       ]);
       setItems(itemsRes.data);
+      setCourses(coursesRes.data);
       setCompleted(new Set(progressRes.data.completed_ids));
+
+      const chapterLists = await Promise.all(coursesRes.data.map((c) => api.get(`/chapters/list?course_id=${c.id}`)));
+      const map = {};
+      coursesRes.data.forEach((c, i) => { map[c.id] = chapterLists[i].data; });
+      setChaptersByCourse(map);
       setLoaded(true);
     })();
   }, [expanded, loaded, pack.id]);
@@ -81,38 +59,14 @@ const PackAccordionItem = ({ pack, expanded, onToggle }) => {
   const markComplete = (id) => setCompleted((prev) => new Set(prev).add(id));
   const markIncomplete = (id) => setCompleted((prev) => { const next = new Set(prev); next.delete(id); return next; });
 
-  const toggleChapter = (id) => {
-    setOpenChapterIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
   const visibleItems = items.filter((it) => langFilter === "all" || it.language === langFilter);
   const progressPct = items.length ? Math.round((completed.size / items.length) * 100) : 0;
 
-  // Group by module (published draft), then by chapter within that module. Content
-  // published before the module_id field existed falls into an "Other content" bucket.
-  const modules = {};
+  const itemsByChapter = {};
   visibleItems.forEach((it) => {
-    const moduleKey = it.module_id || OTHER_MODULE_KEY;
-    if (!modules[moduleKey]) {
-      modules[moduleKey] = {
-        id: moduleKey,
-        name: it.module_id ? (it.module_name || `Module ${it.module_index}`) : "Other content",
-        index: it.module_index ?? Infinity,
-        chapters: {},
-      };
-    }
-    const chapterKey = it.chapter_id || "other";
-    if (!modules[moduleKey].chapters[chapterKey]) {
-      modules[moduleKey].chapters[chapterKey] = { id: chapterKey, title: it.title || "Untitled chapter", items: [] };
-    }
-    modules[moduleKey].chapters[chapterKey].items.push(it);
+    const key = it.chapter_id || "other";
+    (itemsByChapter[key] = itemsByChapter[key] || []).push(it);
   });
-  const moduleList = Object.values(modules).sort((a, b) => a.index - b.index);
 
   return (
     <div className="rounded-2xl border border-white/10 bg-[#0a0514]/40 overflow-hidden" data-testid={`pack-${pack.id}`}>
@@ -159,43 +113,44 @@ const PackAccordionItem = ({ pack, expanded, onToggle }) => {
                 ))}
               </div>
 
-              <div className="space-y-3" data-testid="module-list">
-                {moduleList.map((mod) => {
-                  const chapterList = Object.values(mod.chapters);
-                  const isModuleOpen = openModuleId === mod.id;
+              <div className="space-y-8">
+                {courses.map((course) => {
+                  const chapters = chaptersByCourse[course.id] || [];
+                  const hasItems = chapters.some((ch) => itemsByChapter[ch.id]?.length);
+                  if (!hasItems) return null;
                   return (
-                    <div key={mod.id} className="rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden" data-testid={`module-${mod.id}`}>
-                      <button
-                        type="button"
-                        onClick={() => setOpenModuleId((cur) => (cur === mod.id ? null : mod.id))}
-                        data-testid={`module-toggle-${mod.id}`}
-                        className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-white/[0.02] transition-colors"
-                      >
-                        <span className="font-display text-base text-white">{mod.name}</span>
-                        <span className="flex items-center gap-2 text-xs text-white/40">
-                          {chapterList.length} chapter{chapterList.length === 1 ? "" : "s"}
-                          <ChevronDown size={15} className={`transition-transform ${isModuleOpen ? "rotate-180" : ""}`} />
-                        </span>
-                      </button>
-                      {isModuleOpen && (
-                        <div className="px-4 pb-4 space-y-2.5">
-                          {chapterList.map((ch) => (
-                            <ChapterRow
-                              key={ch.id}
-                              chapterId={ch.id}
-                              title={ch.title}
-                              items={ch.items}
-                              completed={completed}
-                              onOpenContent={setSelected}
-                              isOpen={openChapterIds.has(ch.id)}
-                              onToggle={() => toggleChapter(ch.id)}
-                            />
-                          ))}
-                        </div>
-                      )}
+                    <div key={course.id}>
+                      <h2 className="font-display text-base text-white mb-3">{course.title}</h2>
+                      <div className="space-y-5">
+                        {chapters.map((ch) => {
+                          const chItems = itemsByChapter[ch.id] || [];
+                          if (chItems.length === 0) return null;
+                          return (
+                            <div key={ch.id}>
+                              <div className="text-sm text-white/60 mb-2">{ch.title}</div>
+                              <div className="grid lg:grid-cols-3 gap-4" data-testid="content-grid">
+                                {chItems.map((c) => (
+                                  <ContentCard key={c.id} content={c} done={completed.has(c.id)} onOpen={() => setSelected(c)} />
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })}
+
+                {itemsByChapter.other?.length > 0 && (
+                  <div>
+                    <h2 className="font-display text-base text-white mb-3">Other content</h2>
+                    <div className="grid lg:grid-cols-3 gap-4">
+                      {itemsByChapter.other.map((c) => (
+                        <ContentCard key={c.id} content={c} done={completed.has(c.id)} onOpen={() => setSelected(c)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {visibleItems.length === 0 && <div className="text-sm text-white/40">No published content yet in this pack.</div>}
               </div>

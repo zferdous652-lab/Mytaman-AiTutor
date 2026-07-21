@@ -100,21 +100,11 @@ async def publish_pack(pack_id: str, payload: PublishIn = PublishIn(), user: dic
             detail="No confirmed drafts to publish. Confirm a draft in Manual Content first.",
         )
 
-    # Each item is stamped with the draft (module) it came from -- the module a student
-    # sees a piece of content grouped under in "My learning". Since resolution is keyed by
-    # (chapter, content_type, language), the same chapter's different content types can
-    # legitimately end up attributed to different modules if they were published as part
-    # of separate draft bundles.
     resolved = {}
     for draft in confirmed:
         for item in draft["items"]:
             key = (item["chapter_id"], item["content_type"], item["language"])
-            resolved[key] = {
-                **item,
-                "module_id": draft["id"],
-                "module_name": draft.get("name"),
-                "module_index": draft["draft_index"],
-            }  # later (higher draft_index) overwrites earlier
+            resolved[key] = item  # later (higher draft_index) overwrites earlier
 
     now = datetime.now(timezone.utc).isoformat()
     published_count = 0
@@ -128,14 +118,7 @@ async def publish_pack(pack_id: str, payload: PublishIn = PublishIn(), user: dic
         if existing:
             await db.contents.update_one(
                 {"id": existing["id"]},
-                {"$set": {
-                    "payload": item["payload"],
-                    "title": item["chapter_title"],
-                    "published": True,
-                    "module_id": item["module_id"],
-                    "module_name": item["module_name"],
-                    "module_index": item["module_index"],
-                }},
+                {"$set": {"payload": item["payload"], "title": item["chapter_title"], "published": True}},
             )
         else:
             await db.contents.insert_one({
@@ -152,53 +135,13 @@ async def publish_pack(pack_id: str, payload: PublishIn = PublishIn(), user: dic
                 "provider": None,
                 "model": None,
                 "published": True,
-                "module_id": item["module_id"],
-                "module_name": item["module_name"],
-                "module_index": item["module_index"],
                 "created_by": user["id"],
                 "created_at": now,
             })
         published_count += 1
 
-    # Mark exactly the drafts that were published as such -- these are what the student
-    # portal lists as "Modules" when browsing a pack. A draft can be confirmed without
-    # being published (deselected in the Publish Review picker), so this can't be
-    # inferred from status="confirmed" alone.
-    await db.pack_drafts.update_many(
-        {"id": {"$in": [d["id"] for d in confirmed]}},
-        {"$set": {"published": True, "published_at": now}},
-    )
-
     await db.packs.update_one({"id": pack_id}, {"$set": {"published": True, "published_at": now}})
     return {"ok": True, "published_count": published_count}
-
-
-@router.get("/{pack_id}/modules")
-async def list_modules(pack_id: str, _: dict = Depends(get_current_user)):
-    """Published draft bundles for a pack, shown to students as browsable 'Modules'
-    before/without enrolling -- a lightweight syllabus preview (course/chapter/type
-    labels only, not the actual payload content)."""
-    docs = await db.pack_drafts.find(
-        {"pack_id": pack_id, "published": True}, {"_id": 0}
-    ).sort("draft_index", 1).to_list(200)
-    return [
-        {
-            "id": d["id"],
-            "draft_index": d["draft_index"],
-            "name": d.get("name"),
-            "published_at": d.get("published_at"),
-            "items": [
-                {
-                    "course_title": it["course_title"],
-                    "chapter_title": it["chapter_title"],
-                    "content_type": it["content_type"],
-                    "language": it["language"],
-                }
-                for it in d["items"]
-            ],
-        }
-        for d in docs
-    ]
 
 
 class EnrollIn(BaseModel):

@@ -45,9 +45,6 @@ class ContentOut(BaseModel):
     draft_index: Optional[int] = None
     provider: Optional[str] = None
     model: Optional[str] = None
-    module_id: Optional[str] = None
-    module_name: Optional[str] = None
-    module_index: Optional[int] = None
     published: bool
     created_at: str
 
@@ -178,8 +175,6 @@ class PackDraftOut(BaseModel):
     name: Optional[str] = None
     items: List[DraftItemOut]
     created_at: str
-    published: bool = False
-    published_at: Optional[str] = None
 
 
 @router.post("/drafts", response_model=PackDraftOut)
@@ -219,17 +214,15 @@ async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("ad
         "items": items_out,
         "created_by": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "published": False,
-        "published_at": None,
     }
     await db.pack_drafts.insert_one(doc)
-    return PackDraftOut(**{k: doc.get(k, PackDraftOut.model_fields[k].default) for k in PackDraftOut.model_fields.keys()})
+    return PackDraftOut(**{k: doc.get(k) for k in PackDraftOut.model_fields.keys()})
 
 
 @router.get("/drafts", response_model=List[PackDraftOut])
 async def list_pack_drafts(pack_id: str, _: dict = Depends(require_role("admin"))):
     docs = await db.pack_drafts.find({"pack_id": pack_id}, {"_id": 0}).sort("draft_index", 1).to_list(200)
-    return [PackDraftOut(**{k: d.get(k, PackDraftOut.model_fields[k].default) for k in PackDraftOut.model_fields.keys()}) for d in docs]
+    return [PackDraftOut(**{k: d.get(k) for k in PackDraftOut.model_fields.keys()}) for d in docs]
 
 
 @router.post("/drafts/{draft_id}/confirm", response_model=PackDraftOut)
@@ -239,7 +232,7 @@ async def confirm_pack_draft(draft_id: str, _: dict = Depends(require_role("admi
     )
     if not res:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return PackDraftOut(**{k: res.get(k, PackDraftOut.model_fields[k].default) for k in PackDraftOut.model_fields.keys()})
+    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
 
 
 @router.post("/drafts/{draft_id}/deny", response_model=PackDraftOut)
@@ -250,7 +243,7 @@ async def deny_pack_draft(draft_id: str, _: dict = Depends(require_role("admin")
     )
     if not res:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return PackDraftOut(**{k: res.get(k, PackDraftOut.model_fields[k].default) for k in PackDraftOut.model_fields.keys()})
+    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
 
 
 @router.post("/drafts/{draft_id}/duplicate", response_model=PackDraftOut)
@@ -272,11 +265,9 @@ async def duplicate_pack_draft(draft_id: str, user: dict = Depends(require_role(
         "items": source["items"],
         "created_by": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "published": False,
-        "published_at": None,
     }
     await db.pack_drafts.insert_one(doc)
-    return PackDraftOut(**{k: doc.get(k, PackDraftOut.model_fields[k].default) for k in PackDraftOut.model_fields.keys()})
+    return PackDraftOut(**{k: doc.get(k) for k in PackDraftOut.model_fields.keys()})
 
 
 class RenameDraftIn(BaseModel):
@@ -291,7 +282,7 @@ async def rename_pack_draft(draft_id: str, payload: RenameDraftIn, _: dict = Dep
     )
     if not res:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return PackDraftOut(**{k: res.get(k, PackDraftOut.model_fields[k].default) for k in PackDraftOut.model_fields.keys()})
+    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
 
 
 @router.delete("/drafts/{draft_id}")
