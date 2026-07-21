@@ -138,8 +138,45 @@ async def publish_pack(pack_id: str, payload: PublishIn = PublishIn(), user: dic
             })
         published_count += 1
 
+    # Mark exactly the drafts that were published as such -- these are what the student
+    # portal lists as "Modules" when browsing a pack. A draft can be confirmed without
+    # being published (deselected in the Publish Review picker), so this can't be
+    # inferred from status="confirmed" alone.
+    await db.pack_drafts.update_many(
+        {"id": {"$in": [d["id"] for d in confirmed]}},
+        {"$set": {"published": True, "published_at": now}},
+    )
+
     await db.packs.update_one({"id": pack_id}, {"$set": {"published": True, "published_at": now}})
     return {"ok": True, "published_count": published_count}
+
+
+@router.get("/{pack_id}/modules")
+async def list_modules(pack_id: str, _: dict = Depends(get_current_user)):
+    """Published draft bundles for a pack, shown to students as browsable 'Modules'
+    before/without enrolling -- a lightweight syllabus preview (course/chapter/type
+    labels only, not the actual payload content)."""
+    docs = await db.pack_drafts.find(
+        {"pack_id": pack_id, "published": True}, {"_id": 0}
+    ).sort("draft_index", 1).to_list(200)
+    return [
+        {
+            "id": d["id"],
+            "draft_index": d["draft_index"],
+            "name": d.get("name"),
+            "published_at": d.get("published_at"),
+            "items": [
+                {
+                    "course_title": it["course_title"],
+                    "chapter_title": it["chapter_title"],
+                    "content_type": it["content_type"],
+                    "language": it["language"],
+                }
+                for it in d["items"]
+            ],
+        }
+        for d in docs
+    ]
 
 
 class EnrollIn(BaseModel):
