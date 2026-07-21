@@ -66,6 +66,8 @@ async def delete_pack(pack_id: str, _: dict = Depends(require_role("admin"))):
     await db.contents.delete_many({"pack_id": pack_id})
     await db.pack_drafts.delete_many({"pack_id": pack_id})
     await db.enrollments.delete_many({"pack_id": pack_id})
+    await db.progress.delete_many({"pack_id": pack_id})
+    await db.quiz_results.delete_many({"pack_id": pack_id})
     return {"ok": True}
 
 
