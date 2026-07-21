@@ -376,10 +376,58 @@ async def mark_incomplete(content_id: str, user: dict = Depends(get_current_user
     return {"ok": True}
 
 
+class QuizResultIn(BaseModel):
+    score: int = Field(ge=0)
+    total: int = Field(ge=0)
+
+
+@router.post("/{content_id}/quiz-result")
+async def submit_quiz_result(content_id: str, payload: QuizResultIn, user: dict = Depends(get_current_user)):
+    content = await db.contents.find_one({"id": content_id, "published": True}, {"_id": 0})
+    if not content:
+        raise HTTPException(status_code=404, detail="Not found")
+    if content["content_type"] != "quiz":
+        raise HTTPException(status_code=400, detail="Not a quiz")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.quiz_results.update_one(
+        {"user_id": user["id"], "content_id": content_id},
+        {
+            "$set": {"score": payload.score, "total": payload.total, "submitted_at": now},
+            "$setOnInsert": {
+                "id": str(uuid.uuid4()),
+                "user_id": user["id"],
+                "pack_id": content["pack_id"],
+                "content_id": content_id,
+            },
+            "$inc": {"attempts": 1},
+        },
+        upsert=True,
+    )
+    # A submitted quiz counts as completed, same as mark_complete.
+    await db.progress.update_one(
+        {"user_id": user["id"], "content_id": content_id},
+        {"$setOnInsert": {
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "pack_id": content["pack_id"],
+            "content_id": content_id,
+            "completed_at": now,
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
 @router.get("/progress")
 async def get_progress(pack_id: str, user: dict = Depends(get_current_user)):
     docs = await db.progress.find({"user_id": user["id"], "pack_id": pack_id}, {"_id": 0, "content_id": 1}).to_list(500)
-    return {"completed_ids": [d["content_id"] for d in docs]}
+    quiz_docs = await db.quiz_results.find(
+        {"user_id": user["id"], "pack_id": pack_id}, {"_id": 0, "content_id": 1, "score": 1, "total": 1, "attempts": 1}
+    ).to_list(500)
+    return {
+        "completed_ids": [d["content_id"] for d in docs],
+        "quiz_scores": {d["content_id"]: {"score": d["score"], "total": d["total"], "attempts": d.get("attempts", 1)} for d in quiz_docs},
+    }
 
 
 @router.get("/stats")
