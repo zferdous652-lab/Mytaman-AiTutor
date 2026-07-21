@@ -56,11 +56,17 @@ const StudentBrowse = () => {
   const { t } = useLang();
   const [packs, setPacks] = useState([]);
   const [enrolled, setEnrolled] = useState(new Set());
+  const [coursesByPack, setCoursesByPack] = useState({});
 
   const load = async () => {
     const [all, mine] = await Promise.all([api.get("/packs/list"), api.get("/packs/mine")]);
     setPacks(all.data);
     setEnrolled(new Set(mine.data.map((p) => p.id)));
+
+    const courseLists = await Promise.all(all.data.map((p) => api.get(`/courses/list?pack_id=${p.id}`)));
+    const map = {};
+    all.data.forEach((p, i) => { map[p.id] = courseLists[i].data; });
+    setCoursesByPack(map);
   };
   useEffect(() => { load(); }, []);
 
@@ -75,27 +81,42 @@ const StudentBrowse = () => {
       <div className="overline text-[#00f0ff]">{t("browse_packs")}</div>
       <h1 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mt-2 mb-8">Available Tutor Packs</h1>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="browse-list">
-        {packs.map((p) => (
-          <div key={p.id} className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5">
-            <div className="flex justify-between">
-              <div className="overline text-[#00f0ff]">{p.tier}</div>
-              <div className="text-[10px] uppercase tracking-widest text-white/40">{p.language.toUpperCase()}</div>
+        {packs.map((p) => {
+          const courses = coursesByPack[p.id] || [];
+          return (
+            <div key={p.id} className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5 flex flex-col">
+              <div className="flex justify-between">
+                <div className="overline text-[#00f0ff]">{p.tier}</div>
+                <div className="text-[10px] uppercase tracking-widest text-white/40">{p.language.toUpperCase()}</div>
+              </div>
+              <div className="font-display text-lg tracking-tight text-white mt-2">{p.title}</div>
+              <div className="text-xs text-white/50 mt-1">{p.subject} · {p.grade}</div>
+              <p className="text-sm text-white/70 mt-3 leading-relaxed">{p.description}</p>
+
+              {courses.length > 0 && (
+                <div className="mt-4" data-testid={`preview-${p.id}`}>
+                  <div className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Preview</div>
+                  <ol className="space-y-1">
+                    {courses.map((c, i) => (
+                      <li key={c.id} className="text-xs text-white/60">{i + 1}. {c.title}</li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              <button
+                data-testid={`enroll-${p.id}`}
+                disabled={enrolled.has(p.id)}
+                onClick={() => enroll(p.id)}
+                className={`mt-4 w-full rounded-full py-2 text-sm font-semibold transition-colors ${
+                  enrolled.has(p.id) ? "border border-white/10 text-white/50" : "bg-[#00f0ff] text-black hover:bg-white"
+                }`}
+              >
+                {enrolled.has(p.id) ? t("enrolled") : t("enroll")}
+              </button>
             </div>
-            <div className="font-display text-lg tracking-tight text-white mt-2">{p.title}</div>
-            <div className="text-xs text-white/50 mt-1">{p.subject} · {p.grade}</div>
-            <p className="text-sm text-white/70 mt-3 leading-relaxed">{p.description}</p>
-            <button
-              data-testid={`enroll-${p.id}`}
-              disabled={enrolled.has(p.id)}
-              onClick={() => enroll(p.id)}
-              className={`mt-4 w-full rounded-full py-2 text-sm font-semibold transition-colors ${
-                enrolled.has(p.id) ? "border border-white/10 text-white/50" : "bg-[#00f0ff] text-black hover:bg-white"
-              }`}
-            >
-              {enrolled.has(p.id) ? t("enrolled") : t("enroll")}
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
