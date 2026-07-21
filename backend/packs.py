@@ -98,11 +98,21 @@ async def publish_pack(pack_id: str, payload: PublishIn = PublishIn(), user: dic
             detail="No confirmed drafts to publish. Confirm a draft in Manual Content first.",
         )
 
+    # Each item is stamped with the draft (module) it came from -- the module a student
+    # sees a piece of content grouped under in "My learning". Since resolution is keyed by
+    # (chapter, content_type, language), the same chapter's different content types can
+    # legitimately end up attributed to different modules if they were published as part
+    # of separate draft bundles.
     resolved = {}
     for draft in confirmed:
         for item in draft["items"]:
             key = (item["chapter_id"], item["content_type"], item["language"])
-            resolved[key] = item  # later (higher draft_index) overwrites earlier
+            resolved[key] = {
+                **item,
+                "module_id": draft["id"],
+                "module_name": draft.get("name"),
+                "module_index": draft["draft_index"],
+            }  # later (higher draft_index) overwrites earlier
 
     now = datetime.now(timezone.utc).isoformat()
     published_count = 0
@@ -116,7 +126,14 @@ async def publish_pack(pack_id: str, payload: PublishIn = PublishIn(), user: dic
         if existing:
             await db.contents.update_one(
                 {"id": existing["id"]},
-                {"$set": {"payload": item["payload"], "title": item["chapter_title"], "published": True}},
+                {"$set": {
+                    "payload": item["payload"],
+                    "title": item["chapter_title"],
+                    "published": True,
+                    "module_id": item["module_id"],
+                    "module_name": item["module_name"],
+                    "module_index": item["module_index"],
+                }},
             )
         else:
             await db.contents.insert_one({
@@ -133,6 +150,9 @@ async def publish_pack(pack_id: str, payload: PublishIn = PublishIn(), user: dic
                 "provider": None,
                 "model": None,
                 "published": True,
+                "module_id": item["module_id"],
+                "module_name": item["module_name"],
+                "module_index": item["module_index"],
                 "created_by": user["id"],
                 "created_at": now,
             })

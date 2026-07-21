@@ -45,6 +45,9 @@ class ContentOut(BaseModel):
     draft_index: Optional[int] = None
     provider: Optional[str] = None
     model: Optional[str] = None
+    module_id: Optional[str] = None
+    module_name: Optional[str] = None
+    module_index: Optional[int] = None
     published: bool
     created_at: str
 
