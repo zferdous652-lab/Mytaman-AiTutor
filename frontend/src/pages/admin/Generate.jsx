@@ -648,7 +648,11 @@ const Generate = () => {
       setSourceFileName(data.filename || file.name);
       toast.success(`Extracted text from ${data.filename || file.name}`);
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Could not extract text from this PDF");
+      const status = err?.response?.status;
+      toast.error(
+        err?.response?.data?.detail ||
+          (status ? `Could not extract text from this PDF (server returned HTTP ${status})` : "Could not extract text from this PDF -- check your connection")
+      );
     }
     setUploadingSource(false);
   };
