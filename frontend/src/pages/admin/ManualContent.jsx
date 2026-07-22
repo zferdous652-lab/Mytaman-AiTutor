@@ -570,16 +570,20 @@ const ManualContent = () => {
     }
     setSaving(true);
     try {
-      const { data } = await api.post("/content/drafts", {
-        pack_id: packId,
-        items: items.map((it) => ({
-          chapter_id: it.chapter_id,
-          content_type: it.content_type,
-          language: it.language,
-          payload: it.payload,
-        })),
-      });
-      toast.success(`Draft ${data.draft_index} saved with ${data.items.length} item(s)`);
+      const itemsPayload = items.map((it) => ({
+        chapter_id: it.chapter_id,
+        content_type: it.content_type,
+        language: it.language,
+        payload: it.payload,
+      }));
+      const data = activeDraftId
+        ? (await api.put(`/content/drafts/${activeDraftId}`, { items: itemsPayload })).data
+        : (await api.post("/content/drafts", { pack_id: packId, items: itemsPayload })).data;
+      toast.success(
+        activeDraftId
+          ? `Draft ${data.draft_index} updated with ${data.items.length} item(s) — confirm it again to include these changes in the next publish`
+          : `Draft ${data.draft_index} saved with ${data.items.length} item(s)`
+      );
       setWorkingSet({});
       setActiveDraftId(null);
       setBody("");
@@ -914,7 +918,7 @@ const ManualContent = () => {
             data-testid="mc-save"
           >
             <FileEdit size={14} />
-            {saving ? "Saving…" : "Save content"}
+            {saving ? "Saving…" : activeDraftId ? "Update draft" : "Save content"}
           </button>
         </div>
 
