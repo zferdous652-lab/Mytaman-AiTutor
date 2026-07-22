@@ -29,11 +29,15 @@ class PackOut(PackIn):
     created_at: str
     published: bool = False
     published_at: Optional[str] = None
+    archived: bool = False
 
 
 @router.get("/list", response_model=List[PackOut])
 async def list_packs(_: dict = Depends(get_current_user)):
-    docs = await db.packs.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    # Archived packs are hidden from both Admin's Tutor Packs list and Browse Packs, but
+    # stay visible to students already enrolled via GET /packs/mine (unfiltered) -- that's
+    # the whole point of archiving instead of deleting: existing students keep access.
+    docs = await db.packs.find({"archived": {"$ne": True}}, {"_id": 0}).sort("created_at", -1).to_list(200)
     return [PackOut(**d) for d in docs]
 
 
@@ -44,10 +48,24 @@ async def create_pack(payload: PackIn, _: dict = Depends(require_role("admin")))
         **payload.model_dump(),
         "published": False,
         "published_at": None,
+        "archived": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.packs.insert_one(doc)
     return PackOut(**doc)
+
+
+@router.post("/{pack_id}/archive", response_model=PackOut)
+async def archive_pack(pack_id: str, _: dict = Depends(require_role("admin"))):
+    """Soft-delete: hides the pack from Admin/Browse Packs but leaves courses, chapters,
+    content, drafts, enrollments and progress untouched -- students already enrolled keep
+    seeing it in My Learning. Use DELETE for a full, unrecoverable removal instead."""
+    res = await db.packs.find_one_and_update(
+        {"id": pack_id}, {"$set": {"archived": True}}, return_document=True, projection={"_id": 0}
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Tutor Pack not found")
+    return PackOut(**res)
 
 
 @router.delete("/{pack_id}")
