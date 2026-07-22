@@ -220,9 +220,13 @@ class DraftItemIn(BaseModel):
     payload: dict
 
 
+DraftSource = Literal["manual", "ai"]
+
+
 class SaveDraftIn(BaseModel):
     pack_id: str
     items: List[DraftItemIn] = Field(min_length=1)
+    source: DraftSource = "manual"
 
 
 class DraftItemOut(BaseModel):
@@ -241,8 +245,17 @@ class PackDraftOut(BaseModel):
     draft_index: int
     status: str
     name: Optional[str] = None
+    source: DraftSource = "manual"
     items: List[DraftItemOut]
     created_at: str
+
+
+def _draft_out(doc: dict) -> PackDraftOut:
+    """Builds a PackDraftOut from a raw pack_drafts document, defaulting `source` to
+    "manual" for drafts saved before the Manual Content / Generate with AI split existed."""
+    d = {k: doc.get(k) for k in PackDraftOut.model_fields.keys()}
+    d["source"] = doc.get("source") or "manual"
+    return PackDraftOut(**d)
 
 
 @router.post("/drafts", response_model=PackDraftOut)
@@ -279,18 +292,25 @@ async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("ad
         "pack_id": payload.pack_id,
         "draft_index": next_index,
         "status": "draft",
+        "source": payload.source,
         "items": items_out,
         "created_by": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.pack_drafts.insert_one(doc)
-    return PackDraftOut(**{k: doc.get(k) for k in PackDraftOut.model_fields.keys()})
+    return _draft_out(doc)
 
 
 @router.get("/drafts", response_model=List[PackDraftOut])
-async def list_pack_drafts(pack_id: str, _: dict = Depends(require_role("admin"))):
-    docs = await db.pack_drafts.find({"pack_id": pack_id}, {"_id": 0}).sort("draft_index", 1).to_list(200)
-    return [PackDraftOut(**{k: d.get(k) for k in PackDraftOut.model_fields.keys()}) for d in docs]
+async def list_pack_drafts(pack_id: str, source: Optional[DraftSource] = None, _: dict = Depends(require_role("admin"))):
+    q: dict = {"pack_id": pack_id}
+    if source == "manual":
+        # Drafts saved before the source field existed are all Manual Content drafts.
+        q["$or"] = [{"source": "manual"}, {"source": {"$exists": False}}]
+    elif source == "ai":
+        q["source"] = "ai"
+    docs = await db.pack_drafts.find(q, {"_id": 0}).sort("draft_index", 1).to_list(200)
+    return [_draft_out(d) for d in docs]
 
 
 @router.post("/drafts/{draft_id}/confirm", response_model=PackDraftOut)
@@ -300,7 +320,7 @@ async def confirm_pack_draft(draft_id: str, _: dict = Depends(require_role("admi
     )
     if not res:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
+    return _draft_out(res)
 
 
 @router.post("/drafts/{draft_id}/deny", response_model=PackDraftOut)
@@ -311,7 +331,7 @@ async def deny_pack_draft(draft_id: str, _: dict = Depends(require_role("admin")
     )
     if not res:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
+    return _draft_out(res)
 
 
 @router.post("/drafts/{draft_id}/duplicate", response_model=PackDraftOut)
@@ -330,12 +350,13 @@ async def duplicate_pack_draft(draft_id: str, user: dict = Depends(require_role(
         "draft_index": next_index,
         "status": "draft",
         "name": f"{source_label} (copy)",
+        "source": source.get("source") or "manual",
         "items": source["items"],
         "created_by": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.pack_drafts.insert_one(doc)
-    return PackDraftOut(**{k: doc.get(k) for k in PackDraftOut.model_fields.keys()})
+    return _draft_out(doc)
 
 
 class RenameDraftIn(BaseModel):
@@ -350,7 +371,7 @@ async def rename_pack_draft(draft_id: str, payload: RenameDraftIn, _: dict = Dep
     )
     if not res:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
+    return _draft_out(res)
 
 
 @router.delete("/drafts/{draft_id}")
