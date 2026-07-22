@@ -1,5 +1,9 @@
 """Content generation & storage endpoints."""
+import io
+import json
+import re
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional, List
@@ -145,16 +149,93 @@ def _validate_payload(content_type: str, payload: dict) -> dict:
         raise HTTPException(status_code=422, detail=f"Invalid payload for {content_type}: {e}")
 
 
+def _extract_json(text: str) -> dict:
+    text = text.strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
+    if fenced:
+        text = fenced.group(1)
+    else:
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            text = text[start:end + 1]
+    return json.loads(text)
+
+
+class AiDraftItemIn(BaseModel):
+    chapter_id: str
+    content_type: ContentType
+    language: Literal["en", "bm"] = "en"
+    source_text: str = Field(min_length=10)
+
+
+class AiDraftItemOut(BaseModel):
+    chapter_id: str
+    content_type: ContentType
+    language: str
+    payload: dict
+    provider: str
+    model: str
+
+
+@router.post("/ai-draft", response_model=AiDraftItemOut)
+async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(require_role("admin"))):
+    """Generates a single chapter's content via the Model Router, validated against the same
+    typed payload shapes as Manual Content, so the result can be edited and saved through the
+    same /content/drafts pipeline (draft -> confirm -> publish)."""
+    if payload.content_type == "mindmap":
+        raise HTTPException(status_code=400, detail="Mind maps need an uploaded image and can't be AI-generated yet.")
+
+    chapter = await db.chapters.find_one({"id": payload.chapter_id}, {"_id": 0})
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    lang_hint = "Respond in Bahasa Melayu." if payload.language == "bm" else "Respond in English."
+    user_text = f"{lang_hint}\n\nChapter: {chapter['title']}\n\nSource material:\n{payload.source_text}"
+    result = await call_router(PROMPT_KEY[payload.content_type], user_text)
+
+    if payload.content_type == "summary":
+        raw_payload = {"body": result["text"].strip()}
+    else:
+        try:
+            raw_payload = _extract_json(result["text"])
+        except (json.JSONDecodeError, ValueError):
+            raise HTTPException(
+                status_code=502,
+                detail="AI did not return valid JSON. Try again, or adjust the prompt in Model Router.",
+            )
+
+    validated = _validate_payload(payload.content_type, raw_payload)
+    return AiDraftItemOut(
+        chapter_id=payload.chapter_id,
+        content_type=payload.content_type,
+        language=payload.language,
+        payload=validated,
+        provider=result["provider"],
+        model=result["model"],
+    )
+
+
+class SourcePdfIn(BaseModel):
+    filename: str
+    url: str
+    text: str
+
+
 class DraftItemIn(BaseModel):
     chapter_id: str
     content_type: ContentType
     language: Literal["en", "bm"] = "en"
     payload: dict
+    source_pdf: Optional[SourcePdfIn] = None
+
+
+DraftSource = Literal["manual", "ai"]
 
 
 class SaveDraftIn(BaseModel):
     pack_id: str
     items: List[DraftItemIn] = Field(min_length=1)
+    source: DraftSource = "manual"
 
 
 class DraftItemOut(BaseModel):
@@ -165,6 +246,7 @@ class DraftItemOut(BaseModel):
     content_type: ContentType
     language: str
     payload: dict
+    source_pdf: Optional[SourcePdfIn] = None
 
 
 class PackDraftOut(BaseModel):
@@ -173,8 +255,17 @@ class PackDraftOut(BaseModel):
     draft_index: int
     status: str
     name: Optional[str] = None
+    source: DraftSource = "manual"
     items: List[DraftItemOut]
     created_at: str
+
+
+def _draft_out(doc: dict) -> PackDraftOut:
+    """Builds a PackDraftOut from a raw pack_drafts document, defaulting `source` to
+    "manual" for drafts saved before the Manual Content / Generate with AI split existed."""
+    d = {k: doc.get(k) for k in PackDraftOut.model_fields.keys()}
+    d["source"] = doc.get("source") or "manual"
+    return PackDraftOut(**d)
 
 
 async def _build_items_out(pack_id: str, items_in: List[DraftItemIn]) -> list:
@@ -195,6 +286,7 @@ async def _build_items_out(pack_id: str, items_in: List[DraftItemIn]) -> list:
             "content_type": item.content_type,
             "language": item.language,
             "payload": validated_payload,
+            "source_pdf": item.source_pdf.model_dump() if item.source_pdf else None,
         })
     return items_out
 
@@ -216,12 +308,13 @@ async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("ad
         "pack_id": payload.pack_id,
         "draft_index": next_index,
         "status": "draft",
+        "source": payload.source,
         "items": items_out,
         "created_by": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.pack_drafts.insert_one(doc)
-    return PackDraftOut(**{k: doc.get(k) for k in PackDraftOut.model_fields.keys()})
+    return _draft_out(doc)
 
 
 class UpdateDraftItemsIn(BaseModel):
@@ -247,13 +340,19 @@ async def update_pack_draft_items(draft_id: str, payload: UpdateDraftItemsIn, _:
         return_document=True,
         projection={"_id": 0},
     )
-    return PackDraftOut(**{k: res.get(k, PackDraftOut.model_fields[k].default) for k in PackDraftOut.model_fields.keys()})
+    return _draft_out(res)
 
 
 @router.get("/drafts", response_model=List[PackDraftOut])
-async def list_pack_drafts(pack_id: str, _: dict = Depends(require_role("admin"))):
-    docs = await db.pack_drafts.find({"pack_id": pack_id}, {"_id": 0}).sort("draft_index", 1).to_list(200)
-    return [PackDraftOut(**{k: d.get(k) for k in PackDraftOut.model_fields.keys()}) for d in docs]
+async def list_pack_drafts(pack_id: str, source: Optional[DraftSource] = None, _: dict = Depends(require_role("admin"))):
+    q: dict = {"pack_id": pack_id}
+    if source == "manual":
+        # Drafts saved before the source field existed are all Manual Content drafts.
+        q["$or"] = [{"source": "manual"}, {"source": {"$exists": False}}]
+    elif source == "ai":
+        q["source"] = "ai"
+    docs = await db.pack_drafts.find(q, {"_id": 0}).sort("draft_index", 1).to_list(200)
+    return [_draft_out(d) for d in docs]
 
 
 @router.post("/drafts/{draft_id}/confirm", response_model=PackDraftOut)
@@ -263,7 +362,7 @@ async def confirm_pack_draft(draft_id: str, _: dict = Depends(require_role("admi
     )
     if not res:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
+    return _draft_out(res)
 
 
 @router.post("/drafts/{draft_id}/deny", response_model=PackDraftOut)
@@ -274,7 +373,7 @@ async def deny_pack_draft(draft_id: str, _: dict = Depends(require_role("admin")
     )
     if not res:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
+    return _draft_out(res)
 
 
 @router.post("/drafts/{draft_id}/duplicate", response_model=PackDraftOut)
@@ -293,12 +392,13 @@ async def duplicate_pack_draft(draft_id: str, user: dict = Depends(require_role(
         "draft_index": next_index,
         "status": "draft",
         "name": f"{source_label} (copy)",
+        "source": source.get("source") or "manual",
         "items": source["items"],
         "created_by": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.pack_drafts.insert_one(doc)
-    return PackDraftOut(**{k: doc.get(k) for k in PackDraftOut.model_fields.keys()})
+    return _draft_out(doc)
 
 
 class RenameDraftIn(BaseModel):
@@ -313,7 +413,7 @@ async def rename_pack_draft(draft_id: str, payload: RenameDraftIn, _: dict = Dep
     )
     if not res:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return PackDraftOut(**{k: res.get(k) for k in PackDraftOut.model_fields.keys()})
+    return _draft_out(res)
 
 
 @router.delete("/drafts/{draft_id}")
@@ -351,6 +451,73 @@ async def upload_image(file: UploadFile = File(...), _: dict = Depends(require_r
     fname = f"{uuid.uuid4()}{ext}"
     (UPLOAD_DIR / fname).write_bytes(data)
     return {"url": f"/api/uploads/mindmaps/{fname}"}
+
+
+SOURCE_PDF_DIR = Path(__file__).parent / "uploads" / "source_pdfs"
+SOURCE_PDF_DIR.mkdir(parents=True, exist_ok=True)
+MAX_PDF_BYTES = 15 * 1024 * 1024
+MAX_PDF_PAGES = 60
+_PAGE_NUMBER_RE = re.compile(r"[\divxlcIVXLC]{1,4}")
+
+
+def _clean_extracted_pages(pages: List[List[str]]) -> str:
+    """Strips stray page numbers and repeated running headers/footers that plain PDF
+    text extraction pulls out as ordinary lines -- in whatever order they appear in
+    the PDF's content stream, not visual reading order, which is why a page number
+    or the book's running title can end up sitting next to a chapter heading."""
+    num_pages = len(pages)
+    line_counts = Counter()
+    for page_lines in pages:
+        for line in {ln.strip() for ln in page_lines if ln.strip()}:
+            line_counts[line] += 1
+
+    # A line repeated on most pages is a running header/footer, not real content.
+    # Skip this heuristic for very short documents, where "most pages" is meaningless.
+    repeat_threshold = max(2, num_pages // 2 + 1) if num_pages > 2 else num_pages + 1
+    noisy = {line for line, count in line_counts.items() if count >= repeat_threshold}
+
+    cleaned_pages = []
+    for page_lines in pages:
+        kept = [
+            line.strip() for line in page_lines
+            if line.strip() and line.strip() not in noisy and not _PAGE_NUMBER_RE.fullmatch(line.strip())
+        ]
+        if kept:
+            cleaned_pages.append("\n".join(kept))
+    return "\n\n".join(cleaned_pages)
+
+
+@router.post("/extract-pdf")
+async def extract_pdf_text(file: UploadFile = File(...), _: dict = Depends(require_role("admin"))):
+    """Extracts plain text from an uploaded course-material PDF and keeps the PDF itself on
+    disk, so it can be attached to a draft (viewable/removable later), not just its text."""
+    if file.content_type not in ("application/pdf", "application/x-pdf"):
+        raise HTTPException(status_code=400, detail="Please upload a PDF file.")
+    data = await file.read()
+    if len(data) > MAX_PDF_BYTES:
+        raise HTTPException(status_code=400, detail="PDF too large (max 15MB)")
+
+    from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
+
+    try:
+        reader = PdfReader(io.BytesIO(data))
+    except PdfReadError:
+        raise HTTPException(status_code=400, detail="Could not read this PDF -- it may be corrupted or encrypted.")
+    if len(reader.pages) > MAX_PDF_PAGES:
+        raise HTTPException(status_code=400, detail=f"PDF has too many pages (max {MAX_PDF_PAGES}).")
+
+    pages = [(page.extract_text() or "").splitlines() for page in reader.pages]
+    text = _clean_extracted_pages(pages)
+    if len(text) < 10:
+        raise HTTPException(
+            status_code=422,
+            detail="No extractable text found in this PDF -- it may be scanned/image-only.",
+        )
+
+    fname = f"{uuid.uuid4()}.pdf"
+    (SOURCE_PDF_DIR / fname).write_bytes(data)
+    return {"filename": file.filename, "text": text, "url": f"/api/uploads/source_pdfs/{fname}"}
 
 
 # ---------- Shared list / publish / stats ----------

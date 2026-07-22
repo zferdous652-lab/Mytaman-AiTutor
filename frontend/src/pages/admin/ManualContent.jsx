@@ -362,7 +362,7 @@ const ManualContent = () => {
 
   const loadDrafts = useCallback(async (pid) => {
     if (!pid) { setDrafts([]); return; }
-    const { data } = await api.get("/content/drafts", { params: { pack_id: pid } });
+    const { data } = await api.get("/content/drafts", { params: { pack_id: pid, source: "manual" } });
     setDrafts(data);
   }, []);
   useEffect(() => { loadDrafts(packId); }, [packId, loadDrafts]);
@@ -578,7 +578,7 @@ const ManualContent = () => {
       }));
       const data = activeDraftId
         ? (await api.put(`/content/drafts/${activeDraftId}`, { items: itemsPayload })).data
-        : (await api.post("/content/drafts", { pack_id: packId, items: itemsPayload })).data;
+        : (await api.post("/content/drafts", { pack_id: packId, source: "manual", items: itemsPayload })).data;
       toast.success(
         activeDraftId
           ? `Draft ${data.draft_index} updated with ${data.items.length} item(s) — confirm it again to include these changes in the next publish`
