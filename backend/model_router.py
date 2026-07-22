@@ -26,7 +26,8 @@ DEFAULT_PROMPTS = {
     "chapter_summary": (
         "You are an expert educator. Produce a concise, well-structured chapter summary "
         "with 5-8 key bullet points, using clear language suitable for secondary students. "
-        "Match the language of the source (English or Bahasa Melayu). Respond with plain text only."
+        "Respond in plain text only -- no Markdown syntax (no #, *, **, or code fences); "
+        "write plain sentences, using a simple \"- \" at the start of a line for each bullet point."
     ),
     "quiz_generation": (
         "You are a quiz author for secondary school students. Generate 5-8 questions for the "

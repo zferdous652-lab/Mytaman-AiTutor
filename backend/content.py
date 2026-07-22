@@ -215,11 +215,18 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
     )
 
 
+class SourcePdfIn(BaseModel):
+    filename: str
+    url: str
+    text: str
+
+
 class DraftItemIn(BaseModel):
     chapter_id: str
     content_type: ContentType
     language: Literal["en", "bm"] = "en"
     payload: dict
+    source_pdf: Optional[SourcePdfIn] = None
 
 
 DraftSource = Literal["manual", "ai"]
@@ -239,6 +246,7 @@ class DraftItemOut(BaseModel):
     content_type: ContentType
     language: str
     payload: dict
+    source_pdf: Optional[SourcePdfIn] = None
 
 
 class PackDraftOut(BaseModel):
@@ -283,6 +291,7 @@ async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("ad
             "content_type": item.content_type,
             "language": item.language,
             "payload": validated_payload,
+            "source_pdf": item.source_pdf.model_dump() if item.source_pdf else None,
         })
 
     last = await db.pack_drafts.find_one(
@@ -413,6 +422,8 @@ async def upload_image(file: UploadFile = File(...), _: dict = Depends(require_r
     return {"url": f"/api/uploads/mindmaps/{fname}"}
 
 
+SOURCE_PDF_DIR = Path(__file__).parent / "uploads" / "source_pdfs"
+SOURCE_PDF_DIR.mkdir(parents=True, exist_ok=True)
 MAX_PDF_BYTES = 15 * 1024 * 1024
 MAX_PDF_PAGES = 60
 _PAGE_NUMBER_RE = re.compile(r"[\divxlcIVXLC]{1,4}")
@@ -447,8 +458,8 @@ def _clean_extracted_pages(pages: List[List[str]]) -> str:
 
 @router.post("/extract-pdf")
 async def extract_pdf_text(file: UploadFile = File(...), _: dict = Depends(require_role("admin"))):
-    """Extracts plain text from an uploaded course-material PDF, for use as AI Generate's
-    source material -- the PDF itself isn't kept, only the extracted text is returned."""
+    """Extracts plain text from an uploaded course-material PDF and keeps the PDF itself on
+    disk, so it can be attached to a draft (viewable/removable later), not just its text."""
     if file.content_type not in ("application/pdf", "application/x-pdf"):
         raise HTTPException(status_code=400, detail="Please upload a PDF file.")
     data = await file.read()
@@ -472,7 +483,10 @@ async def extract_pdf_text(file: UploadFile = File(...), _: dict = Depends(requi
             status_code=422,
             detail="No extractable text found in this PDF -- it may be scanned/image-only.",
         )
-    return {"filename": file.filename, "text": text}
+
+    fname = f"{uuid.uuid4()}.pdf"
+    (SOURCE_PDF_DIR / fname).write_bytes(data)
+    return {"filename": file.filename, "text": text, "url": f"/api/uploads/source_pdfs/{fname}"}
 
 
 # ---------- Shared list / publish / stats ----------

@@ -239,12 +239,12 @@ const MindmapBuilder = ({ mindmap, setMindmap, uploading, onUpload }) => {
 };
 
 // ---------- Source material builder (PDF upload -> extracted text, shared per chapter) ----------
-const SourceMaterialUploader = ({ fileName, uploading, onUpload }) => {
+const SourceMaterialUploader = ({ file, uploading, onUpload, onRemove }) => {
   const [dragOver, setDragOver] = useState(false);
 
   const handleFiles = (files) => {
-    const file = files?.[0];
-    if (file) onUpload(file);
+    const dropped = files?.[0];
+    if (dropped) onUpload(dropped);
   };
 
   return (
@@ -253,7 +253,7 @@ const SourceMaterialUploader = ({ fileName, uploading, onUpload }) => {
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
       onClick={() => document.getElementById("gen-source-file-input").click()}
-      className={`rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-colors ${
+      className={`relative rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-colors ${
         dragOver ? "border-[#00f0ff] bg-[#00f0ff]/5" : "border-white/15 bg-white/5"
       }`}
       data-testid="gen-source-dropzone"
@@ -265,13 +265,39 @@ const SourceMaterialUploader = ({ fileName, uploading, onUpload }) => {
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
+      {file && !uploading && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          className="absolute top-2 right-2 text-white/40 hover:text-red-400"
+          title="Remove uploaded PDF"
+          data-testid="gen-source-remove"
+        >
+          <X size={16} />
+        </button>
+      )}
       <FileText size={20} className="mx-auto text-white/40" />
       <div className="mt-2 text-sm text-white/70">
-        {uploading
-          ? "Extracting text…"
-          : fileName
-          ? `Uploaded: ${fileName} — click or drop to replace`
-          : "Drag & drop a course material PDF, or click to upload"}
+        {uploading ? (
+          "Extracting text…"
+        ) : file ? (
+          <>
+            Uploaded:{" "}
+            <a
+              href={file.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-[#00f0ff] hover:underline"
+              data-testid="gen-source-view"
+            >
+              {file.filename}
+            </a>{" "}
+            — click or drop to replace
+          </>
+        ) : (
+          "Drag & drop a course material PDF, or click to upload"
+        )}
       </div>
       <div className="mt-1 text-[10px] text-white/30">PDF only · max 15MB · shared across all content types for this chapter</div>
     </div>
@@ -313,9 +339,11 @@ const Generate = () => {
   // content type is being generated from it. Separate from workingSet since it's only
   // an AI-generation input, not part of the saved content payload.
   const [sourceTexts, setSourceTexts] = useState({});
-  const [sourceFileNames, setSourceFileNames] = useState({});
+  // { [chapterId]: { filename, url } } -- the uploaded PDF itself (not just its text),
+  // so a saved draft can show/remove which PDF a chapter's content was generated from.
+  const [sourceFiles, setSourceFiles] = useState({});
   const [sourceText, setSourceText] = useState("");
-  const [sourceFileName, setSourceFileName] = useState("");
+  const [sourceFile, setSourceFile] = useState(null);
   const [activeDraftId, setActiveDraftId] = useState(null);
   const [draftSort, setDraftSort] = useState("number");
   const [markMode, setMarkMode] = useState(false);
@@ -438,14 +466,14 @@ const Generate = () => {
     if (ctype === "flashcards") setCards(p.cards?.length ? p.cards : [{ front: "", back: "" }]);
     if (ctype === "mindmap") setMindmap({ image_url: p.image_url || "", caption: p.caption || "" });
     setSourceText(srcMap[cid] || "");
-    setSourceFileName(fileMap[cid] || "");
+    setSourceFile(fileMap[cid] || null);
   };
 
   // Safety net for indirect chapter changes (e.g. auto-selecting a chapter after switching
   // Course, which happens asynchronously via loadChapters and can't call applyHydration directly).
   useEffect(() => {
     if (!chapterId) return;
-    applyHydration(workingSet, sourceTexts, sourceFileNames, chapterId, contentType, language);
+    applyHydration(workingSet, sourceTexts, sourceFiles, chapterId, contentType, language);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chapterId, contentType, language]);
 
@@ -474,7 +502,7 @@ const Generate = () => {
   // returns the updated maps synchronously so callers can switch selection right after
   // without losing in-progress edits.
   const syncCurrent = () => {
-    if (!chapterId) return { workingSet, sourceTexts, sourceFileNames };
+    if (!chapterId) return { workingSet, sourceTexts, sourceFiles };
     const key = keyFor(chapterId, contentType, language);
     const payload = buildPayload();
     const nextWorking = { ...workingSet };
@@ -492,17 +520,17 @@ const Generate = () => {
     }
     setWorkingSet(nextWorking);
     const nextSource = { ...sourceTexts, [chapterId]: sourceText };
-    const nextFileNames = { ...sourceFileNames, [chapterId]: sourceFileName };
+    const nextFiles = { ...sourceFiles, [chapterId]: sourceFile };
     setSourceTexts(nextSource);
-    setSourceFileNames(nextFileNames);
-    return { workingSet: nextWorking, sourceTexts: nextSource, sourceFileNames: nextFileNames };
+    setSourceFiles(nextFiles);
+    return { workingSet: nextWorking, sourceTexts: nextSource, sourceFiles: nextFiles };
   };
 
   const switchPack = (pid) => {
     if (Object.keys(workingSet).length > 0) toast("Switched Tutor Pack — pending items cleared.");
     setWorkingSet({});
     setSourceTexts({});
-    setSourceFileNames({});
+    setSourceFiles({});
     setActiveDraftId(null);
     setPackId(pid);
   };
@@ -510,17 +538,17 @@ const Generate = () => {
   const switchChapter = (cid) => {
     const synced = syncCurrent();
     setChapterId(cid);
-    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFileNames, cid, contentType, language);
+    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFiles, cid, contentType, language);
   };
   const switchContentType = (ct) => {
     const synced = syncCurrent();
     setContentType(ct);
-    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFileNames, chapterId, ct, language);
+    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFiles, chapterId, ct, language);
   };
   const switchLanguage = (l) => {
     const synced = syncCurrent();
     setLanguage(l);
-    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFileNames, chapterId, contentType, l);
+    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFiles, chapterId, contentType, l);
   };
 
   const addCourse = async () => {
@@ -574,7 +602,7 @@ const Generate = () => {
       removedChapterIds.forEach((id) => delete next[id]);
       return next;
     });
-    setSourceFileNames((prev) => {
+    setSourceFiles((prev) => {
       const next = { ...prev };
       removedChapterIds.forEach((id) => delete next[id]);
       return next;
@@ -612,7 +640,7 @@ const Generate = () => {
       delete next[chapter.id];
       return next;
     });
-    setSourceFileNames((prev) => {
+    setSourceFiles((prev) => {
       const next = { ...prev };
       delete next[chapter.id];
       return next;
@@ -645,7 +673,7 @@ const Generate = () => {
       form.append("file", file);
       const { data } = await api.post("/content/extract-pdf", form);
       setSourceText(data.text);
-      setSourceFileName(data.filename || file.name);
+      setSourceFile({ filename: data.filename || file.name, url: data.url });
       toast.success(`Extracted text from ${data.filename || file.name}`);
     } catch (err) {
       const status = err?.response?.status;
@@ -655,6 +683,11 @@ const Generate = () => {
       );
     }
     setUploadingSource(false);
+  };
+
+  const removeSourcePdf = () => {
+    setSourceFile(null);
+    setSourceText("");
   };
 
   const removePending = (key, e) => {
@@ -672,7 +705,7 @@ const Generate = () => {
     setChapterId(entry.chapter_id);
     setContentType(entry.content_type);
     setLanguage(entry.language);
-    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFileNames, entry.chapter_id, entry.content_type, entry.language);
+    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFiles, entry.chapter_id, entry.content_type, entry.language);
   };
 
   const generateWithAi = async () => {
@@ -721,12 +754,17 @@ const Generate = () => {
       const { data } = await api.post("/content/drafts", {
         pack_id: packId,
         source: "ai",
-        items: items.map((it) => ({
-          chapter_id: it.chapter_id,
-          content_type: it.content_type,
-          language: it.language,
-          payload: it.payload,
-        })),
+        items: items.map((it) => {
+          const file = synced.sourceFiles[it.chapter_id];
+          const text = synced.sourceTexts[it.chapter_id];
+          return {
+            chapter_id: it.chapter_id,
+            content_type: it.content_type,
+            language: it.language,
+            payload: it.payload,
+            source_pdf: file ? { filename: file.filename, url: file.url, text: text || "" } : undefined,
+          };
+        }),
       });
       toast.success(`Draft ${data.draft_index} saved with ${data.items.length} item(s)`);
       // Source material stays loaded (per chapter) since it's reference material, not part of
@@ -844,14 +882,22 @@ const Generate = () => {
   const loadDraftIntoWorkingSet = (draft) => {
     const synced = syncCurrent();
     const next = {};
+    const nextSourceTexts = {};
+    const nextSourceFiles = {};
     for (const item of draft.items) {
       next[keyFor(item.chapter_id, item.content_type, item.language)] = { ...item };
+      if (item.source_pdf) {
+        nextSourceTexts[item.chapter_id] = item.source_pdf.text || "";
+        nextSourceFiles[item.chapter_id] = { filename: item.source_pdf.filename, url: item.source_pdf.url };
+      }
     }
     const orphanedKeys = Object.keys(synced.workingSet).filter((k) => !(k in next));
     if (orphanedKeys.length > 0) {
       toast(`Discarded ${orphanedKeys.length} pending item(s) not part of Draft ${draft.draft_index}`);
     }
     setWorkingSet(next);
+    setSourceTexts(nextSourceTexts);
+    setSourceFiles(nextSourceFiles);
     setActiveDraftId(draft.id);
     const first = draft.items[0];
     if (first) {
@@ -859,7 +905,7 @@ const Generate = () => {
       setChapterId(first.chapter_id);
       setContentType(first.content_type);
       setLanguage(first.language);
-      applyHydration(next, synced.sourceTexts, synced.sourceFileNames, first.chapter_id, first.content_type, first.language);
+      applyHydration(next, nextSourceTexts, nextSourceFiles, first.chapter_id, first.content_type, first.language);
     }
     toast.success(`Draft ${draft.draft_index} loaded — browse chapters/types below to view or edit each item, then Save to create a new version`);
   };
@@ -1051,7 +1097,7 @@ const Generate = () => {
                 Source material (PDF) for <span className="text-white">{selectedChapter.title}</span>
               </label>
               <div className="mt-1">
-                <SourceMaterialUploader fileName={sourceFileName} uploading={uploadingSource} onUpload={uploadSourcePdf} />
+                <SourceMaterialUploader file={sourceFile} uploading={uploadingSource} onUpload={uploadSourcePdf} onRemove={removeSourcePdf} />
               </div>
               {sourceText && (
                 <textarea
