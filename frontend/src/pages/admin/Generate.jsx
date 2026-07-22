@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, X, Upload, CheckCircle2, FileEdit, ListChecks, Trash2, MoreVertical, XCircle, Pencil, Copy, Sparkles } from "lucide-react";
+import { Plus, X, Upload, CheckCircle2, FileEdit, ListChecks, Trash2, MoreVertical, XCircle, Pencil, Copy, Sparkles, FileText } from "lucide-react";
 import { api } from "@/lib/api";
 
 const TYPES = [
@@ -238,6 +238,46 @@ const MindmapBuilder = ({ mindmap, setMindmap, uploading, onUpload }) => {
   );
 };
 
+// ---------- Source material builder (PDF upload -> extracted text, shared per chapter) ----------
+const SourceMaterialUploader = ({ fileName, uploading, onUpload }) => {
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleFiles = (files) => {
+    const file = files?.[0];
+    if (file) onUpload(file);
+  };
+
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
+      onClick={() => document.getElementById("gen-source-file-input").click()}
+      className={`rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-colors ${
+        dragOver ? "border-[#00f0ff] bg-[#00f0ff]/5" : "border-white/15 bg-white/5"
+      }`}
+      data-testid="gen-source-dropzone"
+    >
+      <input
+        id="gen-source-file-input"
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        onChange={(e) => handleFiles(e.target.files)}
+      />
+      <FileText size={20} className="mx-auto text-white/40" />
+      <div className="mt-2 text-sm text-white/70">
+        {uploading
+          ? "Extracting text…"
+          : fileName
+          ? `Uploaded: ${fileName} — click or drop to replace`
+          : "Drag & drop a course material PDF, or click to upload"}
+      </div>
+      <div className="mt-1 text-[10px] text-white/30">PDF only · max 15MB · shared across all content types for this chapter</div>
+    </div>
+  );
+};
+
 const keyFor = (chapterId, contentType, language) => `${chapterId}::${contentType}::${language}`;
 
 const isMeaningful = (contentType, payload) => {
@@ -263,14 +303,19 @@ const Generate = () => {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingSource, setUploadingSource] = useState(false);
 
   // Pending content, accumulated client-side across chapters/types until "Save content"
   // bundles it all into a single pack-level draft. Keyed by chapter+type+language.
   const [workingSet, setWorkingSet] = useState({});
-  // Source material typed per chapter/type/language, kept separate from workingSet since
-  // it's only an AI-generation input, not part of the saved content payload.
+  // Source material (extracted from an uploaded PDF) is kept per CHAPTER only -- not
+  // per type/language -- since it's the same reference material regardless of which
+  // content type is being generated from it. Separate from workingSet since it's only
+  // an AI-generation input, not part of the saved content payload.
   const [sourceTexts, setSourceTexts] = useState({});
+  const [sourceFileNames, setSourceFileNames] = useState({});
   const [sourceText, setSourceText] = useState("");
+  const [sourceFileName, setSourceFileName] = useState("");
   const [activeDraftId, setActiveDraftId] = useState(null);
   const [draftSort, setDraftSort] = useState("number");
   const [markMode, setMarkMode] = useState(false);
@@ -373,11 +418,12 @@ const Generate = () => {
   }, []);
   useEffect(() => { loadDrafts(packId); }, [packId, loadDrafts]);
 
-  // Pushes a working-set entry's payload (and its source text) into the visible builder
-  // fields. Called directly (not just via effect) so it also works when the target selection
-  // is already the current one -- e.g. loading a draft whose first item matches what's already
-  // on screen, where chapterId/contentType/language wouldn't actually change.
-  const applyHydration = (map, srcMap, cid, ctype, lang) => {
+  // Pushes a working-set entry's payload into the visible builder fields, and the chapter's
+  // uploaded source material (shared across content types/languages for that chapter) into
+  // the source-material box. Called directly (not just via effect) so it also works when the
+  // target selection is already the current one -- e.g. loading a draft whose first item
+  // matches what's already on screen, where chapterId/contentType/language wouldn't change.
+  const applyHydration = (map, srcMap, fileMap, cid, ctype, lang) => {
     const entry = map[keyFor(cid, ctype, lang)];
     const p = entry?.payload || {};
     if (ctype === "summary") setBody(p.body || "");
@@ -391,14 +437,15 @@ const Generate = () => {
     }
     if (ctype === "flashcards") setCards(p.cards?.length ? p.cards : [{ front: "", back: "" }]);
     if (ctype === "mindmap") setMindmap({ image_url: p.image_url || "", caption: p.caption || "" });
-    setSourceText(srcMap[keyFor(cid, ctype, lang)] || "");
+    setSourceText(srcMap[cid] || "");
+    setSourceFileName(fileMap[cid] || "");
   };
 
   // Safety net for indirect chapter changes (e.g. auto-selecting a chapter after switching
   // Course, which happens asynchronously via loadChapters and can't call applyHydration directly).
   useEffect(() => {
     if (!chapterId) return;
-    applyHydration(workingSet, sourceTexts, chapterId, contentType, language);
+    applyHydration(workingSet, sourceTexts, sourceFileNames, chapterId, contentType, language);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chapterId, contentType, language]);
 
@@ -422,11 +469,12 @@ const Generate = () => {
     return {};
   };
 
-  // Persists whatever is currently in the builder fields (and the source text box) into the
-  // working set (keyed by the CURRENT selection) and returns the updated set synchronously,
-  // so callers can switch selection right after without losing in-progress edits.
+  // Persists whatever is currently in the builder fields (keyed by the CURRENT selection) and
+  // the chapter's source material (keyed by chapter only) into their respective maps, and
+  // returns the updated maps synchronously so callers can switch selection right after
+  // without losing in-progress edits.
   const syncCurrent = () => {
-    if (!chapterId) return { workingSet, sourceTexts };
+    if (!chapterId) return { workingSet, sourceTexts, sourceFileNames };
     const key = keyFor(chapterId, contentType, language);
     const payload = buildPayload();
     const nextWorking = { ...workingSet };
@@ -443,15 +491,18 @@ const Generate = () => {
       delete nextWorking[key];
     }
     setWorkingSet(nextWorking);
-    const nextSource = { ...sourceTexts, [key]: sourceText };
+    const nextSource = { ...sourceTexts, [chapterId]: sourceText };
+    const nextFileNames = { ...sourceFileNames, [chapterId]: sourceFileName };
     setSourceTexts(nextSource);
-    return { workingSet: nextWorking, sourceTexts: nextSource };
+    setSourceFileNames(nextFileNames);
+    return { workingSet: nextWorking, sourceTexts: nextSource, sourceFileNames: nextFileNames };
   };
 
   const switchPack = (pid) => {
     if (Object.keys(workingSet).length > 0) toast("Switched Tutor Pack — pending items cleared.");
     setWorkingSet({});
     setSourceTexts({});
+    setSourceFileNames({});
     setActiveDraftId(null);
     setPackId(pid);
   };
@@ -459,17 +510,17 @@ const Generate = () => {
   const switchChapter = (cid) => {
     const synced = syncCurrent();
     setChapterId(cid);
-    applyHydration(synced.workingSet, synced.sourceTexts, cid, contentType, language);
+    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFileNames, cid, contentType, language);
   };
   const switchContentType = (ct) => {
     const synced = syncCurrent();
     setContentType(ct);
-    applyHydration(synced.workingSet, synced.sourceTexts, chapterId, ct, language);
+    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFileNames, chapterId, ct, language);
   };
   const switchLanguage = (l) => {
     const synced = syncCurrent();
     setLanguage(l);
-    applyHydration(synced.workingSet, synced.sourceTexts, chapterId, contentType, l);
+    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFileNames, chapterId, contentType, l);
   };
 
   const addCourse = async () => {
@@ -520,7 +571,12 @@ const Generate = () => {
     });
     setSourceTexts((prev) => {
       const next = { ...prev };
-      Object.keys(next).forEach((k) => { if (removedChapterIds.has(k.split("::")[0])) delete next[k]; });
+      removedChapterIds.forEach((id) => delete next[id]);
+      return next;
+    });
+    setSourceFileNames((prev) => {
+      const next = { ...prev };
+      removedChapterIds.forEach((id) => delete next[id]);
       return next;
     });
     await loadCourses(packId);
@@ -553,7 +609,12 @@ const Generate = () => {
     });
     setSourceTexts((prev) => {
       const next = { ...prev };
-      Object.keys(next).forEach((k) => { if (k.startsWith(`${chapter.id}::`)) delete next[k]; });
+      delete next[chapter.id];
+      return next;
+    });
+    setSourceFileNames((prev) => {
+      const next = { ...prev };
+      delete next[chapter.id];
       return next;
     });
     await loadChapters(courseId);
@@ -573,6 +634,25 @@ const Generate = () => {
     setUploading(false);
   };
 
+  const uploadSourcePdf = async (file) => {
+    if (!chapterId) {
+      toast.error("Select a chapter first.");
+      return;
+    }
+    setUploadingSource(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const { data } = await api.post("/content/extract-pdf", form);
+      setSourceText(data.text);
+      setSourceFileName(data.filename || file.name);
+      toast.success(`Extracted text from ${data.filename || file.name}`);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not extract text from this PDF");
+    }
+    setUploadingSource(false);
+  };
+
   const removePending = (key, e) => {
     e.stopPropagation();
     setWorkingSet((prev) => {
@@ -588,7 +668,7 @@ const Generate = () => {
     setChapterId(entry.chapter_id);
     setContentType(entry.content_type);
     setLanguage(entry.language);
-    applyHydration(synced.workingSet, synced.sourceTexts, entry.chapter_id, entry.content_type, entry.language);
+    applyHydration(synced.workingSet, synced.sourceTexts, synced.sourceFileNames, entry.chapter_id, entry.content_type, entry.language);
   };
 
   const generateWithAi = async () => {
@@ -597,7 +677,7 @@ const Generate = () => {
       return;
     }
     if (sourceText.trim().length < 10) {
-      toast.error("Add at least a few sentences of source material to generate from.");
+      toast.error("Upload a course material PDF for this chapter first.");
       return;
     }
     setGenerating(true);
@@ -645,15 +725,15 @@ const Generate = () => {
         })),
       });
       toast.success(`Draft ${data.draft_index} saved with ${data.items.length} item(s)`);
+      // Source material stays loaded (per chapter) since it's reference material, not part of
+      // the draft itself -- the admin will likely generate more content types from it next.
       setWorkingSet({});
-      setSourceTexts({});
       setActiveDraftId(null);
       setBody("");
       setNotes([""]);
       setQuestions([emptyQuestion()]);
       setCards([{ front: "", back: "" }]);
       setMindmap({ image_url: "", caption: "" });
-      setSourceText("");
       await loadDrafts(packId);
     } catch (err2) {
       toast.error(err2?.response?.data?.detail?.[0]?.msg || err2?.response?.data?.detail || "Save failed");
@@ -775,7 +855,7 @@ const Generate = () => {
       setChapterId(first.chapter_id);
       setContentType(first.content_type);
       setLanguage(first.language);
-      applyHydration(next, synced.sourceTexts, first.chapter_id, first.content_type, first.language);
+      applyHydration(next, synced.sourceTexts, synced.sourceFileNames, first.chapter_id, first.content_type, first.language);
     }
     toast.success(`Draft ${draft.draft_index} loaded — browse chapters/types below to view or edit each item, then Save to create a new version`);
   };
@@ -964,16 +1044,21 @@ const Generate = () => {
           {selectedChapter && contentType !== "mindmap" && (
             <div className="pt-2 border-t border-white/10">
               <label className="text-xs text-white/60">
-                Source material for <span className="text-white">{selectedChapter.title}</span>
+                Source material (PDF) for <span className="text-white">{selectedChapter.title}</span>
               </label>
-              <textarea
-                rows={6}
-                value={sourceText}
-                onChange={(e) => setSourceText(e.target.value)}
-                className={inputCls + " font-mono text-sm leading-relaxed"}
-                placeholder="Paste chapter text, curriculum notes, or lesson material for the AI to work from..."
-                data-testid="gen-source"
-              />
+              <div className="mt-1">
+                <SourceMaterialUploader fileName={sourceFileName} uploading={uploadingSource} onUpload={uploadSourcePdf} />
+              </div>
+              {sourceText && (
+                <textarea
+                  rows={6}
+                  value={sourceText}
+                  onChange={(e) => setSourceText(e.target.value)}
+                  className={inputCls + " mt-2 font-mono text-xs leading-relaxed"}
+                  placeholder="Extracted text will appear here — edit if needed..."
+                  data-testid="gen-source"
+                />
+              )}
             </div>
           )}
 

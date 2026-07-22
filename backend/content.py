@@ -1,4 +1,5 @@
 """Content generation & storage endpoints."""
+import io
 import json
 import re
 import uuid
@@ -409,6 +410,40 @@ async def upload_image(file: UploadFile = File(...), _: dict = Depends(require_r
     fname = f"{uuid.uuid4()}{ext}"
     (UPLOAD_DIR / fname).write_bytes(data)
     return {"url": f"/api/uploads/mindmaps/{fname}"}
+
+
+MAX_PDF_BYTES = 15 * 1024 * 1024
+MAX_PDF_PAGES = 60
+
+
+@router.post("/extract-pdf")
+async def extract_pdf_text(file: UploadFile = File(...), _: dict = Depends(require_role("admin"))):
+    """Extracts plain text from an uploaded course-material PDF, for use as AI Generate's
+    source material -- the PDF itself isn't kept, only the extracted text is returned."""
+    if file.content_type not in ("application/pdf", "application/x-pdf"):
+        raise HTTPException(status_code=400, detail="Please upload a PDF file.")
+    data = await file.read()
+    if len(data) > MAX_PDF_BYTES:
+        raise HTTPException(status_code=400, detail="PDF too large (max 15MB)")
+
+    from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
+
+    try:
+        reader = PdfReader(io.BytesIO(data))
+    except PdfReadError:
+        raise HTTPException(status_code=400, detail="Could not read this PDF -- it may be corrupted or encrypted.")
+    if len(reader.pages) > MAX_PDF_PAGES:
+        raise HTTPException(status_code=400, detail=f"PDF has too many pages (max {MAX_PDF_PAGES}).")
+
+    pages_text = [(page.extract_text() or "").strip() for page in reader.pages]
+    text = "\n\n".join(p for p in pages_text if p)
+    if len(text) < 10:
+        raise HTTPException(
+            status_code=422,
+            detail="No extractable text found in this PDF -- it may be scanned/image-only.",
+        )
+    return {"filename": file.filename, "text": text}
 
 
 # ---------- Shared list / publish / stats ----------
