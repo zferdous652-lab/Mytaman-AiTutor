@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck } from "lucide-react";
+import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -16,6 +16,9 @@ const Packs = () => {
   const [selectedDraftIds, setSelectedDraftIds] = useState([]);
   const [loadingReview, setLoadingReview] = useState(false);
   const [publishingSelection, setPublishingSelection] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteFromStudents, setDeleteFromStudents] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
     const { data } = await api.get("/packs/list");
@@ -75,15 +78,33 @@ const Packs = () => {
     }
   };
 
-  const deletePack = async (pack) => {
-    if (!window.confirm(`Delete "${pack.title}"? This removes all its courses, chapters, content, and drafts. This cannot be undone.`)) return;
+  const openDelete = (pack) => {
+    setDeleteTarget(pack);
+    setDeleteFromStudents(false);
+  };
+
+  const closeDelete = () => {
+    setDeleteTarget(null);
+    setDeleteFromStudents(false);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await api.delete(`/packs/${pack.id}`);
-      toast.success(`"${pack.title}" deleted`);
+      if (deleteFromStudents) {
+        await api.delete(`/packs/${deleteTarget.id}`);
+        toast.success(`"${deleteTarget.title}" deleted for everyone, including enrolled students`);
+      } else {
+        await api.post(`/packs/${deleteTarget.id}/archive`);
+        toast.success(`"${deleteTarget.title}" removed from Tutor Packs — enrolled students keep it in My Learning`);
+      }
+      closeDelete();
       load();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Delete failed");
     }
+    setDeleting(false);
   };
 
   return (
@@ -180,7 +201,7 @@ const Packs = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); deletePack(p); }}
+                    onClick={(e) => { e.stopPropagation(); openDelete(p); }}
                     className="text-white/40 hover:text-red-400"
                     data-testid={`pack-${p.id}-delete`}
                     title="Delete pack"
@@ -278,6 +299,71 @@ const Packs = () => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={closeDelete}
+          data-testid="delete-pack-modal"
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0a0514] shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 text-[#ff0055]"><AlertTriangle size={20} /></div>
+              <div>
+                <div className="font-display text-lg text-white tracking-tight">Delete "{deleteTarget.title}"?</div>
+                <p className="text-xs text-white/50 mt-1.5 leading-relaxed">
+                  This removes it from Tutor Packs and Browse Packs. Its courses, chapters, content and drafts always go with it.
+                </p>
+              </div>
+            </div>
+
+            <label
+              className={`mt-5 flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${
+                deleteFromStudents ? "border-[#ff0055]/50 bg-[#ff0055]/5" : "border-white/10 bg-white/[0.02] hover:border-white/20"
+              }`}
+              data-testid="delete-cascade-checkbox-label"
+            >
+              <input
+                type="checkbox"
+                checked={deleteFromStudents}
+                onChange={(e) => setDeleteFromStudents(e.target.checked)}
+                className="mt-0.5 accent-[#ff0055]"
+                data-testid="delete-cascade-checkbox"
+              />
+              <div>
+                <div className="text-sm text-white">Also remove from Student Portal</div>
+                <p className="text-xs text-white/50 mt-1 leading-relaxed">
+                  Unenrolls every student and permanently deletes their progress for this pack. Leave unchecked to keep it
+                  in already-enrolled students' My Learning — it just disappears from here and from Browse Packs.
+                </p>
+              </div>
+            </label>
+
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeDelete}
+                className="rounded-full border border-white/15 px-5 py-2 text-sm text-white/80 hover:border-white/30 transition-colors"
+                data-testid="delete-pack-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="inline-flex items-center gap-2 rounded-full bg-[#ff0055] px-5 py-2 text-sm font-semibold text-white hover:bg-[#ff0055]/80 transition-colors disabled:opacity-50"
+                data-testid="delete-pack-confirm"
+              >
+                <Trash2 size={14} /> {deleting ? "Deleting…" : deleteFromStudents ? "Delete for everyone" : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}
