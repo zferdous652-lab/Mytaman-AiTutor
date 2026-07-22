@@ -325,10 +325,6 @@ const ManualContent = () => {
 
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [newChapterTitle, setNewChapterTitle] = useState("");
-  const [renamingCourse, setRenamingCourse] = useState(false);
-  const [courseRenameValue, setCourseRenameValue] = useState("");
-  const [renamingChapterId, setRenamingChapterId] = useState(null);
-  const [chapterRenameValue, setChapterRenameValue] = useState("");
 
   const [body, setBody] = useState("");
   const [questions, setQuestions] = useState([emptyQuestion()]);
@@ -485,62 +481,51 @@ const ManualContent = () => {
     toast.success("Chapter added");
   };
 
-  const startRenameCourse = () => {
+  const purgePendingForChapters = (chapterIds) => {
+    setWorkingSet((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        if (chapterIds.some((chId) => key.startsWith(`${chId}::`))) delete next[key];
+      }
+      return next;
+    });
+  };
+
+  const renameCourse = async () => {
     const course = courses.find((c) => c.id === courseId);
     if (!course) return;
-    setCourseRenameValue(course.title);
-    setRenamingCourse(true);
-  };
-  const cancelRenameCourse = () => setRenamingCourse(false);
-  const submitRenameCourse = async () => {
-    if (!renamingCourse) return;
-    const title = courseRenameValue.trim();
-    setRenamingCourse(false);
-    if (!title || !courseId) return;
-    await api.patch(`/courses/${courseId}`, { title });
+    const next = window.prompt("Rename course", course.title);
+    if (!next || !next.trim() || next.trim() === course.title) return;
+    await api.patch(`/courses/${course.id}`, { title: next.trim() });
     toast.success("Course renamed");
     await loadCourses(packId);
   };
-  const deleteCourseHandler = async () => {
+
+  const deleteCourse = async () => {
     const course = courses.find((c) => c.id === courseId);
     if (!course) return;
-    if (!window.confirm(`Delete course "${course.title}"? This deletes all its chapters and content. This cannot be undone.`)) return;
-    const removedChapterIds = new Set(chapters.map((c) => c.id));
-    await api.delete(`/courses/${courseId}`);
-    toast.success("Course deleted");
-    setWorkingSet((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((k) => { if (removedChapterIds.has(next[k].chapter_id)) delete next[k]; });
-      return next;
-    });
+    if (!window.confirm(`Delete course "${course.title}"? This removes all its chapters and any content saved under them. This cannot be undone.`)) return;
+    await api.delete(`/courses/${course.id}`);
+    purgePendingForChapters(chapters.map((ch) => ch.id));
+    toast.success(`Course "${course.title}" deleted`);
     await loadCourses(packId);
   };
 
-  const startRenameChapter = (chapter, e) => {
+  const renameChapter = async (chapter, e) => {
     e.stopPropagation();
-    setRenamingChapterId(chapter.id);
-    setChapterRenameValue(chapter.title);
-  };
-  const cancelRenameChapter = () => setRenamingChapterId(null);
-  const submitRenameChapter = async (id) => {
-    if (renamingChapterId !== id) return;
-    const title = chapterRenameValue.trim();
-    setRenamingChapterId(null);
-    if (!title) return;
-    await api.patch(`/chapters/${id}`, { title });
+    const next = window.prompt("Rename chapter", chapter.title);
+    if (!next || !next.trim() || next.trim() === chapter.title) return;
+    await api.patch(`/chapters/${chapter.id}`, { title: next.trim() });
     toast.success("Chapter renamed");
     await loadChapters(courseId);
   };
-  const deleteChapterHandler = async (chapter, e) => {
+
+  const deleteChapter = async (chapter, e) => {
     e.stopPropagation();
-    if (!window.confirm(`Delete chapter "${chapter.title}"? This deletes its content. This cannot be undone.`)) return;
+    if (!window.confirm(`Delete chapter "${chapter.title}"? This removes any content saved under it. This cannot be undone.`)) return;
     await api.delete(`/chapters/${chapter.id}`);
-    toast.success("Chapter deleted");
-    setWorkingSet((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((k) => { if (k.startsWith(`${chapter.id}::`)) delete next[k]; });
-      return next;
-    });
+    purgePendingForChapters([chapter.id]);
+    toast.success(`Chapter "${chapter.title}" deleted`);
     await loadChapters(courseId);
   };
 
@@ -585,17 +570,20 @@ const ManualContent = () => {
     }
     setSaving(true);
     try {
-      const { data } = await api.post("/content/drafts", {
-        pack_id: packId,
-        source: "manual",
-        items: items.map((it) => ({
-          chapter_id: it.chapter_id,
-          content_type: it.content_type,
-          language: it.language,
-          payload: it.payload,
-        })),
-      });
-      toast.success(`Draft ${data.draft_index} saved with ${data.items.length} item(s)`);
+      const itemsPayload = items.map((it) => ({
+        chapter_id: it.chapter_id,
+        content_type: it.content_type,
+        language: it.language,
+        payload: it.payload,
+      }));
+      const data = activeDraftId
+        ? (await api.put(`/content/drafts/${activeDraftId}`, { items: itemsPayload })).data
+        : (await api.post("/content/drafts", { pack_id: packId, source: "manual", items: itemsPayload })).data;
+      toast.success(
+        activeDraftId
+          ? `Draft ${data.draft_index} updated with ${data.items.length} item(s) — confirm it again to include these changes in the next publish`
+          : `Draft ${data.draft_index} saved with ${data.items.length} item(s)`
+      );
       setWorkingSet({});
       setActiveDraftId(null);
       setBody("");
@@ -760,41 +748,29 @@ const ManualContent = () => {
           <div>
             <label className="text-xs text-white/60">Course</label>
             <div className="mt-1 flex gap-2">
-              {renamingCourse ? (
-                <input
-                  autoFocus
-                  value={courseRenameValue}
-                  onChange={(e) => setCourseRenameValue(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") submitRenameCourse(); if (e.key === "Escape") cancelRenameCourse(); }}
-                  onBlur={submitRenameCourse}
-                  className={inputCls + " flex-1"}
-                  data-testid="mc-course-rename-input"
-                />
-              ) : (
-                <select value={courseId} onChange={(e) => switchCourse(e.target.value)} className={inputCls + " flex-1"} data-testid="mc-course">
-                  {courses.length === 0 && <option value="">No courses yet</option>}
-                  {courses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-                </select>
-              )}
+              <select value={courseId} onChange={(e) => switchCourse(e.target.value)} className={inputCls + " flex-1"} data-testid="mc-course">
+                {courses.length === 0 && <option value="">No courses yet</option>}
+                {courses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+              </select>
               <button
                 type="button"
-                onClick={startRenameCourse}
+                onClick={renameCourse}
                 disabled={!courseId}
-                className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 text-white/60 hover:text-white disabled:opacity-40"
+                className="rounded-lg border border-white/10 px-2.5 text-white/60 hover:text-[#00f0ff] hover:border-[#00f0ff]/40 disabled:opacity-30 disabled:cursor-not-allowed"
                 data-testid="mc-course-rename"
                 title="Rename course"
               >
-                <Pencil size={14} />
+                <Pencil size={13} />
               </button>
               <button
                 type="button"
-                onClick={deleteCourseHandler}
+                onClick={deleteCourse}
                 disabled={!courseId}
-                className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 text-red-400/80 hover:text-red-400 disabled:opacity-40"
+                className="rounded-lg border border-white/10 px-2.5 text-white/60 hover:text-red-400 hover:border-red-400/40 disabled:opacity-30 disabled:cursor-not-allowed"
                 data-testid="mc-course-delete"
                 title="Delete course"
               >
-                <Trash2 size={14} />
+                <Trash2 size={13} />
               </button>
             </div>
             <div className="mt-2 flex gap-2">
@@ -833,58 +809,33 @@ const ManualContent = () => {
             <div className="mt-1 flex flex-wrap gap-2" data-testid="mc-chapters">
               {chapters.map((c) => {
                 const hasPending = Object.keys(workingSet).some((k) => k.startsWith(`${c.id}::`));
-                const isSelected = chapterId === c.id;
-                const isRenaming = renamingChapterId === c.id;
                 return (
-                  <div
+                  <button
                     key={c.id}
-                    className={`relative flex items-center gap-1.5 rounded-full pl-4 pr-2 py-1.5 text-xs border transition-colors ${
-                      isSelected ? "bg-[#00f0ff] text-black border-[#00f0ff]" : "border-white/15 text-white/70 hover:border-white/30"
+                    type="button"
+                    onClick={() => switchChapter(c.id)}
+                    className={`relative rounded-full pl-4 pr-2 py-1.5 text-xs border transition-colors flex items-center gap-1.5 ${
+                      chapterId === c.id ? "bg-[#00f0ff] text-black border-[#00f0ff]" : "border-white/15 text-white/70 hover:border-white/30"
                     }`}
                     data-testid={`mc-chapter-${c.id}`}
                   >
-                    {isRenaming ? (
-                      <input
-                        autoFocus
-                        value={chapterRenameValue}
-                        onChange={(e) => setChapterRenameValue(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => { if (e.key === "Enter") submitRenameChapter(c.id); if (e.key === "Escape") cancelRenameChapter(); }}
-                        onBlur={() => submitRenameChapter(c.id)}
-                        className="w-24 rounded bg-black/20 px-1.5 py-0.5 text-xs text-inherit outline-none"
-                        data-testid={`mc-chapter-${c.id}-rename-input`}
-                      />
-                    ) : (
-                      <button type="button" onClick={() => switchChapter(c.id)} className="flex items-center gap-1.5">
-                        {c.title}
-                        {hasPending && (
-                          <span className={`inline-block h-1.5 w-1.5 rounded-full ${isSelected ? "bg-black" : "bg-[#00f0ff]"}`} />
-                        )}
-                      </button>
+                    {c.title}
+                    {hasPending && (
+                      <span className={`inline-block h-1.5 w-1.5 rounded-full ${chapterId === c.id ? "bg-black" : "bg-[#00f0ff]"}`} />
                     )}
-                    {!isRenaming && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={(e) => startRenameChapter(c, e)}
-                          className="hover:opacity-70"
-                          data-testid={`mc-chapter-${c.id}-rename`}
-                          title="Rename chapter"
-                        >
-                          <Pencil size={11} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => deleteChapterHandler(c, e)}
-                          className="hover:opacity-70"
-                          data-testid={`mc-chapter-${c.id}-delete`}
-                          title="Delete chapter"
-                        >
-                          <X size={12} />
-                        </button>
-                      </>
-                    )}
-                  </div>
+                    <Pencil
+                      size={11}
+                      onClick={(e) => renameChapter(c, e)}
+                      className={`hover:opacity-100 ${chapterId === c.id ? "text-black/60" : "text-white/40"}`}
+                      data-testid={`mc-chapter-${c.id}-rename`}
+                    />
+                    <X
+                      size={12}
+                      onClick={(e) => deleteChapter(c, e)}
+                      className={`hover:opacity-100 ${chapterId === c.id ? "text-black/60" : "text-white/40"}`}
+                      data-testid={`mc-chapter-${c.id}-delete`}
+                    />
+                  </button>
                 );
               })}
               {chapters.length === 0 && <span className="text-xs text-white/40">No chapters yet — add one below.</span>}
@@ -967,7 +918,7 @@ const ManualContent = () => {
             data-testid="mc-save"
           >
             <FileEdit size={14} />
-            {saving ? "Saving…" : "Save content"}
+            {saving ? "Saving…" : activeDraftId ? "Update draft" : "Save content"}
           </button>
         </div>
 
