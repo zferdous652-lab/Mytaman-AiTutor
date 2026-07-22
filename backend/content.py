@@ -3,6 +3,7 @@ import io
 import json
 import re
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional, List
@@ -414,6 +415,34 @@ async def upload_image(file: UploadFile = File(...), _: dict = Depends(require_r
 
 MAX_PDF_BYTES = 15 * 1024 * 1024
 MAX_PDF_PAGES = 60
+_PAGE_NUMBER_RE = re.compile(r"[\divxlcIVXLC]{1,4}")
+
+
+def _clean_extracted_pages(pages: List[List[str]]) -> str:
+    """Strips stray page numbers and repeated running headers/footers that plain PDF
+    text extraction pulls out as ordinary lines -- in whatever order they appear in
+    the PDF's content stream, not visual reading order, which is why a page number
+    or the book's running title can end up sitting next to a chapter heading."""
+    num_pages = len(pages)
+    line_counts = Counter()
+    for page_lines in pages:
+        for line in {ln.strip() for ln in page_lines if ln.strip()}:
+            line_counts[line] += 1
+
+    # A line repeated on most pages is a running header/footer, not real content.
+    # Skip this heuristic for very short documents, where "most pages" is meaningless.
+    repeat_threshold = max(2, num_pages // 2 + 1) if num_pages > 2 else num_pages + 1
+    noisy = {line for line, count in line_counts.items() if count >= repeat_threshold}
+
+    cleaned_pages = []
+    for page_lines in pages:
+        kept = [
+            line.strip() for line in page_lines
+            if line.strip() and line.strip() not in noisy and not _PAGE_NUMBER_RE.fullmatch(line.strip())
+        ]
+        if kept:
+            cleaned_pages.append("\n".join(kept))
+    return "\n\n".join(cleaned_pages)
 
 
 @router.post("/extract-pdf")
@@ -436,8 +465,8 @@ async def extract_pdf_text(file: UploadFile = File(...), _: dict = Depends(requi
     if len(reader.pages) > MAX_PDF_PAGES:
         raise HTTPException(status_code=400, detail=f"PDF has too many pages (max {MAX_PDF_PAGES}).")
 
-    pages_text = [(page.extract_text() or "").strip() for page in reader.pages]
-    text = "\n\n".join(p for p in pages_text if p)
+    pages = [(page.extract_text() or "").splitlines() for page in reader.pages]
+    text = _clean_extracted_pages(pages)
     if len(text) < 10:
         raise HTTPException(
             status_code=422,
