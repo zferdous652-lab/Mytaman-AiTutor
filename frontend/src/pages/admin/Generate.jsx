@@ -751,22 +751,25 @@ const Generate = () => {
     }
     setSaving(true);
     try {
-      const { data } = await api.post("/content/drafts", {
-        pack_id: packId,
-        source: "ai",
-        items: items.map((it) => {
-          const file = synced.sourceFiles[it.chapter_id];
-          const text = synced.sourceTexts[it.chapter_id];
-          return {
-            chapter_id: it.chapter_id,
-            content_type: it.content_type,
-            language: it.language,
-            payload: it.payload,
-            source_pdf: file ? { filename: file.filename, url: file.url, text: text || "" } : undefined,
-          };
-        }),
+      const itemsPayload = items.map((it) => {
+        const file = synced.sourceFiles[it.chapter_id];
+        const text = synced.sourceTexts[it.chapter_id];
+        return {
+          chapter_id: it.chapter_id,
+          content_type: it.content_type,
+          language: it.language,
+          payload: it.payload,
+          source_pdf: file ? { filename: file.filename, url: file.url, text: text || "" } : undefined,
+        };
       });
-      toast.success(`Draft ${data.draft_index} saved with ${data.items.length} item(s)`);
+      const data = activeDraftId
+        ? (await api.put(`/content/drafts/${activeDraftId}`, { items: itemsPayload })).data
+        : (await api.post("/content/drafts", { pack_id: packId, source: "ai", items: itemsPayload })).data;
+      toast.success(
+        activeDraftId
+          ? `Draft ${data.draft_index} updated with ${data.items.length} item(s) — confirm it again to include these changes in the next publish`
+          : `Draft ${data.draft_index} saved with ${data.items.length} item(s)`
+      );
       // Source material stays loaded (per chapter) since it's reference material, not part of
       // the draft itself -- the admin will likely generate more content types from it next.
       setWorkingSet({});
@@ -1181,7 +1184,7 @@ const Generate = () => {
               data-testid="gen-save"
             >
               <FileEdit size={14} />
-              {saving ? "Saving…" : "Save content"}
+              {saving ? "Saving…" : activeDraftId ? "Update draft" : "Save content"}
             </button>
           </div>
         </div>
