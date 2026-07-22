@@ -177,19 +177,14 @@ class PackDraftOut(BaseModel):
     created_at: str
 
 
-@router.post("/drafts", response_model=PackDraftOut)
-async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("admin"))):
-    pack = await db.packs.find_one({"id": payload.pack_id}, {"_id": 0})
-    if not pack:
-        raise HTTPException(status_code=404, detail="Tutor Pack not found")
-
+async def _build_items_out(pack_id: str, items_in: List[DraftItemIn]) -> list:
     items_out = []
-    for item in payload.items:
+    for item in items_in:
         chapter = await db.chapters.find_one({"id": item.chapter_id}, {"_id": 0})
         if not chapter:
             raise HTTPException(status_code=404, detail=f"Chapter {item.chapter_id} not found")
         course = await db.courses.find_one({"id": chapter["course_id"]}, {"_id": 0})
-        if not course or course["pack_id"] != payload.pack_id:
+        if not course or course["pack_id"] != pack_id:
             raise HTTPException(status_code=400, detail=f"Chapter {item.chapter_id} does not belong to this Tutor Pack")
         validated_payload = _validate_payload(item.content_type, item.payload)
         items_out.append({
@@ -201,6 +196,16 @@ async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("ad
             "language": item.language,
             "payload": validated_payload,
         })
+    return items_out
+
+
+@router.post("/drafts", response_model=PackDraftOut)
+async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("admin"))):
+    pack = await db.packs.find_one({"id": payload.pack_id}, {"_id": 0})
+    if not pack:
+        raise HTTPException(status_code=404, detail="Tutor Pack not found")
+
+    items_out = await _build_items_out(payload.pack_id, payload.items)
 
     last = await db.pack_drafts.find_one(
         {"pack_id": payload.pack_id}, {"_id": 0, "draft_index": 1}, sort=[("draft_index", -1)]
@@ -217,6 +222,32 @@ async def save_draft(payload: SaveDraftIn, user: dict = Depends(require_role("ad
     }
     await db.pack_drafts.insert_one(doc)
     return PackDraftOut(**{k: doc.get(k) for k in PackDraftOut.model_fields.keys()})
+
+
+class UpdateDraftItemsIn(BaseModel):
+    items: List[DraftItemIn] = Field(min_length=1)
+
+
+@router.put("/drafts/{draft_id}", response_model=PackDraftOut)
+async def update_pack_draft_items(draft_id: str, payload: UpdateDraftItemsIn, _: dict = Depends(require_role("admin"))):
+    """Replaces a draft's items in place (same id/draft_index) instead of creating a new
+    draft -- lets an admin re-edit an already-confirmed draft (e.g. add another chapter)
+    without spawning a fresh Draft N every time. Resets status to "draft" since the
+    confirmed content just changed underneath it; the existing Confirm action becomes
+    available again once the edit is saved."""
+    draft = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    items_out = await _build_items_out(draft["pack_id"], payload.items)
+
+    res = await db.pack_drafts.find_one_and_update(
+        {"id": draft_id},
+        {"$set": {"items": items_out, "status": "draft"}},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    return PackDraftOut(**{k: res.get(k, PackDraftOut.model_fields[k].default) for k in PackDraftOut.model_fields.keys()})
 
 
 @router.get("/drafts", response_model=List[PackDraftOut])

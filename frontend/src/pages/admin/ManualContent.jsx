@@ -481,6 +481,54 @@ const ManualContent = () => {
     toast.success("Chapter added");
   };
 
+  const purgePendingForChapters = (chapterIds) => {
+    setWorkingSet((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        if (chapterIds.some((chId) => key.startsWith(`${chId}::`))) delete next[key];
+      }
+      return next;
+    });
+  };
+
+  const renameCourse = async () => {
+    const course = courses.find((c) => c.id === courseId);
+    if (!course) return;
+    const next = window.prompt("Rename course", course.title);
+    if (!next || !next.trim() || next.trim() === course.title) return;
+    await api.patch(`/courses/${course.id}`, { title: next.trim() });
+    toast.success("Course renamed");
+    await loadCourses(packId);
+  };
+
+  const deleteCourse = async () => {
+    const course = courses.find((c) => c.id === courseId);
+    if (!course) return;
+    if (!window.confirm(`Delete course "${course.title}"? This removes all its chapters and any content saved under them. This cannot be undone.`)) return;
+    await api.delete(`/courses/${course.id}`);
+    purgePendingForChapters(chapters.map((ch) => ch.id));
+    toast.success(`Course "${course.title}" deleted`);
+    await loadCourses(packId);
+  };
+
+  const renameChapter = async (chapter, e) => {
+    e.stopPropagation();
+    const next = window.prompt("Rename chapter", chapter.title);
+    if (!next || !next.trim() || next.trim() === chapter.title) return;
+    await api.patch(`/chapters/${chapter.id}`, { title: next.trim() });
+    toast.success("Chapter renamed");
+    await loadChapters(courseId);
+  };
+
+  const deleteChapter = async (chapter, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete chapter "${chapter.title}"? This removes any content saved under it. This cannot be undone.`)) return;
+    await api.delete(`/chapters/${chapter.id}`);
+    purgePendingForChapters([chapter.id]);
+    toast.success(`Chapter "${chapter.title}" deleted`);
+    await loadChapters(courseId);
+  };
+
   const uploadMindmapImage = async (file) => {
     setUploading(true);
     try {
@@ -522,16 +570,20 @@ const ManualContent = () => {
     }
     setSaving(true);
     try {
-      const { data } = await api.post("/content/drafts", {
-        pack_id: packId,
-        items: items.map((it) => ({
-          chapter_id: it.chapter_id,
-          content_type: it.content_type,
-          language: it.language,
-          payload: it.payload,
-        })),
-      });
-      toast.success(`Draft ${data.draft_index} saved with ${data.items.length} item(s)`);
+      const itemsPayload = items.map((it) => ({
+        chapter_id: it.chapter_id,
+        content_type: it.content_type,
+        language: it.language,
+        payload: it.payload,
+      }));
+      const data = activeDraftId
+        ? (await api.put(`/content/drafts/${activeDraftId}`, { items: itemsPayload })).data
+        : (await api.post("/content/drafts", { pack_id: packId, items: itemsPayload })).data;
+      toast.success(
+        activeDraftId
+          ? `Draft ${data.draft_index} updated with ${data.items.length} item(s) — confirm it again to include these changes in the next publish`
+          : `Draft ${data.draft_index} saved with ${data.items.length} item(s)`
+      );
       setWorkingSet({});
       setActiveDraftId(null);
       setBody("");
@@ -700,6 +752,26 @@ const ManualContent = () => {
                 {courses.length === 0 && <option value="">No courses yet</option>}
                 {courses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
+              <button
+                type="button"
+                onClick={renameCourse}
+                disabled={!courseId}
+                className="rounded-lg border border-white/10 px-2.5 text-white/60 hover:text-[#00f0ff] hover:border-[#00f0ff]/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                data-testid="mc-course-rename"
+                title="Rename course"
+              >
+                <Pencil size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={deleteCourse}
+                disabled={!courseId}
+                className="rounded-lg border border-white/10 px-2.5 text-white/60 hover:text-red-400 hover:border-red-400/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                data-testid="mc-course-delete"
+                title="Delete course"
+              >
+                <Trash2 size={13} />
+              </button>
             </div>
             <div className="mt-2 flex gap-2">
               <input
@@ -742,15 +814,27 @@ const ManualContent = () => {
                     key={c.id}
                     type="button"
                     onClick={() => switchChapter(c.id)}
-                    className={`relative rounded-full px-4 py-1.5 text-xs border transition-colors ${
+                    className={`relative rounded-full pl-4 pr-2 py-1.5 text-xs border transition-colors flex items-center gap-1.5 ${
                       chapterId === c.id ? "bg-[#00f0ff] text-black border-[#00f0ff]" : "border-white/15 text-white/70 hover:border-white/30"
                     }`}
                     data-testid={`mc-chapter-${c.id}`}
                   >
                     {c.title}
                     {hasPending && (
-                      <span className={`ml-1.5 inline-block h-1.5 w-1.5 rounded-full ${chapterId === c.id ? "bg-black" : "bg-[#00f0ff]"}`} />
+                      <span className={`inline-block h-1.5 w-1.5 rounded-full ${chapterId === c.id ? "bg-black" : "bg-[#00f0ff]"}`} />
                     )}
+                    <Pencil
+                      size={11}
+                      onClick={(e) => renameChapter(c, e)}
+                      className={`hover:opacity-100 ${chapterId === c.id ? "text-black/60" : "text-white/40"}`}
+                      data-testid={`mc-chapter-${c.id}-rename`}
+                    />
+                    <X
+                      size={12}
+                      onClick={(e) => deleteChapter(c, e)}
+                      className={`hover:opacity-100 ${chapterId === c.id ? "text-black/60" : "text-white/40"}`}
+                      data-testid={`mc-chapter-${c.id}-delete`}
+                    />
                   </button>
                 );
               })}
@@ -834,7 +918,7 @@ const ManualContent = () => {
             data-testid="mc-save"
           >
             <FileEdit size={14} />
-            {saving ? "Saving…" : "Save content"}
+            {saving ? "Saving…" : activeDraftId ? "Update draft" : "Save content"}
           </button>
         </div>
 
