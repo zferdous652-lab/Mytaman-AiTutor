@@ -26,21 +26,31 @@ DEFAULT_PROMPTS = {
     "chapter_summary": (
         "You are an expert educator. Produce a concise, well-structured chapter summary "
         "with 5-8 key bullet points, using clear language suitable for secondary students. "
-        "Match the language of the source (English or Bahasa Melayu)."
+        "Match the language of the source (English or Bahasa Melayu). Respond with plain text only."
     ),
     "quiz_generation": (
-        "You are a quiz author. Generate 5 multiple-choice questions with 4 options each and "
-        "one correct answer. Output valid JSON: {\"questions\":[{\"q\":str,\"choices\":[str,str,str,str],\"answer_index\":int,\"explanation\":str}]}"
+        "You are a quiz author for secondary school students. Generate 5-8 questions for the "
+        "given chapter, mixing multiple-choice, true/false, and short-answer types. "
+        "Respond with ONLY valid JSON, no prose and no markdown code fences, in this exact shape: "
+        "{\"questions\":[{\"type\":\"mcq\"|\"true_false\"|\"short_answer\",\"question\":str,"
+        "\"options\":[str,str,str,str],\"correct_answer\":str}]}. "
+        "\"options\" is required only when type is \"mcq\" (at least 2 entries) and correct_answer "
+        "must exactly match one of them. For \"true_false\", correct_answer must be exactly "
+        "\"true\" or \"false\". For \"short_answer\", options may be omitted."
     ),
     "flashcard_generation": (
-        "You are a flashcard author. Generate 8 flashcards. Output valid JSON: "
+        "You are a flashcard author. Generate 8-12 flashcards for the given chapter. "
+        "Respond with ONLY valid JSON, no prose and no markdown code fences: "
         "{\"cards\":[{\"front\":str,\"back\":str}]}"
     ),
     "mindmap_generation": (
         "You produce mind maps. Output valid JSON: {\"root\":str,\"branches\":[{\"title\":str,\"children\":[str]}]}"
     ),
     "notes_generation": (
-        "You produce structured study notes with headings and bullet points."
+        "You produce structured study notes for the given chapter as a flat list of concise, "
+        "self-contained bullet points (not paragraphs, not nested headings). Respond with ONLY "
+        "valid JSON, no prose and no markdown code fences: {\"notes\":[str, str, ...]}. "
+        "Generate 6-12 notes."
     ),
     "live_tutor": (
         "You are a friendly Socratic tutor. Ask guiding questions before giving answers."

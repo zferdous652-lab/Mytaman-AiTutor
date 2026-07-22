@@ -1,4 +1,6 @@
 """Content generation & storage endpoints."""
+import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -143,6 +145,72 @@ def _validate_payload(content_type: str, payload: dict) -> dict:
         return TextPayload(**payload).model_dump()
     except (ValidationError, ValueError) as e:
         raise HTTPException(status_code=422, detail=f"Invalid payload for {content_type}: {e}")
+
+
+def _extract_json(text: str) -> dict:
+    text = text.strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
+    if fenced:
+        text = fenced.group(1)
+    else:
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            text = text[start:end + 1]
+    return json.loads(text)
+
+
+class AiDraftItemIn(BaseModel):
+    chapter_id: str
+    content_type: ContentType
+    language: Literal["en", "bm"] = "en"
+    source_text: str = Field(min_length=10)
+
+
+class AiDraftItemOut(BaseModel):
+    chapter_id: str
+    content_type: ContentType
+    language: str
+    payload: dict
+    provider: str
+    model: str
+
+
+@router.post("/ai-draft", response_model=AiDraftItemOut)
+async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(require_role("admin"))):
+    """Generates a single chapter's content via the Model Router, validated against the same
+    typed payload shapes as Manual Content, so the result can be edited and saved through the
+    same /content/drafts pipeline (draft -> confirm -> publish)."""
+    if payload.content_type == "mindmap":
+        raise HTTPException(status_code=400, detail="Mind maps need an uploaded image and can't be AI-generated yet.")
+
+    chapter = await db.chapters.find_one({"id": payload.chapter_id}, {"_id": 0})
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    lang_hint = "Respond in Bahasa Melayu." if payload.language == "bm" else "Respond in English."
+    user_text = f"{lang_hint}\n\nChapter: {chapter['title']}\n\nSource material:\n{payload.source_text}"
+    result = await call_router(PROMPT_KEY[payload.content_type], user_text)
+
+    if payload.content_type == "summary":
+        raw_payload = {"body": result["text"].strip()}
+    else:
+        try:
+            raw_payload = _extract_json(result["text"])
+        except (json.JSONDecodeError, ValueError):
+            raise HTTPException(
+                status_code=502,
+                detail="AI did not return valid JSON. Try again, or adjust the prompt in Model Router.",
+            )
+
+    validated = _validate_payload(payload.content_type, raw_payload)
+    return AiDraftItemOut(
+        chapter_id=payload.chapter_id,
+        content_type=payload.content_type,
+        language=payload.language,
+        payload=validated,
+        provider=result["provider"],
+        model=result["model"],
+    )
 
 
 class DraftItemIn(BaseModel):
