@@ -177,6 +177,36 @@ class AiDraftItemOut(BaseModel):
     model: str
 
 
+def _normalize_quiz_payload(raw: dict) -> dict:
+    """Accepts quiz JSON in either our target shape ({type, question, options,
+    correct_answer}) or the older ad-hoc shape ({q, choices, answer_index, explanation})
+    that a not-yet-updated Model Router prompt (or a model that ignores the newer
+    instructions) may still produce, and normalizes it to our schema."""
+    normalized = []
+    for q in raw.get("questions", []):
+        if "type" in q and "question" in q:
+            normalized.append(q)
+            continue
+        question_text = q.get("q") or q.get("question") or q.get("text") or ""
+        choices = q.get("choices") or q.get("options")
+        answer_index = q.get("answer_index")
+        correct_answer = q.get("correct_answer") or q.get("answer")
+        if correct_answer is None and choices and isinstance(answer_index, int) and 0 <= answer_index < len(choices):
+            correct_answer = choices[answer_index]
+        if choices:
+            normalized.append({"type": "mcq", "question": question_text, "options": choices, "correct_answer": correct_answer})
+        else:
+            normalized.append({"type": "short_answer", "question": question_text, "correct_answer": correct_answer})
+    return {"questions": normalized}
+
+
+def _notes_from_plain_text(text: str) -> dict:
+    """Falls back to splitting plain-text lines into notes when the AI didn't return JSON
+    -- covers a not-yet-updated Model Router prompt that still asks for free-form notes."""
+    lines = [ln.strip().lstrip("-*• ").strip() for ln in text.splitlines()]
+    return {"notes": [ln for ln in lines if ln]}
+
+
 @router.post("/ai-draft", response_model=AiDraftItemOut)
 async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(require_role("admin"))):
     """Generates a single chapter's content via the Model Router, validated against the same
@@ -199,10 +229,15 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
         try:
             raw_payload = _extract_json(result["text"])
         except (json.JSONDecodeError, ValueError):
-            raise HTTPException(
-                status_code=502,
-                detail="AI did not return valid JSON. Try again, or adjust the prompt in Model Router.",
-            )
+            if payload.content_type == "notes":
+                raw_payload = _notes_from_plain_text(result["text"])
+            else:
+                raise HTTPException(
+                    status_code=502,
+                    detail="AI did not return valid JSON. Try again, or adjust the prompt in Model Router.",
+                )
+        if payload.content_type == "quiz":
+            raw_payload = _normalize_quiz_payload(raw_payload)
 
     validated = _validate_payload(payload.content_type, raw_payload)
     return AiDraftItemOut(
