@@ -90,7 +90,7 @@ const StudentBrowse = () => {
                 <div className="text-[10px] uppercase tracking-widest text-white/40">{p.language.toUpperCase()}</div>
               </div>
               <div className="font-display text-lg tracking-tight text-white mt-2">{p.title}</div>
-              <div className="text-xs text-white/50 mt-1">{p.subject} · {p.grade}</div>
+              <div className="text-xs text-white/50 mt-1">{p.grade}</div>
               <p className="text-sm text-white/70 mt-3 leading-relaxed">{p.description}</p>
 
               {courses.length > 0 && (

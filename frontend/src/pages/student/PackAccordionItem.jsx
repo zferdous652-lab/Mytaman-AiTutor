@@ -115,7 +115,7 @@ const PackAccordionItem = ({ pack, expanded, onToggle }) => {
       >
         <div>
           <div className="font-display text-lg tracking-tight text-white">{pack.title}</div>
-          <div className="text-xs text-white/40 mt-0.5">{pack.subject} · {pack.grade}</div>
+          <div className="text-xs text-white/40 mt-0.5">{pack.grade}</div>
         </div>
         <div className="flex items-center gap-4 shrink-0">
           {loaded && (

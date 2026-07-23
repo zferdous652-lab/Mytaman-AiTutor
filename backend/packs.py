@@ -18,7 +18,6 @@ Tier = Literal["basic", "premium", "xpoints"]
 class PackIn(BaseModel):
     title: str
     description: str
-    subject: str
     grade: str
     language: Literal["en", "bm", "both"] = "both"
     tier: Tier = "basic"
@@ -200,7 +199,6 @@ async def seed_packs(target_db):
             "id": str(uuid.uuid4()),
             "title": "KSSM Form 1 Sejarah",
             "description": "Bab-bab utama sejarah tingkatan 1 dengan ringkasan, kuiz dan kad imbas.",
-            "subject": "Sejarah",
             "grade": "Form 1",
             "language": "both",
             "tier": "basic",
@@ -210,7 +208,6 @@ async def seed_packs(target_db):
             "id": str(uuid.uuid4()),
             "title": "KSSM Form 2 Mathematics",
             "description": "Algebra, geometry, and statistics with AI-generated practice quizzes.",
-            "subject": "Mathematics",
             "grade": "Form 2",
             "language": "en",
             "tier": "basic",
@@ -220,7 +217,6 @@ async def seed_packs(target_db):
             "id": str(uuid.uuid4()),
             "title": "KSSM Form 3 Science",
             "description": "Biology, chemistry, physics fundamentals with flashcards and mind maps.",
-            "subject": "Science",
             "grade": "Form 3",
             "language": "both",
             "tier": "premium",
