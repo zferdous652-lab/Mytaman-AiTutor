@@ -22,18 +22,31 @@ class MindmapErrorBoundary extends React.Component {
   }
 }
 
-// payload shape: { image_url, caption? }
+// payload shape: { html, caption? } -- or, for legacy content predating AI-generated HTML
+// mind maps, { image_url, caption? }.
 const MindmapViewer = ({ content }) => {
+  const html = content.payload?.html;
   const url = content.payload?.image_url;
   const caption = content.payload?.caption;
   const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const src = useMemo(() => (url ? (url.startsWith("http") ? url : `${BACKEND_URL}${url}`) : null), [url]);
 
+  if (html) {
+    return (
+      <div>
+        <div className="rounded-2xl border border-[#00f0ff]/20 bg-gradient-to-b from-[#120a1f] to-[#0a0514] overflow-auto" data-testid="mindmap-html-view">
+          <div className="mindmap-html" dangerouslySetInnerHTML={{ __html: html }} />
+        </div>
+        {caption && <p className="mt-3 text-sm text-white/60">{caption}</p>}
+      </div>
+    );
+  }
+
   if (!src) {
     return (
       <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] p-10 text-center" data-testid="mindmap-empty">
         <ImageOff size={28} className="mx-auto text-white/25" />
-        <div className="mt-3 text-sm text-white/40">No mind map image yet.</div>
+        <div className="mt-3 text-sm text-white/40">No mind map yet.</div>
       </div>
     );
   }

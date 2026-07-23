@@ -130,3 +130,65 @@ body {
 input:focus, textarea:focus, select:focus {
   outline: none;
 }
+
+/* Mind map (AI-generated HTML fragment, sanitized server-side to a fixed class allowlist) */
+.mindmap-html {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.5rem;
+}
+.mindmap-html .mindmap-root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+.mindmap-html .mindmap-root > .mindmap-node {
+  align-self: center;
+  font-family: "Unbounded", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #00f0ff;
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.15);
+  border-radius: 9999px;
+  padding: 0.6rem 1.4rem;
+  margin-bottom: 0.25rem;
+  text-align: center;
+}
+.mindmap-html .mindmap-branch {
+  border-left: 2px solid rgba(0, 240, 255, 0.25);
+  margin-left: 1rem;
+  padding: 0.25rem 0 0.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.mindmap-html .mindmap-branch > .mindmap-node {
+  align-self: flex-start;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #fff;
+  background: rgba(138, 43, 226, 0.15);
+  border: 1px solid rgba(138, 43, 226, 0.4);
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.75rem;
+}
+.mindmap-html .mindmap-leaf {
+  position: relative;
+  padding-left: 0.9rem;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+.mindmap-html .mindmap-leaf::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.5em;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #00f0ff;
+}

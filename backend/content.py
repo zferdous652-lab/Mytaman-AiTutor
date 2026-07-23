@@ -111,9 +111,36 @@ class FlashcardsPayload(BaseModel):
     cards: List[FlashCard] = Field(min_length=1, max_length=200)
 
 
+MINDMAP_ALLOWED_TAGS = ["div", "span", "p", "ul", "ol", "li", "strong", "em", "b", "i", "br", "h3", "h4"]
+MINDMAP_ALLOWED_CLASSES = {"mindmap-root", "mindmap-node", "mindmap-branch", "mindmap-leaf"}
+_CLASS_ATTR_RE = re.compile(r'\sclass="([^"]*)"')
+
+
+def _sanitize_mindmap_html(html: str) -> str:
+    """Strict allowlist sanitizer for AI-generated (or hand-authored) mind map HTML -- this
+    is rendered client-side via dangerouslySetInnerHTML, so this is the only real security
+    boundary. Strips every tag/attribute except a small structural set, no inline styles or
+    scripts, and only lets through our own known mindmap-* class names (not the raw values
+    the model produced), so nothing else on the page can be targeted via class names either."""
+    import bleach
+
+    cleaned = bleach.clean(html, tags=MINDMAP_ALLOWED_TAGS, attributes={"*": ["class"]}, strip=True)
+
+    def _filter_classes(match: "re.Match") -> str:
+        kept = [c for c in match.group(1).split() if c in MINDMAP_ALLOWED_CLASSES]
+        return f' class="{" ".join(kept)}"' if kept else ""
+
+    return _CLASS_ATTR_RE.sub(_filter_classes, cleaned).strip()
+
+
 class MindmapPayload(BaseModel):
-    image_url: str = Field(min_length=1)
+    html: Optional[str] = None
+    image_url: Optional[str] = None  # legacy -- mind maps used to be an uploaded image
     caption: Optional[str] = None
+
+    def validate_shape(self):
+        if not (self.html and self.html.strip()) and not (self.image_url and self.image_url.strip()):
+            raise ValueError("Provide mind map HTML (or, for legacy content, an image_url)")
 
 
 class TextPayload(BaseModel):
@@ -138,7 +165,11 @@ def _validate_payload(content_type: str, payload: dict) -> dict:
         if content_type == "flashcards":
             return FlashcardsPayload(**payload).model_dump()
         if content_type == "mindmap":
-            return MindmapPayload(**payload).model_dump()
+            if payload.get("html"):
+                payload = {**payload, "html": _sanitize_mindmap_html(payload["html"])}
+            parsed = MindmapPayload(**payload)
+            parsed.validate_shape()
+            return parsed.model_dump()
         if content_type == "notes":
             parsed = NotesPayload(**payload)
             parsed.validate_shape()
@@ -159,6 +190,19 @@ def _extract_json(text: str) -> dict:
         if start != -1 and end != -1 and end > start:
             text = text[start:end + 1]
     return json.loads(text)
+
+
+def _extract_html(text: str) -> str:
+    """Strips markdown code fences / stray prose the model may wrap the HTML fragment in,
+    keeping just the outer <div ...>...</div> mind map markup."""
+    text = text.strip()
+    fenced = re.search(r"```(?:html)?\s*(<div[\s\S]*?</div>)\s*```", text, re.DOTALL)
+    if fenced:
+        return fenced.group(1).strip()
+    start, end = text.find("<div"), text.rfind("</div>")
+    if start != -1 and end != -1 and end > start:
+        return text[start:end + len("</div>")].strip()
+    return text
 
 
 class AiDraftItemIn(BaseModel):
@@ -212,9 +256,6 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
     """Generates a single chapter's content via the Model Router, validated against the same
     typed payload shapes as Manual Content, so the result can be edited and saved through the
     same /content/drafts pipeline (draft -> confirm -> publish)."""
-    if payload.content_type == "mindmap":
-        raise HTTPException(status_code=400, detail="Mind maps need an uploaded image and can't be AI-generated yet.")
-
     chapter = await db.chapters.find_one({"id": payload.chapter_id}, {"_id": 0})
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found")
@@ -225,6 +266,8 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
 
     if payload.content_type == "summary":
         raw_payload = {"body": result["text"].strip()}
+    elif payload.content_type == "mindmap":
+        raw_payload = {"html": _extract_html(result["text"])}
     else:
         try:
             raw_payload = _extract_json(result["text"])

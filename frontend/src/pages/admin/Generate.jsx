@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, X, Upload, CheckCircle2, FileEdit, ListChecks, Trash2, MoreVertical, XCircle, Pencil, Copy, Sparkles, FileText } from "lucide-react";
+import { Plus, X, CheckCircle2, FileEdit, ListChecks, Trash2, MoreVertical, XCircle, Pencil, Copy, Sparkles, FileText } from "lucide-react";
 import { api } from "@/lib/api";
 
 const TYPES = [
@@ -189,45 +189,34 @@ const NotesBuilder = ({ notes, setNotes }) => {
   );
 };
 
-// ---------- Mind map builder (image upload -- not AI-generatable) ----------
-const MindmapBuilder = ({ mindmap, setMindmap, uploading, onUpload }) => {
-  const [dragOver, setDragOver] = useState(false);
-
-  const handleFiles = (files) => {
-    const file = files?.[0];
-    if (file) onUpload(file);
-  };
-
+// ---------- Mind map builder (AI/hand-authored HTML fragment, rendered live) ----------
+const MindmapBuilder = ({ mindmap, setMindmap }) => {
   return (
     <div className="space-y-3" data-testid="mindmap-builder">
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
-        onClick={() => document.getElementById("gen-mindmap-file-input").click()}
-        className={`rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-colors ${
-          dragOver ? "border-[#00f0ff] bg-[#00f0ff]/5" : "border-white/15 bg-white/5"
-        }`}
-        data-testid="mindmap-dropzone"
-      >
-        <input
-          id="gen-mindmap-file-input"
-          type="file"
-          accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
-          className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
-        />
-        <Upload size={22} className="mx-auto text-white/40" />
-        <div className="mt-2 text-sm text-white/70">
-          {uploading ? "Uploading…" : "Drag & drop a mind map image, or click to upload"}
-        </div>
-        <div className="mt-1 text-[10px] text-white/30">PNG, JPEG, WEBP, GIF · max 5MB · AI can't generate images yet</div>
-      </div>
-      {mindmap.image_url && (
-        <div className="rounded-xl border border-white/10 overflow-hidden" data-testid="mindmap-preview">
-          <img src={mindmap.image_url} alt="Mind map preview" className="w-full max-h-64 object-contain bg-black/30" />
+      {mindmap.image_url && !mindmap.html && (
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-white/50" data-testid="mindmap-legacy-image">
+          Legacy image-based mind map from before HTML generation —{" "}
+          <a href={mindmap.image_url} target="_blank" rel="noreferrer" className="text-[#00f0ff] hover:underline">
+            view image
+          </a>
+          . Add HTML below to replace it.
         </div>
       )}
+      <div className="rounded-xl border border-white/10 bg-black/20 min-h-[8rem]" data-testid="mindmap-preview">
+        {mindmap.html ? (
+          <div className="mindmap-html" dangerouslySetInnerHTML={{ __html: mindmap.html }} />
+        ) : (
+          <div className="p-6 text-center text-sm text-white/30">Mind map preview will appear here.</div>
+        )}
+      </div>
+      <textarea
+        rows={8}
+        value={mindmap.html}
+        onChange={(e) => setMindmap({ ...mindmap, html: e.target.value })}
+        className={inputCls + " font-mono text-xs leading-relaxed"}
+        placeholder="Mind map HTML appears here after AI Generate — edit freely before saving..."
+        data-testid="mindmap-html"
+      />
       <input
         value={mindmap.caption}
         onChange={(e) => setMindmap({ ...mindmap, caption: e.target.value })}
@@ -311,7 +300,7 @@ const isMeaningful = (contentType, payload) => {
   if (contentType === "notes") return (payload.notes || []).some((n) => n.trim());
   if (contentType === "quiz") return (payload.questions || []).some((q) => q.question?.trim());
   if (contentType === "flashcards") return (payload.cards || []).some((c) => c.front?.trim() || c.back?.trim());
-  if (contentType === "mindmap") return !!payload.image_url;
+  if (contentType === "mindmap") return !!(payload.html || "").trim() || !!payload.image_url;
   return false;
 };
 
@@ -328,7 +317,6 @@ const Generate = () => {
   const [drafts, setDrafts] = useState([]);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [uploadingSource, setUploadingSource] = useState(false);
 
   // Pending content, accumulated client-side across chapters/types until "Save content"
@@ -408,7 +396,7 @@ const Generate = () => {
   const [body, setBody] = useState("");
   const [questions, setQuestions] = useState([emptyQuestion()]);
   const [cards, setCards] = useState([{ front: "", back: "" }]);
-  const [mindmap, setMindmap] = useState({ image_url: "", caption: "" });
+  const [mindmap, setMindmap] = useState({ html: "", image_url: "", caption: "" });
   const [notes, setNotes] = useState([""]);
 
   const loadPacks = async () => {
@@ -464,7 +452,7 @@ const Generate = () => {
       );
     }
     if (ctype === "flashcards") setCards(p.cards?.length ? p.cards : [{ front: "", back: "" }]);
-    if (ctype === "mindmap") setMindmap({ image_url: p.image_url || "", caption: p.caption || "" });
+    if (ctype === "mindmap") setMindmap({ html: p.html || "", image_url: p.image_url || "", caption: p.caption || "" });
     setSourceText(srcMap[cid] || "");
     setSourceFile(fileMap[cid] || null);
   };
@@ -493,7 +481,13 @@ const Generate = () => {
       };
     }
     if (contentType === "flashcards") return { cards };
-    if (contentType === "mindmap") return { image_url: mindmap.image_url, caption: mindmap.caption || undefined };
+    if (contentType === "mindmap") {
+      return {
+        html: mindmap.html?.trim() || undefined,
+        image_url: mindmap.image_url || undefined,
+        caption: mindmap.caption || undefined,
+      };
+    }
     return {};
   };
 
@@ -648,20 +642,6 @@ const Generate = () => {
     await loadChapters(courseId);
   };
 
-  const uploadMindmapImage = async (file) => {
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const { data } = await api.post("/content/upload-image", form);
-      setMindmap((m) => ({ ...m, image_url: data.url }));
-      toast.success("Image uploaded");
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || "Upload failed");
-    }
-    setUploading(false);
-  };
-
   const uploadSourcePdf = async (file) => {
     if (!chapterId) {
       toast.error("Select a chapter first.");
@@ -735,6 +715,7 @@ const Generate = () => {
         );
       }
       if (contentType === "flashcards") setCards(data.payload.cards?.length ? data.payload.cards : [{ front: "", back: "" }]);
+      if (contentType === "mindmap") setMindmap((m) => ({ ...m, html: data.payload.html || "" }));
       toast.success(`Generated via ${data.provider} (${data.model}) — review, then Save content`);
     } catch (err) {
       toast.error(err?.response?.data?.detail?.message || err?.response?.data?.detail || "AI generation failed");
@@ -778,7 +759,7 @@ const Generate = () => {
       setNotes([""]);
       setQuestions([emptyQuestion()]);
       setCards([{ front: "", back: "" }]);
-      setMindmap({ image_url: "", caption: "" });
+      setMindmap({ html: "", image_url: "", caption: "" });
       await loadDrafts(packId);
     } catch (err2) {
       toast.error(err2?.response?.data?.detail?.[0]?.msg || err2?.response?.data?.detail || "Save failed");
@@ -1094,7 +1075,7 @@ const Generate = () => {
             </div>
           </div>
 
-          {selectedChapter && contentType !== "mindmap" && (
+          {selectedChapter && (
             <div className="pt-2 border-t border-white/10">
               <label className="text-xs text-white/60">
                 Source material (PDF) for <span className="text-white">{selectedChapter.title}</span>
@@ -1116,7 +1097,7 @@ const Generate = () => {
           )}
 
           {selectedChapter && (
-            <div className={contentType !== "mindmap" ? "" : "pt-2 border-t border-white/10"}>
+            <div className="pt-2 border-t border-white/10">
               <div className="text-xs text-white/60 mb-2">
                 {TYPES.find((t) => t.v === contentType)?.label} for <span className="text-white">{selectedChapter.title}</span>
               </div>
@@ -1135,7 +1116,7 @@ const Generate = () => {
               {contentType === "quiz" && <QuizBuilder questions={questions} setQuestions={setQuestions} />}
               {contentType === "flashcards" && <FlashcardsBuilder cards={cards} setCards={setCards} />}
               {contentType === "mindmap" && (
-                <MindmapBuilder mindmap={mindmap} setMindmap={setMindmap} uploading={uploading} onUpload={uploadMindmapImage} />
+                <MindmapBuilder mindmap={mindmap} setMindmap={setMindmap} />
               )}
             </div>
           )}
@@ -1168,8 +1149,7 @@ const Generate = () => {
             <button
               type="button"
               onClick={generateWithAi}
-              disabled={generating || contentType === "mindmap" || !chapterId}
-              title={contentType === "mindmap" ? "Mind maps need an uploaded image — AI can't generate one yet" : undefined}
+              disabled={generating || !chapterId}
               className="inline-flex items-center gap-2 rounded-full border border-[#00f0ff] px-6 py-2.5 text-sm font-semibold text-[#00f0ff] hover:bg-[#00f0ff] hover:text-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#00f0ff]"
               data-testid="gen-ai-generate"
             >
