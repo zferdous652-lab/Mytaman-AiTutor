@@ -45,7 +45,27 @@ DEFAULT_PROMPTS = {
         "{\"cards\":[{\"front\":str,\"back\":str}]}"
     ),
     "mindmap_generation": (
-        "You produce mind maps. Output valid JSON: {\"root\":str,\"branches\":[{\"title\":str,\"children\":[str]}]}"
+        "You produce a mind map for the given chapter as a small nested HTML fragment -- NOT a "
+        "full page. Respond with ONLY the HTML, no prose, no markdown code fences, no <html>/<head>/"
+        "<body> tags. Use ONLY these three class names, nested like this:\n"
+        "<div class=\"mindmap-root\">\n"
+        "  <div class=\"mindmap-node\">Central Topic</div>\n"
+        "  <div class=\"mindmap-branch\">\n"
+        "    <div class=\"mindmap-node\">Branch A</div>\n"
+        "    <div class=\"mindmap-leaf\">Idea 1</div>\n"
+        "    <div class=\"mindmap-leaf\">Idea 2</div>\n"
+        "  </div>\n"
+        "  <div class=\"mindmap-branch\">\n"
+        "    <div class=\"mindmap-node\">Branch B</div>\n"
+        "    <div class=\"mindmap-leaf\">Idea 3</div>\n"
+        "  </div>\n"
+        "</div>\n"
+        "Rules: exactly one mindmap-root wrapping exactly one mindmap-node (the central topic) "
+        "followed by 4-7 mindmap-branch siblings. Each mindmap-branch starts with its own "
+        "mindmap-node (the branch topic) followed by 2-4 mindmap-leaf items (short phrases, a few "
+        "words each) or, for deeper structure, another nested mindmap-branch instead of leaves. "
+        "Keep the whole tree to at most 3 levels deep. Do not use any other tags, attributes, "
+        "inline styles, scripts, or class names."
     ),
     "notes_generation": (
         "You produce structured study notes for the given chapter as a flat list of concise, "
