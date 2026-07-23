@@ -10,7 +10,7 @@ const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Fla
 const Packs = () => {
   const { t } = useLang();
   const [packs, setPacks] = useState([]);
-  const [form, setForm] = useState({ title: "", description: "", subject: "", grade: "", language: "both", tier: "basic" });
+  const [form, setForm] = useState({ title: "", description: "", grade: "", language: "both", tier: "basic" });
   const [reviewPack, setReviewPack] = useState(null);
   const [confirmedDrafts, setConfirmedDrafts] = useState([]);
   const [selectedDraftIds, setSelectedDraftIds] = useState([]);
@@ -71,7 +71,7 @@ const Packs = () => {
     try {
       await api.post("/packs/create", form);
       toast.success("Pack created");
-      setForm({ title: "", description: "", subject: "", grade: "", language: "both", tier: "basic" });
+      setForm({ title: "", description: "", grade: "", language: "both", tier: "basic" });
       load();
     } catch (err) {
       toast.error("Failed");
@@ -118,15 +118,9 @@ const Packs = () => {
             <label className="text-xs text-white/60">Title</label>
             <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white" data-testid="pack-title" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-white/60">Subject</label>
-              <input required value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white" data-testid="pack-subject" />
-            </div>
-            <div>
-              <label className="text-xs text-white/60">Grade</label>
-              <input required value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white" data-testid="pack-grade" />
-            </div>
+          <div>
+            <label className="text-xs text-white/60">Grade</label>
+            <input required value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white" data-testid="pack-grade" />
           </div>
           <div>
             <label className="text-xs text-white/60">Description</label>
@@ -177,7 +171,7 @@ const Packs = () => {
                 </div>
               </div>
               <div className="font-display text-lg text-white mt-2 tracking-tight">{p.title}</div>
-              <div className="text-xs text-white/50 mt-1">{p.subject} · {p.grade}</div>
+              <div className="text-xs text-white/50 mt-1">{p.grade}</div>
               <p className="text-sm text-white/70 mt-3 leading-relaxed flex-1">{p.description}</p>
 
               <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between gap-2">
