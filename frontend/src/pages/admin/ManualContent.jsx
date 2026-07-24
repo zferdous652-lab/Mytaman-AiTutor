@@ -1083,11 +1083,11 @@ const ManualContent = () => {
                           <button
                             type="button"
                             onClick={(e) => confirmDraft(d.id, e)}
-                            disabled={d.status === "confirmed"}
-                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-white/80 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-white/80 hover:bg-white/5"
                             data-testid={`draft-${d.draft_index}-action-confirm`}
+                            title={d.status === "confirmed" ? "Re-confirm to push this draft back into Tutor Pack Publish review" : "Confirm this draft"}
                           >
-                            <CheckCircle2 size={13} /> Confirm
+                            <CheckCircle2 size={13} /> {d.status === "confirmed" ? "Re-confirm" : "Confirm"}
                           </button>
                           <button
                             type="button"

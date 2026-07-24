@@ -563,31 +563,6 @@ async def hide_pack_draft_from_review(draft_id: str, _: dict = Depends(require_r
     return {"ok": True}
 
 
-class BulkHideDraftsIn(BaseModel):
-    ids: List[str] = Field(min_length=1)
-
-
-@router.post("/drafts/bulk-hide-from-review")
-async def bulk_hide_pack_drafts_from_review(payload: BulkHideDraftsIn, _: dict = Depends(require_role("admin"))):
-    await _hide_drafts_from_review(payload.ids)
-    return {"ok": True}
-
-
-@router.post("/drafts/{draft_id}/unpublish")
-async def unpublish_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
-    """Removes a draft's items from the student/parent-facing contents collection, and
-    also removes the draft from the Publish review panel's list (see hide-from-review
-    above) -- but never touches the draft itself, which stays exactly as-is in Manual
-    Content / Generate with AI. Deleting the draft record is out of scope here by design
-    (that only ever happens in Manual Content / Generate with AI)."""
-    draft = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
-    if not draft:
-        raise HTTPException(status_code=404, detail="Draft not found")
-    removed_from_students = await _unpublish_draft_items(draft)
-    await _hide_drafts_from_review([draft_id])
-    return {"ok": True, "removed_from_students": removed_from_students}
-
-
 class BulkUnpublishDraftsIn(BaseModel):
     ids: List[str] = Field(min_length=1)
 
