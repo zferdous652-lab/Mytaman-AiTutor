@@ -334,7 +334,7 @@ const ManualContent = () => {
 
   const loadCourses = useCallback(async (pid) => {
     if (!pid) { setCourses([]); return; }
-    const { data } = await api.get("/courses/list", { params: { pack_id: pid } });
+    const { data } = await api.get("/courses/list", { params: { pack_id: pid, source: "manual" } });
     setCourses(data);
     setCourseId((cur) => (data.find((c) => c.id === cur) ? cur : (data[0]?.id || "")));
   }, []);
@@ -459,7 +459,7 @@ const ManualContent = () => {
 
   const addCourse = async () => {
     if (!newCourseTitle.trim() || !packId) return;
-    const { data } = await api.post("/courses/create", { pack_id: packId, title: newCourseTitle.trim() });
+    const { data } = await api.post("/courses/create", { pack_id: packId, title: newCourseTitle.trim(), source: "manual" });
     setNewCourseTitle("");
     await loadCourses(packId);
     setCourseId(data.id);
@@ -696,6 +696,19 @@ const ManualContent = () => {
     }
     toast.success(`Draft ${draft.draft_index} loaded — browse chapters/types below to view or edit each item, then Save to create a new version`);
   };
+
+  // Auto-load a specific draft when arriving via the Tutor Packs "Edit" link
+  // (?pack=X&draft=Y), e.g. from the Publish review pop-up.
+  const requestedDraftId = searchParams.get("draft");
+  const autoLoadedDraftRef = useRef(null);
+  useEffect(() => {
+    if (!requestedDraftId || autoLoadedDraftRef.current === requestedDraftId) return;
+    const match = drafts.find((d) => d.id === requestedDraftId);
+    if (match) {
+      autoLoadedDraftRef.current = requestedDraftId;
+      loadDraftIntoWorkingSet(match);
+    }
+  }, [requestedDraftId, drafts]); // eslint-disable-line
 
   const pendingItems = Object.entries(workingSet);
 
@@ -1070,11 +1083,11 @@ const ManualContent = () => {
                           <button
                             type="button"
                             onClick={(e) => confirmDraft(d.id, e)}
-                            disabled={d.status === "confirmed"}
-                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-white/80 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-white/80 hover:bg-white/5"
                             data-testid={`draft-${d.draft_index}-action-confirm`}
+                            title={d.status === "confirmed" ? "Re-confirm to push this draft back into Tutor Pack Publish review" : "Confirm this draft"}
                           >
-                            <CheckCircle2 size={13} /> Confirm
+                            <CheckCircle2 size={13} /> {d.status === "confirmed" ? "Re-confirm" : "Confirm"}
                           </button>
                           <button
                             type="button"

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle } from "lucide-react";
+import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle, Pencil, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -19,6 +19,16 @@ const Packs = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteFromStudents, setDeleteFromStudents] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [confirmState, setConfirmState] = useState(null);
+
+  const askConfirm = (title, message, onConfirm, confirmLabel = "Delete") => setConfirmState({ title, message, onConfirm, confirmLabel });
+  const closeConfirm = () => setConfirmState(null);
+  const runConfirm = async () => {
+    if (!confirmState) return;
+    await confirmState.onConfirm();
+    setConfirmState(null);
+  };
 
   const load = async () => {
     const { data } = await api.get("/packs/list");
@@ -31,7 +41,7 @@ const Packs = () => {
     setLoadingReview(true);
     try {
       const { data } = await api.get("/content/drafts", { params: { pack_id: pack.id } });
-      const confirmed = data.filter((d) => d.status === "confirmed");
+      const confirmed = data.filter((d) => d.status === "confirmed" && !d.hidden_from_review);
       setConfirmedDrafts(confirmed);
       setSelectedDraftIds(confirmed.map((d) => d.id));
     } catch (err) {
@@ -50,6 +60,52 @@ const Packs = () => {
 
   const toggleDraftSelection = (id) => {
     setSelectedDraftIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  // Per-row Remove: admin-side only, via hidden_from_review -- the draft stays confirmed
+  // and completely untouched in Manual Content / Generate with AI (including anything it
+  // already published live for students). Re-confirming it there brings it back here.
+  const removeFromList = (draft) => {
+    const label = draft.name || `Draft ${draft.draft_index}`;
+    askConfirm(
+      `Remove ${label} from this list?`,
+      "Admin-only: it disappears from Publish review here, but the draft stays confirmed and untouched in Manual Content / Generate with AI — re-confirm it there to bring it back here.",
+      async () => {
+        try {
+          await api.post(`/content/drafts/${draft.id}/hide-from-review`);
+          toast.success(`${label} removed from this list`);
+          setConfirmedDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+          setSelectedDraftIds((prev) => prev.filter((id) => id !== draft.id));
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || "Failed");
+        }
+      },
+      "Remove"
+    );
+  };
+
+  // Remove all: the one bulk action, next to Publish selected -- clears every checked
+  // draft from this list AND pulls its content from the student portal. Same "draft stays
+  // untouched, re-confirm to resurface" rule applies.
+  const removeAllSelected = () => {
+    if (selectedDraftIds.length === 0) return;
+    askConfirm(
+      `Remove ${selectedDraftIds.length} checked draft(s)?`,
+      "They disappear from this list and their content is pulled from the student portal — the drafts themselves stay untouched in Manual Content / Generate with AI. Re-confirm any of them there to bring it back here.",
+      async () => {
+        setBulkDeleting(true);
+        try {
+          const { data } = await api.post("/content/drafts/bulk-unpublish", { ids: selectedDraftIds });
+          toast.success(`Removed ${selectedDraftIds.length} draft(s), ${data.removed_from_students} item(s) from the student portal`);
+          setConfirmedDrafts((prev) => prev.filter((d) => !selectedDraftIds.includes(d.id)));
+          setSelectedDraftIds([]);
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || "Failed");
+        }
+        setBulkDeleting(false);
+      },
+      "Remove"
+    );
   };
 
   const publishSelection = async () => {
@@ -224,7 +280,7 @@ const Packs = () => {
                 <div className="overline text-[#00f0ff]">Publish review</div>
                 <div className="font-display text-xl text-white mt-1 tracking-tight">{reviewPack.title}</div>
                 <p className="text-xs text-white/50 mt-1">
-                  Select which confirmed drafts to push live. Unselected drafts stay confirmed but won't be published.
+                  Check drafts and Publish selected to push live. Remove only clears this list — the draft always stays in Manual Content / Generate with AI; re-confirm it there to bring it back.
                 </p>
               </div>
               <button type="button" onClick={closeReview} className="text-white/40 hover:text-white" data-testid="publish-review-close">
@@ -244,10 +300,11 @@ const Packs = () => {
 
               {confirmedDrafts.map((d) => {
                 const checked = selectedDraftIds.includes(d.id);
+                const editHref = `/admin/${d.source === "ai" ? "generate" : "manual"}?pack=${reviewPack.id}&draft=${d.id}`;
                 return (
-                  <label
+                  <div
                     key={d.id}
-                    className={`block rounded-xl border p-4 cursor-pointer transition-colors ${
+                    className={`rounded-xl border p-4 transition-colors ${
                       checked ? "border-[#00f0ff]/50 bg-[#00f0ff]/5" : "border-white/10 bg-white/[0.02] hover:border-white/20"
                     }`}
                     data-testid={`review-draft-${d.id}`}
@@ -257,11 +314,14 @@ const Packs = () => {
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleDraftSelection(d.id)}
-                        className="mt-1 accent-[#00f0ff]"
+                        className="mt-1 accent-[#00f0ff] cursor-pointer"
                         data-testid={`review-draft-${d.id}-checkbox`}
                       />
-                      <div className="flex-1">
-                        <div className="text-sm text-white font-medium">{d.name || `Draft ${d.draft_index}`}</div>
+                      <label className="flex-1 cursor-pointer" onClick={() => toggleDraftSelection(d.id)}>
+                        <div className="text-sm text-white font-medium">
+                          {d.name || `Draft ${d.draft_index}`}
+                          <span className="ml-2 text-[10px] uppercase tracking-wide text-white/30">{d.source === "ai" ? "AI generated" : "Manual"}</span>
+                        </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {d.items.map((it, i) => (
                             <span
@@ -272,9 +332,28 @@ const Packs = () => {
                             </span>
                           ))}
                         </div>
+                      </label>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Link
+                          to={editHref}
+                          className="text-white/40 hover:text-[#00f0ff] transition-colors"
+                          title="Edit this draft"
+                          data-testid={`review-draft-${d.id}-edit`}
+                        >
+                          <Pencil size={14} />
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => removeFromList(d)}
+                          className="text-white/40 hover:text-red-400 transition-colors"
+                          title="Remove from this list (admin-side only)"
+                          data-testid={`review-draft-${d.id}-delete`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </div>
-                  </label>
+                  </div>
                 );
               })}
             </div>
@@ -282,15 +361,27 @@ const Packs = () => {
             {confirmedDrafts.length > 0 && (
               <div className="p-6 border-t border-white/10 flex items-center justify-between gap-3">
                 <span className="text-xs text-white/50">{selectedDraftIds.length} of {confirmedDrafts.length} selected</span>
-                <button
-                  type="button"
-                  onClick={publishSelection}
-                  disabled={selectedDraftIds.length === 0 || publishingSelection}
-                  className="inline-flex items-center gap-2 rounded-full bg-[#00f0ff] px-5 py-2 text-sm font-semibold text-black hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  data-testid="publish-review-submit"
-                >
-                  <Send size={14} /> {publishingSelection ? "Publishing…" : "Publish selected"}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={removeAllSelected}
+                    disabled={selectedDraftIds.length === 0 || bulkDeleting}
+                    className="inline-flex items-center gap-2 rounded-full border border-red-400/40 px-4 py-2 text-sm text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    data-testid="publish-review-bulk-delete"
+                    title="Remove all checked drafts from this list and from students"
+                  >
+                    <Trash2 size={14} /> {bulkDeleting ? "Removing…" : "Remove all"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={publishSelection}
+                    disabled={selectedDraftIds.length === 0 || publishingSelection}
+                    className="inline-flex items-center gap-2 rounded-full bg-[#00f0ff] px-5 py-2 text-sm font-semibold text-black hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    data-testid="publish-review-submit"
+                  >
+                    <Send size={14} /> {publishingSelection ? "Publishing…" : "Publish selected"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -356,6 +447,45 @@ const Packs = () => {
                 data-testid="delete-pack-confirm"
               >
                 <Trash2 size={14} /> {deleting ? "Deleting…" : deleteFromStudents ? "Delete for everyone" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmState && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          onClick={closeConfirm}
+          data-testid="confirm-modal"
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0a0514] shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 text-[#ff0055]"><AlertTriangle size={20} /></div>
+              <div>
+                <div className="font-display text-lg text-white tracking-tight">{confirmState.title}</div>
+                <p className="text-xs text-white/50 mt-1.5 leading-relaxed">{confirmState.message}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeConfirm}
+                className="rounded-full border border-white/15 px-5 py-2 text-sm text-white/80 hover:border-white/30 transition-colors"
+                data-testid="confirm-modal-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={runConfirm}
+                className="inline-flex items-center gap-2 rounded-full bg-[#ff0055] px-5 py-2 text-sm font-semibold text-white hover:bg-[#ff0055]/80 transition-colors"
+                data-testid="confirm-modal-confirm"
+              >
+                {confirmState.confirmLabel === "Remove" ? <EyeOff size={14} /> : <Trash2 size={14} />} {confirmState.confirmLabel}
               </button>
             </div>
           </div>

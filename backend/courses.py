@@ -4,7 +4,7 @@ Hierarchy: Pack -> Course (e.g. History, Mathematics) -> Chapter (e.g. Bab 1) ->
 """
 import uuid
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -14,12 +14,19 @@ from auth import require_role, get_current_user
 
 router = APIRouter(tags=["courses"])
 
+# Manual Content and Generate with AI each get their own, fully separate Course/Chapter
+# scaffolding for the same Tutor Pack -- a course (and everything under it) created from
+# one is never visible from the other. Courses saved before this field existed default to
+# "manual".
+CourseSource = Literal["manual", "ai"]
+
 
 # ---------- Courses ----------
 
 class CourseIn(BaseModel):
     pack_id: str
     title: str = Field(min_length=1)
+    source: CourseSource = "manual"
 
 
 class CourseRename(BaseModel):
@@ -31,6 +38,7 @@ class CourseOut(BaseModel):
     pack_id: str
     title: str
     created_at: str
+    source: CourseSource = "manual"
 
 
 @router.post("/courses/create", response_model=CourseOut)
@@ -39,6 +47,7 @@ async def create_course(payload: CourseIn, _: dict = Depends(require_role("admin
         "id": str(uuid.uuid4()),
         "pack_id": payload.pack_id,
         "title": payload.title,
+        "source": payload.source,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.courses.insert_one(doc)
@@ -46,9 +55,14 @@ async def create_course(payload: CourseIn, _: dict = Depends(require_role("admin
 
 
 @router.get("/courses/list", response_model=List[CourseOut])
-async def list_courses(pack_id: str, _: dict = Depends(get_current_user)):
-    docs = await db.courses.find({"pack_id": pack_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
-    return [CourseOut(**d) for d in docs]
+async def list_courses(pack_id: str, source: Optional[CourseSource] = None, _: dict = Depends(get_current_user)):
+    q: dict = {"pack_id": pack_id}
+    if source == "manual":
+        q["$or"] = [{"source": "manual"}, {"source": {"$exists": False}}]
+    elif source == "ai":
+        q["source"] = "ai"
+    docs = await db.courses.find(q, {"_id": 0}).sort("created_at", 1).to_list(200)
+    return [CourseOut(**{**d, "source": d.get("source") or "manual"}) for d in docs]
 
 
 @router.patch("/courses/{course_id}", response_model=CourseOut)
@@ -58,7 +72,7 @@ async def rename_course(course_id: str, payload: CourseRename, _: dict = Depends
     )
     if not res:
         raise HTTPException(status_code=404, detail="Course not found")
-    return CourseOut(**res)
+    return CourseOut(**{**res, "source": res.get("source") or "manual"})
 
 
 @router.delete("/courses/{course_id}")
