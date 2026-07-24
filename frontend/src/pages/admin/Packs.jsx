@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle, Pencil } from "lucide-react";
+import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle, Pencil, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -22,7 +22,7 @@ const Packs = () => {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [confirmState, setConfirmState] = useState(null);
 
-  const askConfirm = (title, message, onConfirm) => setConfirmState({ title, message, onConfirm });
+  const askConfirm = (title, message, onConfirm, confirmLabel = "Delete") => setConfirmState({ title, message, onConfirm, confirmLabel });
   const closeConfirm = () => setConfirmState(null);
   const runConfirm = async () => {
     if (!confirmState) return;
@@ -62,48 +62,43 @@ const Packs = () => {
     setSelectedDraftIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const deleteReviewDraft = (draft) => {
+  const unpublishReviewDraft = (draft) => {
     const label = draft.name || `Draft ${draft.draft_index}`;
-    // Checked = this draft is selected to be/stay live, so deleting it here also removes
-    // it from the student portal. Unchecked = it's not part of what's going live, so
-    // deleting it only clears it from this admin-side list.
-    const unpublish = selectedDraftIds.includes(draft.id);
-    const message = unpublish
-      ? "It's checked, so this also removes its content from the student portal."
-      : "It's unchecked, so this only removes the draft here — published student content stays untouched.";
-    askConfirm(`Delete ${label}?`, message, async () => {
-      try {
-        const { data } = await api.delete(`/content/drafts/${draft.id}`, { params: { unpublish } });
-        toast.success(
-          unpublish && data.removed_from_students > 0
-            ? `${label} deleted and removed from the student portal`
-            : `${label} deleted`
-        );
-        setConfirmedDrafts((prev) => prev.filter((d) => d.id !== draft.id));
-        setSelectedDraftIds((prev) => prev.filter((id) => id !== draft.id));
-      } catch (err) {
-        toast.error(err?.response?.data?.detail || "Delete failed");
-      }
-    });
+    askConfirm(
+      `Remove ${label} from students?`,
+      "This only removes its content from the student portal — the draft itself is untouched here and in Manual Content / Generate with AI.",
+      async () => {
+        try {
+          const { data } = await api.post(`/content/drafts/${draft.id}/unpublish`);
+          toast.success(
+            data.removed_from_students > 0
+              ? `${label} removed from the student portal`
+              : `${label} wasn't live for students — nothing to remove`
+          );
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || "Failed");
+        }
+      },
+      "Remove"
+    );
   };
 
-  const bulkDeleteSelected = () => {
+  const bulkUnpublishSelected = () => {
     if (selectedDraftIds.length === 0) return;
     askConfirm(
-      `Delete ${selectedDraftIds.length} checked draft(s)?`,
-      "This also removes their content from the student portal.",
+      `Remove ${selectedDraftIds.length} checked draft(s) from students?`,
+      "Their content is removed from the student portal — the drafts themselves stay untouched here and in Manual Content / Generate with AI.",
       async () => {
         setBulkDeleting(true);
         try {
-          const { data } = await api.post("/content/drafts/bulk-delete", { ids: selectedDraftIds }, { params: { unpublish: true } });
-          toast.success(`Deleted ${data.deleted_count} draft(s), removed ${data.removed_from_students} item(s) from the student portal`);
-          setConfirmedDrafts((prev) => prev.filter((d) => !selectedDraftIds.includes(d.id)));
-          setSelectedDraftIds([]);
+          const { data } = await api.post("/content/drafts/bulk-unpublish", { ids: selectedDraftIds });
+          toast.success(`Removed ${data.removed_from_students} item(s) from the student portal`);
         } catch (err) {
-          toast.error(err?.response?.data?.detail || "Bulk delete failed");
+          toast.error(err?.response?.data?.detail || "Failed");
         }
         setBulkDeleting(false);
-      }
+      },
+      "Remove"
     );
   };
 
@@ -279,7 +274,7 @@ const Packs = () => {
                 <div className="overline text-[#00f0ff]">Publish review</div>
                 <div className="font-display text-xl text-white mt-1 tracking-tight">{reviewPack.title}</div>
                 <p className="text-xs text-white/50 mt-1">
-                  Check drafts to publish. Deleting a checked draft also removes it from students; unchecked stays admin-only.
+                  Check drafts and Publish selected to push live. Delete only removes a draft's content from students — never the draft itself.
                 </p>
               </div>
               <button type="button" onClick={closeReview} className="text-white/40 hover:text-white" data-testid="publish-review-close">
@@ -343,12 +338,12 @@ const Packs = () => {
                         </Link>
                         <button
                           type="button"
-                          onClick={() => deleteReviewDraft(d)}
+                          onClick={() => unpublishReviewDraft(d)}
                           className="text-white/40 hover:text-red-400 transition-colors"
-                          title="Delete this draft"
+                          title="Remove this draft's content from students"
                           data-testid={`review-draft-${d.id}-delete`}
                         >
-                          <Trash2 size={14} />
+                          <EyeOff size={14} />
                         </button>
                       </div>
                     </div>
@@ -364,13 +359,13 @@ const Packs = () => {
                   {selectedDraftIds.length > 0 && (
                     <button
                       type="button"
-                      onClick={bulkDeleteSelected}
+                      onClick={bulkUnpublishSelected}
                       disabled={bulkDeleting}
                       className="inline-flex items-center gap-2 rounded-full border border-red-400/40 px-4 py-2 text-sm text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       data-testid="publish-review-bulk-delete"
-                      title="Delete all checked drafts and remove their content from students"
+                      title="Remove all checked drafts' content from students"
                     >
-                      <Trash2 size={14} /> {bulkDeleting ? "Deleting…" : "Delete selected"}
+                      <EyeOff size={14} /> {bulkDeleting ? "Removing…" : "Remove selected from students"}
                     </button>
                   )}
                   <button
@@ -486,7 +481,7 @@ const Packs = () => {
                 className="inline-flex items-center gap-2 rounded-full bg-[#ff0055] px-5 py-2 text-sm font-semibold text-white hover:bg-[#ff0055]/80 transition-colors"
                 data-testid="confirm-modal-confirm"
               >
-                <Trash2 size={14} /> Delete
+                {confirmState.confirmLabel === "Remove" ? <EyeOff size={14} /> : <Trash2 size={14} />} {confirmState.confirmLabel}
               </button>
             </div>
           </div>

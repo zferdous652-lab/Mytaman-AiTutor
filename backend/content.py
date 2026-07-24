@@ -496,9 +496,7 @@ async def rename_pack_draft(draft_id: str, payload: RenameDraftIn, _: dict = Dep
 
 async def _unpublish_draft_items(draft: dict) -> int:
     """Removes a draft's items from the published contents collection (plus any student
-    progress/quiz_results referencing them). Used only when an admin explicitly opts in via
-    unpublish=True -- Manual Content, Generate with AI, and ordinary draft deletes never
-    call this, keeping authoring isolated from students by default."""
+    progress/quiz_results referencing them), without touching the draft itself."""
     removed = 0
     for item in draft["items"]:
         existing = await db.contents.find_one({
@@ -516,21 +514,14 @@ async def _unpublish_draft_items(draft: dict) -> int:
 
 
 @router.delete("/drafts/{draft_id}")
-async def delete_pack_draft(draft_id: str, unpublish: bool = False, _: dict = Depends(require_role("admin"))):
-    """Deletes a draft. By default this only ever touches pack_drafts -- Manual Content
-    and Generate with AI rely on that to keep authoring fully isolated from students.
-
-    unpublish=True is the one deliberate exception, used only by the Tutor Pack "Publish
-    review" pop-up when the admin deletes a draft that's checked (i.e. currently selected
-    to be/stay live): it also removes that draft's matching items from the published
-    contents collection, so the deletion actually reaches the student/parent portal.
-    """
-    draft = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
-    if not draft:
+async def delete_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
+    """Deletes a draft. Only ever touches pack_drafts -- this is the one place a draft is
+    allowed to be deleted outright (Manual Content / Generate with AI's own 3-dot Delete
+    and Mark-mode bulk delete), and it never reaches the published contents collection."""
+    res = await db.pack_drafts.delete_one({"id": draft_id})
+    if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Draft not found")
-    await db.pack_drafts.delete_one({"id": draft_id})
-    removed_from_students = await _unpublish_draft_items(draft) if unpublish else 0
-    return {"ok": True, "removed_from_students": removed_from_students}
+    return {"ok": True}
 
 
 class BulkDeleteDraftsIn(BaseModel):
@@ -538,16 +529,36 @@ class BulkDeleteDraftsIn(BaseModel):
 
 
 @router.post("/drafts/bulk-delete")
-async def bulk_delete_pack_drafts(payload: BulkDeleteDraftsIn, unpublish: bool = False, _: dict = Depends(require_role("admin"))):
-    """Same unpublish=True opt-in as the single-draft delete above, applied per draft --
-    only the Publish review pop-up's bulk delete (over checked/live drafts) ever sets it."""
+async def bulk_delete_pack_drafts(payload: BulkDeleteDraftsIn, _: dict = Depends(require_role("admin"))):
+    res = await db.pack_drafts.delete_many({"id": {"$in": payload.ids}})
+    return {"ok": True, "deleted_count": res.deleted_count}
+
+
+@router.post("/drafts/{draft_id}/unpublish")
+async def unpublish_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
+    """Removes a draft's items from the student/parent-facing contents collection without
+    touching the draft itself -- the draft stays exactly as-is in Manual Content / Generate
+    with AI. This is the only student-portal-affecting action the Tutor Pack "Publish
+    review" pop-up's Delete offers; deleting the draft record is out of scope there by
+    design (that only ever happens in Manual Content / Generate with AI)."""
+    draft = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    removed_from_students = await _unpublish_draft_items(draft)
+    return {"ok": True, "removed_from_students": removed_from_students}
+
+
+class BulkUnpublishDraftsIn(BaseModel):
+    ids: List[str] = Field(min_length=1)
+
+
+@router.post("/drafts/bulk-unpublish")
+async def bulk_unpublish_pack_drafts(payload: BulkUnpublishDraftsIn, _: dict = Depends(require_role("admin"))):
     drafts = await db.pack_drafts.find({"id": {"$in": payload.ids}}, {"_id": 0}).to_list(len(payload.ids))
     removed_from_students = 0
-    if unpublish:
-        for draft in drafts:
-            removed_from_students += await _unpublish_draft_items(draft)
-    res = await db.pack_drafts.delete_many({"id": {"$in": payload.ids}})
-    return {"ok": True, "deleted_count": res.deleted_count, "removed_from_students": removed_from_students}
+    for draft in drafts:
+        removed_from_students += await _unpublish_draft_items(draft)
+    return {"ok": True, "removed_from_students": removed_from_students}
 
 
 UPLOAD_DIR = Path(__file__).parent / "uploads" / "mindmaps"
