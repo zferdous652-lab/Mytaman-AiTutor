@@ -495,11 +495,36 @@ async def rename_pack_draft(draft_id: str, payload: RenameDraftIn, _: dict = Dep
 
 
 @router.delete("/drafts/{draft_id}")
-async def delete_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
-    res = await db.pack_drafts.delete_one({"id": draft_id})
-    if res.deleted_count == 0:
+async def delete_pack_draft(draft_id: str, unpublish: bool = False, _: dict = Depends(require_role("admin"))):
+    """Deletes a draft. By default this only ever touches pack_drafts -- Manual Content
+    and Generate with AI rely on that to keep authoring fully isolated from students.
+
+    unpublish=True is the one deliberate exception, used only by the Tutor Pack "Publish
+    review" pop-up when the admin deletes a draft that's checked (i.e. currently selected
+    to be/stay live): it also removes that draft's matching items from the published
+    contents collection, so the deletion actually reaches the student/parent portal.
+    """
+    draft = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
+    if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return {"ok": True}
+    await db.pack_drafts.delete_one({"id": draft_id})
+
+    removed_from_students = 0
+    if unpublish:
+        for item in draft["items"]:
+            existing = await db.contents.find_one({
+                "pack_id": draft["pack_id"],
+                "chapter_id": item["chapter_id"],
+                "content_type": item["content_type"],
+                "language": item["language"],
+            })
+            if existing:
+                await db.contents.delete_one({"id": existing["id"]})
+                await db.progress.delete_many({"content_id": existing["id"]})
+                await db.quiz_results.delete_many({"content_id": existing["id"]})
+                removed_from_students += 1
+
+    return {"ok": True, "removed_from_students": removed_from_students}
 
 
 class BulkDeleteDraftsIn(BaseModel):

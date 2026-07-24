@@ -53,10 +53,22 @@ const Packs = () => {
   };
 
   const deleteReviewDraft = async (draft) => {
-    if (!window.confirm(`Delete ${draft.name || `Draft ${draft.draft_index}`}? This only removes the draft — it never touches content already published to students.`)) return;
+    const label = draft.name || `Draft ${draft.draft_index}`;
+    // Checked = this draft is selected to be/stay live, so deleting it here also removes
+    // it from the student portal. Unchecked = it's not part of what's going live, so
+    // deleting it only clears it from this admin-side list.
+    const unpublish = selectedDraftIds.includes(draft.id);
+    const confirmMsg = unpublish
+      ? `Delete ${label}? It's checked, so this also removes its content from the student portal.`
+      : `Delete ${label}? It's unchecked, so this only removes the draft here — published student content stays untouched.`;
+    if (!window.confirm(confirmMsg)) return;
     try {
-      await api.delete(`/content/drafts/${draft.id}`);
-      toast.success(`${draft.name || `Draft ${draft.draft_index}`} deleted`);
+      const { data } = await api.delete(`/content/drafts/${draft.id}`, { params: { unpublish } });
+      toast.success(
+        unpublish && data.removed_from_students > 0
+          ? `${label} deleted and removed from the student portal`
+          : `${label} deleted`
+      );
       setConfirmedDrafts((prev) => prev.filter((d) => d.id !== draft.id));
       setSelectedDraftIds((prev) => prev.filter((id) => id !== draft.id));
     } catch (err) {
@@ -236,8 +248,9 @@ const Packs = () => {
                 <div className="overline text-[#00f0ff]">Publish review</div>
                 <div className="font-display text-xl text-white mt-1 tracking-tight">{reviewPack.title}</div>
                 <p className="text-xs text-white/50 mt-1">
-                  Select which confirmed drafts to push live, or edit/delete a draft here. Nothing here affects the
-                  student portal until you click Publish selected — Manual Content and Generate with AI never do.
+                  Check a draft to keep it live, uncheck to leave it out, then Publish selected. Manual Content and
+                  Generate with AI never affect students — deleting a draft here does: checked deletes it from the
+                  student portal too, unchecked only removes it from this list.
                 </p>
               </div>
               <button type="button" onClick={closeReview} className="text-white/40 hover:text-white" data-testid="publish-review-close">
