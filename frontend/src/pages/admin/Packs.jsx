@@ -84,7 +84,7 @@ const Packs = () => {
   };
 
   const bulkUnpublishSelected = () => {
-    if (selectedDraftIds.length === 0) return;
+    if (selectedDraftIds.length < 2) return;
     askConfirm(
       `Remove ${selectedDraftIds.length} checked draft(s) from students?`,
       "Their content is removed from the student portal — the drafts themselves stay untouched here and in Manual Content / Generate with AI.",
@@ -356,7 +356,7 @@ const Packs = () => {
               <div className="p-6 border-t border-white/10 flex items-center justify-between gap-3">
                 <span className="text-xs text-white/50">{selectedDraftIds.length} of {confirmedDrafts.length} selected</span>
                 <div className="flex items-center gap-3">
-                  {selectedDraftIds.length > 0 && (
+                  {selectedDraftIds.length >= 2 && (
                     <button
                       type="button"
                       onClick={bulkUnpublishSelected}
