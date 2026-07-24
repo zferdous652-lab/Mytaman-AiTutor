@@ -494,6 +494,27 @@ async def rename_pack_draft(draft_id: str, payload: RenameDraftIn, _: dict = Dep
     return _draft_out(res)
 
 
+async def _unpublish_draft_items(draft: dict) -> int:
+    """Removes a draft's items from the published contents collection (plus any student
+    progress/quiz_results referencing them). Used only when an admin explicitly opts in via
+    unpublish=True -- Manual Content, Generate with AI, and ordinary draft deletes never
+    call this, keeping authoring isolated from students by default."""
+    removed = 0
+    for item in draft["items"]:
+        existing = await db.contents.find_one({
+            "pack_id": draft["pack_id"],
+            "chapter_id": item["chapter_id"],
+            "content_type": item["content_type"],
+            "language": item["language"],
+        })
+        if existing:
+            await db.contents.delete_one({"id": existing["id"]})
+            await db.progress.delete_many({"content_id": existing["id"]})
+            await db.quiz_results.delete_many({"content_id": existing["id"]})
+            removed += 1
+    return removed
+
+
 @router.delete("/drafts/{draft_id}")
 async def delete_pack_draft(draft_id: str, unpublish: bool = False, _: dict = Depends(require_role("admin"))):
     """Deletes a draft. By default this only ever touches pack_drafts -- Manual Content
@@ -508,22 +529,7 @@ async def delete_pack_draft(draft_id: str, unpublish: bool = False, _: dict = De
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
     await db.pack_drafts.delete_one({"id": draft_id})
-
-    removed_from_students = 0
-    if unpublish:
-        for item in draft["items"]:
-            existing = await db.contents.find_one({
-                "pack_id": draft["pack_id"],
-                "chapter_id": item["chapter_id"],
-                "content_type": item["content_type"],
-                "language": item["language"],
-            })
-            if existing:
-                await db.contents.delete_one({"id": existing["id"]})
-                await db.progress.delete_many({"content_id": existing["id"]})
-                await db.quiz_results.delete_many({"content_id": existing["id"]})
-                removed_from_students += 1
-
+    removed_from_students = await _unpublish_draft_items(draft) if unpublish else 0
     return {"ok": True, "removed_from_students": removed_from_students}
 
 
@@ -532,9 +538,16 @@ class BulkDeleteDraftsIn(BaseModel):
 
 
 @router.post("/drafts/bulk-delete")
-async def bulk_delete_pack_drafts(payload: BulkDeleteDraftsIn, _: dict = Depends(require_role("admin"))):
+async def bulk_delete_pack_drafts(payload: BulkDeleteDraftsIn, unpublish: bool = False, _: dict = Depends(require_role("admin"))):
+    """Same unpublish=True opt-in as the single-draft delete above, applied per draft --
+    only the Publish review pop-up's bulk delete (over checked/live drafts) ever sets it."""
+    drafts = await db.pack_drafts.find({"id": {"$in": payload.ids}}, {"_id": 0}).to_list(len(payload.ids))
+    removed_from_students = 0
+    if unpublish:
+        for draft in drafts:
+            removed_from_students += await _unpublish_draft_items(draft)
     res = await db.pack_drafts.delete_many({"id": {"$in": payload.ids}})
-    return {"ok": True, "deleted_count": res.deleted_count}
+    return {"ok": True, "deleted_count": res.deleted_count, "removed_from_students": removed_from_students}
 
 
 UPLOAD_DIR = Path(__file__).parent / "uploads" / "mindmaps"

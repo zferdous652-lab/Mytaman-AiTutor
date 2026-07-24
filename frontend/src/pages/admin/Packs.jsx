@@ -19,6 +19,7 @@ const Packs = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteFromStudents, setDeleteFromStudents] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const load = async () => {
     const { data } = await api.get("/packs/list");
@@ -74,6 +75,21 @@ const Packs = () => {
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Delete failed");
     }
+  };
+
+  const bulkDeleteSelected = async () => {
+    if (selectedDraftIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedDraftIds.length} checked draft(s)? This also removes their content from the student portal.`)) return;
+    setBulkDeleting(true);
+    try {
+      const { data } = await api.post("/content/drafts/bulk-delete", { ids: selectedDraftIds }, { params: { unpublish: true } });
+      toast.success(`Deleted ${data.deleted_count} draft(s), removed ${data.removed_from_students} item(s) from the student portal`);
+      setConfirmedDrafts((prev) => prev.filter((d) => !selectedDraftIds.includes(d.id)));
+      setSelectedDraftIds([]);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Bulk delete failed");
+    }
+    setBulkDeleting(false);
   };
 
   const publishSelection = async () => {
@@ -248,9 +264,7 @@ const Packs = () => {
                 <div className="overline text-[#00f0ff]">Publish review</div>
                 <div className="font-display text-xl text-white mt-1 tracking-tight">{reviewPack.title}</div>
                 <p className="text-xs text-white/50 mt-1">
-                  Check a draft to keep it live, uncheck to leave it out, then Publish selected. Manual Content and
-                  Generate with AI never affect students — deleting a draft here does: checked deletes it from the
-                  student portal too, unchecked only removes it from this list.
+                  Check drafts to publish. Deleting a checked draft also removes it from students; unchecked stays admin-only.
                 </p>
               </div>
               <button type="button" onClick={closeReview} className="text-white/40 hover:text-white" data-testid="publish-review-close">
@@ -331,15 +345,27 @@ const Packs = () => {
             {confirmedDrafts.length > 0 && (
               <div className="p-6 border-t border-white/10 flex items-center justify-between gap-3">
                 <span className="text-xs text-white/50">{selectedDraftIds.length} of {confirmedDrafts.length} selected</span>
-                <button
-                  type="button"
-                  onClick={publishSelection}
-                  disabled={selectedDraftIds.length === 0 || publishingSelection}
-                  className="inline-flex items-center gap-2 rounded-full bg-[#00f0ff] px-5 py-2 text-sm font-semibold text-black hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  data-testid="publish-review-submit"
-                >
-                  <Send size={14} /> {publishingSelection ? "Publishing…" : "Publish selected"}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={bulkDeleteSelected}
+                    disabled={selectedDraftIds.length === 0 || bulkDeleting}
+                    className="inline-flex items-center gap-2 rounded-full border border-red-400/40 px-4 py-2 text-sm text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    data-testid="publish-review-bulk-delete"
+                    title="Delete all checked drafts and remove their content from students"
+                  >
+                    <Trash2 size={14} /> {bulkDeleting ? "Deleting…" : "Delete selected"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={publishSelection}
+                    disabled={selectedDraftIds.length === 0 || publishingSelection}
+                    className="inline-flex items-center gap-2 rounded-full bg-[#00f0ff] px-5 py-2 text-sm font-semibold text-black hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    data-testid="publish-review-submit"
+                  >
+                    <Send size={14} /> {publishingSelection ? "Publishing…" : "Publish selected"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
