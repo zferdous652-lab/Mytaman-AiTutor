@@ -346,16 +346,18 @@ const Packs = () => {
               <div className="p-6 border-t border-white/10 flex items-center justify-between gap-3">
                 <span className="text-xs text-white/50">{selectedDraftIds.length} of {confirmedDrafts.length} selected</span>
                 <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={bulkDeleteSelected}
-                    disabled={selectedDraftIds.length === 0 || bulkDeleting}
-                    className="inline-flex items-center gap-2 rounded-full border border-red-400/40 px-4 py-2 text-sm text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    data-testid="publish-review-bulk-delete"
-                    title="Delete all checked drafts and remove their content from students"
-                  >
-                    <Trash2 size={14} /> {bulkDeleting ? "Deleting…" : "Delete selected"}
-                  </button>
+                  {selectedDraftIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={bulkDeleteSelected}
+                      disabled={bulkDeleting}
+                      className="inline-flex items-center gap-2 rounded-full border border-red-400/40 px-4 py-2 text-sm text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      data-testid="publish-review-bulk-delete"
+                      title="Delete all checked drafts and remove their content from students"
+                    >
+                      <Trash2 size={14} /> {bulkDeleting ? "Deleting…" : "Delete selected"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={publishSelection}
