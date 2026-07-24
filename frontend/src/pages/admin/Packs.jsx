@@ -20,6 +20,15 @@ const Packs = () => {
   const [deleteFromStudents, setDeleteFromStudents] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [confirmState, setConfirmState] = useState(null);
+
+  const askConfirm = (title, message, onConfirm) => setConfirmState({ title, message, onConfirm });
+  const closeConfirm = () => setConfirmState(null);
+  const runConfirm = async () => {
+    if (!confirmState) return;
+    await confirmState.onConfirm();
+    setConfirmState(null);
+  };
 
   const load = async () => {
     const { data } = await api.get("/packs/list");
@@ -53,43 +62,49 @@ const Packs = () => {
     setSelectedDraftIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const deleteReviewDraft = async (draft) => {
+  const deleteReviewDraft = (draft) => {
     const label = draft.name || `Draft ${draft.draft_index}`;
     // Checked = this draft is selected to be/stay live, so deleting it here also removes
     // it from the student portal. Unchecked = it's not part of what's going live, so
     // deleting it only clears it from this admin-side list.
     const unpublish = selectedDraftIds.includes(draft.id);
-    const confirmMsg = unpublish
-      ? `Delete ${label}? It's checked, so this also removes its content from the student portal.`
-      : `Delete ${label}? It's unchecked, so this only removes the draft here — published student content stays untouched.`;
-    if (!window.confirm(confirmMsg)) return;
-    try {
-      const { data } = await api.delete(`/content/drafts/${draft.id}`, { params: { unpublish } });
-      toast.success(
-        unpublish && data.removed_from_students > 0
-          ? `${label} deleted and removed from the student portal`
-          : `${label} deleted`
-      );
-      setConfirmedDrafts((prev) => prev.filter((d) => d.id !== draft.id));
-      setSelectedDraftIds((prev) => prev.filter((id) => id !== draft.id));
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || "Delete failed");
-    }
+    const message = unpublish
+      ? "It's checked, so this also removes its content from the student portal."
+      : "It's unchecked, so this only removes the draft here — published student content stays untouched.";
+    askConfirm(`Delete ${label}?`, message, async () => {
+      try {
+        const { data } = await api.delete(`/content/drafts/${draft.id}`, { params: { unpublish } });
+        toast.success(
+          unpublish && data.removed_from_students > 0
+            ? `${label} deleted and removed from the student portal`
+            : `${label} deleted`
+        );
+        setConfirmedDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+        setSelectedDraftIds((prev) => prev.filter((id) => id !== draft.id));
+      } catch (err) {
+        toast.error(err?.response?.data?.detail || "Delete failed");
+      }
+    });
   };
 
-  const bulkDeleteSelected = async () => {
+  const bulkDeleteSelected = () => {
     if (selectedDraftIds.length === 0) return;
-    if (!window.confirm(`Delete ${selectedDraftIds.length} checked draft(s)? This also removes their content from the student portal.`)) return;
-    setBulkDeleting(true);
-    try {
-      const { data } = await api.post("/content/drafts/bulk-delete", { ids: selectedDraftIds }, { params: { unpublish: true } });
-      toast.success(`Deleted ${data.deleted_count} draft(s), removed ${data.removed_from_students} item(s) from the student portal`);
-      setConfirmedDrafts((prev) => prev.filter((d) => !selectedDraftIds.includes(d.id)));
-      setSelectedDraftIds([]);
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || "Bulk delete failed");
-    }
-    setBulkDeleting(false);
+    askConfirm(
+      `Delete ${selectedDraftIds.length} checked draft(s)?`,
+      "This also removes their content from the student portal.",
+      async () => {
+        setBulkDeleting(true);
+        try {
+          const { data } = await api.post("/content/drafts/bulk-delete", { ids: selectedDraftIds }, { params: { unpublish: true } });
+          toast.success(`Deleted ${data.deleted_count} draft(s), removed ${data.removed_from_students} item(s) from the student portal`);
+          setConfirmedDrafts((prev) => prev.filter((d) => !selectedDraftIds.includes(d.id)));
+          setSelectedDraftIds([]);
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || "Bulk delete failed");
+        }
+        setBulkDeleting(false);
+      }
+    );
   };
 
   const publishSelection = async () => {
@@ -433,6 +448,45 @@ const Packs = () => {
                 data-testid="delete-pack-confirm"
               >
                 <Trash2 size={14} /> {deleting ? "Deleting…" : deleteFromStudents ? "Delete for everyone" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmState && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          onClick={closeConfirm}
+          data-testid="confirm-modal"
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0a0514] shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 text-[#ff0055]"><AlertTriangle size={20} /></div>
+              <div>
+                <div className="font-display text-lg text-white tracking-tight">{confirmState.title}</div>
+                <p className="text-xs text-white/50 mt-1.5 leading-relaxed">{confirmState.message}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeConfirm}
+                className="rounded-full border border-white/15 px-5 py-2 text-sm text-white/80 hover:border-white/30 transition-colors"
+                data-testid="confirm-modal-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={runConfirm}
+                className="inline-flex items-center gap-2 rounded-full bg-[#ff0055] px-5 py-2 text-sm font-semibold text-white hover:bg-[#ff0055]/80 transition-colors"
+                data-testid="confirm-modal-confirm"
+              >
+                <Trash2 size={14} /> Delete
               </button>
             </div>
           </div>
