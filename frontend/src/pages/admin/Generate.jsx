@@ -413,7 +413,7 @@ const Generate = () => {
 
   const loadCourses = useCallback(async (pid) => {
     if (!pid) { setCourses([]); return; }
-    const { data } = await api.get("/courses/list", { params: { pack_id: pid } });
+    const { data } = await api.get("/courses/list", { params: { pack_id: pid, source: "ai" } });
     setCourses(data);
     setCourseId((cur) => (data.find((c) => c.id === cur) ? cur : (data[0]?.id || "")));
   }, []);
@@ -547,7 +547,7 @@ const Generate = () => {
 
   const addCourse = async () => {
     if (!newCourseTitle.trim() || !packId) return;
-    const { data } = await api.post("/courses/create", { pack_id: packId, title: newCourseTitle.trim() });
+    const { data } = await api.post("/courses/create", { pack_id: packId, title: newCourseTitle.trim(), source: "ai" });
     setNewCourseTitle("");
     await loadCourses(packId);
     setCourseId(data.id);
