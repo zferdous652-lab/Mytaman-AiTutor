@@ -697,6 +697,19 @@ const ManualContent = () => {
     toast.success(`Draft ${draft.draft_index} loaded — browse chapters/types below to view or edit each item, then Save to create a new version`);
   };
 
+  // Auto-load a specific draft when arriving via the Tutor Packs "Edit" link
+  // (?pack=X&draft=Y), e.g. from the Publish review pop-up.
+  const requestedDraftId = searchParams.get("draft");
+  const autoLoadedDraftRef = useRef(null);
+  useEffect(() => {
+    if (!requestedDraftId || autoLoadedDraftRef.current === requestedDraftId) return;
+    const match = drafts.find((d) => d.id === requestedDraftId);
+    if (match) {
+      autoLoadedDraftRef.current = requestedDraftId;
+      loadDraftIntoWorkingSet(match);
+    }
+  }, [requestedDraftId, drafts]); // eslint-disable-line
+
   const pendingItems = Object.entries(workingSet);
 
   return (

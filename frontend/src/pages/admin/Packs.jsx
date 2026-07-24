@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle } from "lucide-react";
+import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle, Pencil } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -50,6 +50,18 @@ const Packs = () => {
 
   const toggleDraftSelection = (id) => {
     setSelectedDraftIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const deleteReviewDraft = async (draft) => {
+    if (!window.confirm(`Delete ${draft.name || `Draft ${draft.draft_index}`}? This only removes the draft — it never touches content already published to students.`)) return;
+    try {
+      await api.delete(`/content/drafts/${draft.id}`);
+      toast.success(`${draft.name || `Draft ${draft.draft_index}`} deleted`);
+      setConfirmedDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+      setSelectedDraftIds((prev) => prev.filter((id) => id !== draft.id));
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Delete failed");
+    }
   };
 
   const publishSelection = async () => {
@@ -224,7 +236,8 @@ const Packs = () => {
                 <div className="overline text-[#00f0ff]">Publish review</div>
                 <div className="font-display text-xl text-white mt-1 tracking-tight">{reviewPack.title}</div>
                 <p className="text-xs text-white/50 mt-1">
-                  Select which confirmed drafts to push live. Unselected drafts stay confirmed but won't be published.
+                  Select which confirmed drafts to push live, or edit/delete a draft here. Nothing here affects the
+                  student portal until you click Publish selected — Manual Content and Generate with AI never do.
                 </p>
               </div>
               <button type="button" onClick={closeReview} className="text-white/40 hover:text-white" data-testid="publish-review-close">
@@ -244,10 +257,11 @@ const Packs = () => {
 
               {confirmedDrafts.map((d) => {
                 const checked = selectedDraftIds.includes(d.id);
+                const editHref = `/admin/${d.source === "ai" ? "generate" : "manual"}?pack=${reviewPack.id}&draft=${d.id}`;
                 return (
-                  <label
+                  <div
                     key={d.id}
-                    className={`block rounded-xl border p-4 cursor-pointer transition-colors ${
+                    className={`rounded-xl border p-4 transition-colors ${
                       checked ? "border-[#00f0ff]/50 bg-[#00f0ff]/5" : "border-white/10 bg-white/[0.02] hover:border-white/20"
                     }`}
                     data-testid={`review-draft-${d.id}`}
@@ -257,11 +271,14 @@ const Packs = () => {
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleDraftSelection(d.id)}
-                        className="mt-1 accent-[#00f0ff]"
+                        className="mt-1 accent-[#00f0ff] cursor-pointer"
                         data-testid={`review-draft-${d.id}-checkbox`}
                       />
-                      <div className="flex-1">
-                        <div className="text-sm text-white font-medium">{d.name || `Draft ${d.draft_index}`}</div>
+                      <label className="flex-1 cursor-pointer" onClick={() => toggleDraftSelection(d.id)}>
+                        <div className="text-sm text-white font-medium">
+                          {d.name || `Draft ${d.draft_index}`}
+                          <span className="ml-2 text-[10px] uppercase tracking-wide text-white/30">{d.source === "ai" ? "AI generated" : "Manual"}</span>
+                        </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {d.items.map((it, i) => (
                             <span
@@ -272,9 +289,28 @@ const Packs = () => {
                             </span>
                           ))}
                         </div>
+                      </label>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Link
+                          to={editHref}
+                          className="text-white/40 hover:text-[#00f0ff] transition-colors"
+                          title="Edit this draft"
+                          data-testid={`review-draft-${d.id}-edit`}
+                        >
+                          <Pencil size={14} />
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => deleteReviewDraft(d)}
+                          className="text-white/40 hover:text-red-400 transition-colors"
+                          title="Delete this draft"
+                          data-testid={`review-draft-${d.id}-delete`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </div>
-                  </label>
+                  </div>
                 );
               })}
             </div>
