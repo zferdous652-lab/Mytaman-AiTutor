@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle, Pencil, EyeOff } from "lucide-react";
+import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle, Pencil, EyeOff, ListX } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -41,7 +41,7 @@ const Packs = () => {
     setLoadingReview(true);
     try {
       const { data } = await api.get("/content/drafts", { params: { pack_id: pack.id } });
-      const confirmed = data.filter((d) => d.status === "confirmed");
+      const confirmed = data.filter((d) => d.status === "confirmed" && !d.hidden_from_review);
       setConfirmedDrafts(confirmed);
       setSelectedDraftIds(confirmed.map((d) => d.id));
     } catch (err) {
@@ -62,19 +62,21 @@ const Packs = () => {
     setSelectedDraftIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const unpublishReviewDraft = (draft) => {
+  // Both remove paths only ever affect this pop-up's list (via hidden_from_review) and,
+  // for the "+ unpublish" variant, the published contents collection -- neither ever
+  // touches the draft record, so it stays exactly as-is in Manual Content / Generate with
+  // AI. (Re)confirming the draft there brings it back into this list.
+  const removeFromListOnly = (draft) => {
     const label = draft.name || `Draft ${draft.draft_index}`;
     askConfirm(
-      `Remove ${label} from students?`,
-      "This only removes its content from the student portal — the draft itself is untouched here and in Manual Content / Generate with AI.",
+      `Remove ${label} from this list?`,
+      "Admin-only: it disappears from Publish review here, but stays confirmed and untouched in Manual Content / Generate with AI, and any live student content it published stays live. Re-confirming it there brings it back here.",
       async () => {
         try {
-          const { data } = await api.post(`/content/drafts/${draft.id}/unpublish`);
-          toast.success(
-            data.removed_from_students > 0
-              ? `${label} removed from the student portal`
-              : `${label} wasn't live for students — nothing to remove`
-          );
+          await api.post(`/content/drafts/${draft.id}/hide-from-review`);
+          toast.success(`${label} removed from this list`);
+          setConfirmedDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+          setSelectedDraftIds((prev) => prev.filter((id) => id !== draft.id));
         } catch (err) {
           toast.error(err?.response?.data?.detail || "Failed");
         }
@@ -83,16 +85,62 @@ const Packs = () => {
     );
   };
 
-  const bulkUnpublishSelected = () => {
+  const removeFromListAndStudents = (draft) => {
+    const label = draft.name || `Draft ${draft.draft_index}`;
+    askConfirm(
+      `Remove ${label} from this list and from students?`,
+      "It disappears from Publish review here and its content is pulled from the student portal — the draft itself stays untouched in Manual Content / Generate with AI. Re-confirming it there brings it back here.",
+      async () => {
+        try {
+          const { data } = await api.post(`/content/drafts/${draft.id}/unpublish`);
+          toast.success(
+            data.removed_from_students > 0
+              ? `${label} removed from this list and from the student portal`
+              : `${label} removed from this list (it wasn't live for students)`
+          );
+          setConfirmedDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+          setSelectedDraftIds((prev) => prev.filter((id) => id !== draft.id));
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || "Failed");
+        }
+      },
+      "Remove"
+    );
+  };
+
+  const bulkRemoveFromListOnly = () => {
     if (selectedDraftIds.length < 2) return;
     askConfirm(
-      `Remove ${selectedDraftIds.length} checked draft(s) from students?`,
-      "Their content is removed from the student portal — the drafts themselves stay untouched here and in Manual Content / Generate with AI.",
+      `Remove ${selectedDraftIds.length} checked draft(s) from this list?`,
+      "Admin-only: they disappear from Publish review here, but stay confirmed and untouched in Manual Content / Generate with AI, and any live student content stays live.",
+      async () => {
+        setBulkDeleting(true);
+        try {
+          await api.post("/content/drafts/bulk-hide-from-review", { ids: selectedDraftIds });
+          toast.success(`Removed ${selectedDraftIds.length} draft(s) from this list`);
+          setConfirmedDrafts((prev) => prev.filter((d) => !selectedDraftIds.includes(d.id)));
+          setSelectedDraftIds([]);
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || "Failed");
+        }
+        setBulkDeleting(false);
+      },
+      "Remove"
+    );
+  };
+
+  const bulkRemoveFromListAndStudents = () => {
+    if (selectedDraftIds.length < 2) return;
+    askConfirm(
+      `Remove ${selectedDraftIds.length} checked draft(s) from this list and from students?`,
+      "They disappear from Publish review here and their content is pulled from the student portal — the drafts themselves stay untouched in Manual Content / Generate with AI.",
       async () => {
         setBulkDeleting(true);
         try {
           const { data } = await api.post("/content/drafts/bulk-unpublish", { ids: selectedDraftIds });
-          toast.success(`Removed ${data.removed_from_students} item(s) from the student portal`);
+          toast.success(`Removed ${selectedDraftIds.length} draft(s) from this list, ${data.removed_from_students} item(s) from the student portal`);
+          setConfirmedDrafts((prev) => prev.filter((d) => !selectedDraftIds.includes(d.id)));
+          setSelectedDraftIds([]);
         } catch (err) {
           toast.error(err?.response?.data?.detail || "Failed");
         }
@@ -274,7 +322,7 @@ const Packs = () => {
                 <div className="overline text-[#00f0ff]">Publish review</div>
                 <div className="font-display text-xl text-white mt-1 tracking-tight">{reviewPack.title}</div>
                 <p className="text-xs text-white/50 mt-1">
-                  Check drafts and Publish selected to push live. Delete only removes a draft's content from students — never the draft itself.
+                  Check drafts and Publish selected to push live. Remove only clears this list (and, optionally, students) — the draft always stays in Manual Content / Generate with AI.
                 </p>
               </div>
               <button type="button" onClick={closeReview} className="text-white/40 hover:text-white" data-testid="publish-review-close">
@@ -338,9 +386,18 @@ const Packs = () => {
                         </Link>
                         <button
                           type="button"
-                          onClick={() => unpublishReviewDraft(d)}
+                          onClick={() => removeFromListOnly(d)}
+                          className="text-white/40 hover:text-amber-400 transition-colors"
+                          title="Remove from this list only (admin-side)"
+                          data-testid={`review-draft-${d.id}-remove-list`}
+                        >
+                          <ListX size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeFromListAndStudents(d)}
                           className="text-white/40 hover:text-red-400 transition-colors"
-                          title="Remove this draft's content from students"
+                          title="Remove from this list and from students"
                           data-testid={`review-draft-${d.id}-delete`}
                         >
                           <EyeOff size={14} />
@@ -357,16 +414,28 @@ const Packs = () => {
                 <span className="text-xs text-white/50">{selectedDraftIds.length} of {confirmedDrafts.length} selected</span>
                 <div className="flex items-center gap-3">
                   {selectedDraftIds.length >= 2 && (
-                    <button
-                      type="button"
-                      onClick={bulkUnpublishSelected}
-                      disabled={bulkDeleting}
-                      className="inline-flex items-center gap-2 rounded-full border border-red-400/40 px-4 py-2 text-sm text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                      data-testid="publish-review-bulk-delete"
-                      title="Remove all checked drafts' content from students"
-                    >
-                      <EyeOff size={14} /> {bulkDeleting ? "Removing…" : "Remove selected from students"}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={bulkRemoveFromListOnly}
+                        disabled={bulkDeleting}
+                        className="inline-flex items-center gap-2 rounded-full border border-amber-400/40 px-4 py-2 text-sm text-amber-400 hover:bg-amber-400/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        data-testid="publish-review-bulk-remove-list"
+                        title="Remove all checked drafts from this list only (admin-side)"
+                      >
+                        <ListX size={14} /> {bulkDeleting ? "Removing…" : "Remove selected"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={bulkRemoveFromListAndStudents}
+                        disabled={bulkDeleting}
+                        className="inline-flex items-center gap-2 rounded-full border border-red-400/40 px-4 py-2 text-sm text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        data-testid="publish-review-bulk-delete"
+                        title="Remove all checked drafts from this list and from students"
+                      >
+                        <EyeOff size={14} /> {bulkDeleting ? "Removing…" : "Remove selected + students"}
+                      </button>
+                    </>
                   )}
                   <button
                     type="button"

@@ -336,13 +336,17 @@ class PackDraftOut(BaseModel):
     source: DraftSource = "manual"
     items: List[DraftItemOut]
     created_at: str
+    hidden_from_review: bool = False
 
 
 def _draft_out(doc: dict) -> PackDraftOut:
     """Builds a PackDraftOut from a raw pack_drafts document, defaulting `source` to
-    "manual" for drafts saved before the Manual Content / Generate with AI split existed."""
+    "manual" for drafts saved before the Manual Content / Generate with AI split existed,
+    and `hidden_from_review` to False for drafts saved before the Tutor Pack Publish review
+    panel's own remove-from-list flag existed."""
     d = {k: doc.get(k) for k in PackDraftOut.model_fields.keys()}
     d["source"] = doc.get("source") or "manual"
+    d["hidden_from_review"] = bool(doc.get("hidden_from_review"))
     return PackDraftOut(**d)
 
 
@@ -435,8 +439,14 @@ async def list_pack_drafts(pack_id: str, source: Optional[DraftSource] = None, _
 
 @router.post("/drafts/{draft_id}/confirm", response_model=PackDraftOut)
 async def confirm_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
+    # (Re)confirming always resurfaces the draft in the Tutor Pack Publish review panel,
+    # even if it was previously removed from that list -- confirm is the one action that
+    # explicitly signals "this is ready to be reviewed for publishing again."
     res = await db.pack_drafts.find_one_and_update(
-        {"id": draft_id}, {"$set": {"status": "confirmed"}}, return_document=True, projection={"_id": 0}
+        {"id": draft_id},
+        {"$set": {"status": "confirmed", "hidden_from_review": False}},
+        return_document=True,
+        projection={"_id": 0},
     )
     if not res:
         raise HTTPException(status_code=404, detail="Draft not found")
@@ -534,17 +544,47 @@ async def bulk_delete_pack_drafts(payload: BulkDeleteDraftsIn, _: dict = Depends
     return {"ok": True, "deleted_count": res.deleted_count}
 
 
+async def _hide_drafts_from_review(ids: List[str]) -> None:
+    await db.pack_drafts.update_many({"id": {"$in": ids}}, {"$set": {"hidden_from_review": True}})
+
+
+@router.post("/drafts/{draft_id}/hide-from-review")
+async def hide_pack_draft_from_review(draft_id: str, _: dict = Depends(require_role("admin"))):
+    """Removes a draft from the Tutor Pack Publish review panel's list only -- an
+    admin-only bookkeeping flag on pack_drafts. Never touches the draft's content, its
+    status, the published contents collection, or its visibility in Manual Content /
+    Generate with AI, which don't look at this flag at all. (Re)confirming the draft
+    resets it, bringing the draft back into the review panel."""
+    res = await db.pack_drafts.find_one_and_update(
+        {"id": draft_id}, {"$set": {"hidden_from_review": True}}, return_document=True, projection={"_id": 0}
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return {"ok": True}
+
+
+class BulkHideDraftsIn(BaseModel):
+    ids: List[str] = Field(min_length=1)
+
+
+@router.post("/drafts/bulk-hide-from-review")
+async def bulk_hide_pack_drafts_from_review(payload: BulkHideDraftsIn, _: dict = Depends(require_role("admin"))):
+    await _hide_drafts_from_review(payload.ids)
+    return {"ok": True}
+
+
 @router.post("/drafts/{draft_id}/unpublish")
 async def unpublish_pack_draft(draft_id: str, _: dict = Depends(require_role("admin"))):
-    """Removes a draft's items from the student/parent-facing contents collection without
-    touching the draft itself -- the draft stays exactly as-is in Manual Content / Generate
-    with AI. This is the only student-portal-affecting action the Tutor Pack "Publish
-    review" pop-up's Delete offers; deleting the draft record is out of scope there by
-    design (that only ever happens in Manual Content / Generate with AI)."""
+    """Removes a draft's items from the student/parent-facing contents collection, and
+    also removes the draft from the Publish review panel's list (see hide-from-review
+    above) -- but never touches the draft itself, which stays exactly as-is in Manual
+    Content / Generate with AI. Deleting the draft record is out of scope here by design
+    (that only ever happens in Manual Content / Generate with AI)."""
     draft = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
     removed_from_students = await _unpublish_draft_items(draft)
+    await _hide_drafts_from_review([draft_id])
     return {"ok": True, "removed_from_students": removed_from_students}
 
 
@@ -558,6 +598,7 @@ async def bulk_unpublish_pack_drafts(payload: BulkUnpublishDraftsIn, _: dict = D
     removed_from_students = 0
     for draft in drafts:
         removed_from_students += await _unpublish_draft_items(draft)
+    await _hide_drafts_from_review(payload.ids)
     return {"ok": True, "removed_from_students": removed_from_students}
 
 
