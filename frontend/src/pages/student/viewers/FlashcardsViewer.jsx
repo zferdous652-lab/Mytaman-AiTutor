@@ -33,7 +33,7 @@ const FlashcardsViewer = ({ content }) => {
   };
 
   const knowCount = Object.values(ratings).filter((r) => r === "know").length;
-  const progressPct = Math.round((Object.keys(ratings).length / cards.length) * 100);
+  const progressPct = Math.round((knowCount / cards.length) * 100);
 
   if (done) {
     return (
