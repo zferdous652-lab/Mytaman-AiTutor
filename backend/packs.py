@@ -40,6 +40,14 @@ async def list_packs(_: dict = Depends(get_current_user)):
     return [PackOut(**d) for d in docs]
 
 
+@router.get("/archived", response_model=List[PackOut])
+async def list_archived_packs(_: dict = Depends(require_role("admin"))):
+    """Archived packs are invisible to GET /list by design (that's what makes archiving
+    useful), so without this there'd be no way to find one again to fully DELETE it."""
+    docs = await db.packs.find({"archived": True}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return [PackOut(**d) for d in docs]
+
+
 @router.post("/create", response_model=PackOut)
 async def create_pack(payload: PackIn, _: dict = Depends(require_role("admin"))):
     doc = {

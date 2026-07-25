@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle, Pencil, EyeOff } from "lucide-react";
+import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle, Pencil, EyeOff, Archive, ChevronDown } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -21,6 +21,8 @@ const Packs = () => {
   const [deleting, setDeleting] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [confirmState, setConfirmState] = useState(null);
+  const [archivedPacks, setArchivedPacks] = useState([]);
+  const [showArchived, setShowArchived] = useState(false);
 
   const askConfirm = (title, message, onConfirm, confirmLabel = "Delete") => setConfirmState({ title, message, onConfirm, confirmLabel });
   const closeConfirm = () => setConfirmState(null);
@@ -35,6 +37,35 @@ const Packs = () => {
     setPacks(data);
   };
   useEffect(() => { load(); }, []);
+
+  const loadArchived = async () => {
+    const { data } = await api.get("/packs/archived");
+    setArchivedPacks(data);
+  };
+  const toggleArchived = () => {
+    if (!showArchived) loadArchived();
+    setShowArchived((s) => !s);
+  };
+
+  // Archived packs are invisible to /packs/list by design (that's what makes archiving
+  // useful) so the only remaining action on one is a real, unrecoverable delete -- there's
+  // no "keep for students" choice left to make since it's already hidden from new enrollment.
+  const deleteArchivedPack = (pack) => {
+    askConfirm(
+      `Permanently delete "${pack.title}"?`,
+      "This is already hidden from Tutor Packs and Browse Packs. Deleting it now also removes it from every student who's still enrolled, including their progress. This cannot be undone.",
+      async () => {
+        try {
+          await api.delete(`/packs/${pack.id}`);
+          toast.success(`"${pack.title}" permanently deleted`);
+          setArchivedPacks((prev) => prev.filter((p) => p.id !== pack.id));
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || "Delete failed");
+        }
+      },
+      "Delete"
+    );
+  };
 
   const openReview = async (pack) => {
     setReviewPack(pack);
@@ -295,6 +326,44 @@ const Packs = () => {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="mt-6">
+        <button
+          type="button"
+          onClick={toggleArchived}
+          className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 transition-colors"
+          data-testid="toggle-archived"
+        >
+          <Archive size={12} /> Archived packs
+          <ChevronDown size={12} className={`transition-transform ${showArchived ? "rotate-180" : ""}`} />
+        </button>
+
+        {showArchived && (
+          <div className="mt-3 space-y-2" data-testid="archived-list">
+            {archivedPacks.length === 0 && <div className="text-xs text-white/40">No archived packs.</div>}
+            {archivedPacks.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0a0514]/40 px-4 py-3"
+                data-testid={`archived-pack-${p.id}`}
+              >
+                <div>
+                  <div className="text-sm text-white">{p.title}</div>
+                  <div className="text-xs text-white/40">{p.grade}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => deleteArchivedPack(p)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-red-400/30 px-3 py-1.5 text-xs text-red-400 hover:bg-red-400/10 transition-colors"
+                  data-testid={`archived-pack-${p.id}-delete`}
+                >
+                  <Trash2 size={12} /> Delete permanently
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {reviewPack && (
