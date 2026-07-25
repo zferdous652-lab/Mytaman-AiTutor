@@ -1,6 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Check, X } from "lucide-react";
+import { Check, X, Clock, ChevronLeft } from "lucide-react";
+
+const QUIZ_DURATION_SECONDS = 30 * 60;
 
 const ELEVATED = "0 6px 0 rgba(31,111,92,0.18), 0 10px 24px rgba(59,47,26,0.15)";
 const PRESSED = "0 2px 0 rgba(31,111,92,0.18), 0 4px 10px rgba(59,47,26,0.12)";
@@ -42,6 +44,12 @@ const ScoreRing = ({ pct }) => (
   </div>
 );
 
+const formatClock = (secs) => {
+  const m = String(Math.floor(secs / 60)).padStart(2, "0");
+  const s = String(secs % 60).padStart(2, "0");
+  return `${m}:${s}`;
+};
+
 // payload shape: { questions: [{ type: mcq|true_false|short_answer, question, options?, correct_answer? }] }
 const QuizViewer = ({ content, onFinish }) => {
   const reduce = useReducedMotion();
@@ -50,89 +58,153 @@ const QuizViewer = ({ content, onFinish }) => {
 
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [locked, setLocked] = useState(false);
+  const [selfChecks, setSelfChecks] = useState({});
   const [finished, setFinished] = useState(false);
   const [shortDraft, setShortDraft] = useState("");
+  const [timeLeft, setTimeLeft] = useState(QUIZ_DURATION_SECONDS);
 
-  const gradable = useMemo(() => questions.filter((q) => q.type !== "short_answer").length, [questions]);
+  const locked = answers[index] !== undefined;
+
+  // Gradable = mcq/true_false questions (always auto-graded) plus short-answer questions
+  // the student self-rated. A short-answer question left un-self-rated simply doesn't
+  // count either way, rather than dragging the score down as an automatic miss.
+  const gradable = useMemo(
+    () => questions.filter((q, i) => q.type !== "short_answer" || selfChecks[i] !== undefined).length,
+    [questions, selfChecks]
+  );
   const correctCount = useMemo(
     () =>
       questions.reduce((acc, q, i) => {
-        if (q.type === "short_answer") return acc;
+        if (q.type === "short_answer") return acc + (selfChecks[i] === true ? 1 : 0);
         const given = answers[i];
         return acc + (given && given.toLowerCase() === (q.correct_answer || "").toLowerCase() ? 1 : 0);
       }, 0),
-    [answers, questions]
+    [answers, questions, selfChecks]
   );
 
-  if (total === 0) return <div className="text-sm text-white/40">No questions.</div>;
+  const finishNow = () => {
+    setFinished(true);
+    onFinish?.(correctCount, gradable);
+  };
+
+  // Whole-quiz 30-minute countdown -- auto-submits with whatever's answered when it hits 0.
+  useEffect(() => {
+    if (finished || total === 0) return;
+    if (timeLeft <= 0) {
+      finishNow();
+      return;
+    }
+    const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft, finished, total]);
+
+  if (total === 0) return <div className="text-base text-[#5c5346]">No questions.</div>;
 
   const q = questions[index];
 
   const selectAnswer = (val) => {
     if (locked) return;
     setAnswers((a) => ({ ...a, [index]: val }));
-    setLocked(true);
   };
 
   const submitShort = () => {
     if (locked) return;
     setAnswers((a) => ({ ...a, [index]: shortDraft }));
-    setLocked(true);
+  };
+
+  const rateShort = (correct) => setSelfChecks((s) => ({ ...s, [index]: correct }));
+
+  const goPrev = () => {
+    if (index === 0) return;
+    setIndex((i) => i - 1);
+    setShortDraft("");
   };
 
   const next = () => {
     if (index + 1 >= total) {
-      setFinished(true);
-      onFinish?.(correctCount, gradable);
+      finishNow();
       return;
     }
     setIndex((i) => i + 1);
-    setLocked(false);
     setShortDraft("");
   };
 
   const retake = () => {
     setIndex(0);
     setAnswers({});
-    setLocked(false);
+    setSelfChecks({});
     setFinished(false);
     setShortDraft("");
+    setTimeLeft(QUIZ_DURATION_SECONDS);
   };
+
+  const answeredCount = Object.keys(answers).length;
 
   if (finished) {
     const pct = gradable ? Math.round((correctCount / gradable) * 100) : 0;
+    const ungraded = total - gradable;
     return (
       <div className="space-y-7" data-testid="quiz-score">
         <div className="flex items-center gap-8">
-          <ScoreRing pct={pct} />
+          {gradable > 0 ? (
+            <ScoreRing pct={pct} />
+          ) : (
+            <div className="h-28 w-28 shrink-0 rounded-full border border-[#3b2f1a]/15 bg-white/40 grid place-items-center text-center px-3">
+              <span className="text-xs text-[#5c5346]">Not auto-graded</span>
+            </div>
+          )}
           <div>
             <div className="text-base text-[#5c5346]">Your score</div>
-            <div className="text-2xl font-bold text-[#2b2620]">{correctCount}/{gradable} correct</div>
-            {gradable < total && (
-              <div className="text-sm text-[#5c5346] mt-1">{total - gradable} short-answer question(s) aren't auto-graded</div>
+            {gradable > 0 ? (
+              <div className="text-2xl font-bold text-[#2b2620]">{correctCount}/{gradable} correct</div>
+            ) : (
+              <div className="text-lg font-semibold text-[#2b2620]">This quiz isn't auto-graded</div>
+            )}
+            {ungraded > 0 && (
+              <div className="text-sm text-[#5c5346] mt-1">
+                {ungraded} short-answer question{ungraded === 1 ? "" : "s"} {gradable > 0 ? "aren't" : "isn't"} included
+                {gradable > 0 ? " unless self-rated" : ""}
+              </div>
             )}
           </div>
         </div>
         <div className="grid sm:grid-cols-2 gap-3 max-h-80 overflow-auto pr-1">
           {questions.map((qq, i) => {
             if (qq.type === "short_answer") {
+              const rated = selfChecks[i];
+              const toneCls =
+                rated === true
+                  ? "border-emerald-700/25 bg-emerald-700/5 text-emerald-800"
+                  : rated === false
+                  ? "border-[#b3261e]/25 bg-[#b3261e]/5 text-[#b3261e]"
+                  : "border-[#3b2f1a]/12 bg-white/40 text-[#5c5346]";
               return (
-                <div key={i} className="rounded-lg border border-[#3b2f1a]/12 bg-white/40 px-4 py-3 text-sm text-[#5c5346]">
-                  <span className="text-[#5c5346]/70">Q{i + 1}.</span> {qq.question} — your answer: "{answers[i] || "—"}"
+                <div key={i} className={`rounded-lg border px-4 py-3 text-sm ${toneCls}`}>
+                  <div><span className="opacity-70">Q{i + 1}.</span> {qq.question}</div>
+                  <div className="mt-1">Your answer: "{answers[i] || "—"}"</div>
+                  {qq.correct_answer && <div className="opacity-70">Expected: "{qq.correct_answer}"</div>}
+                  {rated === undefined && <div className="mt-1 text-xs opacity-70">Not self-rated</div>}
                 </div>
               );
             }
-            const ok = (answers[i] || "").toLowerCase() === (qq.correct_answer || "").toLowerCase();
+            const given = answers[i];
+            const ok = (given || "").toLowerCase() === (qq.correct_answer || "").toLowerCase();
             return (
               <div
                 key={i}
-                className={`flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
+                className={`rounded-lg border px-4 py-3 text-sm ${
                   ok ? "border-emerald-700/25 bg-emerald-700/5 text-emerald-800" : "border-[#b3261e]/25 bg-[#b3261e]/5 text-[#b3261e]"
                 }`}
               >
-                {ok ? <Check size={15} className="mt-0.5 shrink-0" /> : <X size={15} className="mt-0.5 shrink-0" />}
-                <span><span className="text-[#5c5346]/70">Q{i + 1}.</span> {qq.question}</span>
+                <div className="flex items-start gap-2">
+                  {ok ? <Check size={15} className="mt-0.5 shrink-0" /> : <X size={15} className="mt-0.5 shrink-0" />}
+                  <span><span className="opacity-70">Q{i + 1}.</span> {qq.question}</span>
+                </div>
+                <div className="mt-1.5 pl-[23px]">
+                  <div>Your answer: <span className="font-medium">{given || "—"}</span></div>
+                  {!ok && <div>Correct answer: <span className="font-medium">{qq.correct_answer}</span></div>}
+                </div>
               </div>
             );
           })}
@@ -151,15 +223,27 @@ const QuizViewer = ({ content, onFinish }) => {
 
   return (
     <div data-testid="quiz-view">
+      <div className="flex justify-end mb-3">
+        <div
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm ${
+            timeLeft <= 60 ? "border-[#b3261e]/40 text-[#b3261e]" : "border-[#3b2f1a]/15 text-[#5c5346]"
+          }`}
+          data-testid="quiz-timer"
+        >
+          <Clock size={14} />
+          <span className={timeLeft <= 60 ? "font-semibold" : ""}>{formatClock(timeLeft)}</span>
+        </div>
+      </div>
+
       <div className="mb-6">
         <div className="flex justify-between text-sm text-[#5c5346] mb-2">
           <span>Question {index + 1} of {total}</span>
-          <span>{Math.round((index / total) * 100)}%</span>
+          <span>{Math.round((answeredCount / total) * 100)}%</span>
         </div>
         <div className="h-1.5 bg-[#3b2f1a]/10 rounded-full overflow-hidden">
           <motion.div
             className="h-full bg-gradient-to-r from-[#1f6f5c] to-[#8a6d3b]"
-            animate={{ width: `${(index / total) * 100}%` }}
+            animate={{ width: `${(answeredCount / total) * 100}%` }}
             transition={{ duration: reduce ? 0 : 0.4 }}
           />
         </div>
@@ -229,8 +313,35 @@ const QuizViewer = ({ content, onFinish }) => {
                   Submit answer
                 </button>
               ) : (
-                <div className="text-sm text-[#5c5346]">
-                  Answer recorded{q.correct_answer ? ` — expected: "${q.correct_answer}"` : ""}. Not auto-graded.
+                <div className="space-y-3">
+                  <div className="text-sm text-[#5c5346]">
+                    Answer recorded{q.correct_answer ? ` — expected: "${q.correct_answer}"` : ""}. Not auto-graded.
+                  </div>
+                  {selfChecks[index] === undefined ? (
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-[#5c5346]">Did you get this right?</span>
+                      <button
+                        type="button"
+                        onClick={() => rateShort(true)}
+                        data-testid="quiz-self-correct"
+                        className="rounded-full border border-emerald-700/40 px-4 py-1.5 text-sm text-emerald-800 hover:bg-emerald-700/10 transition-colors"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => rateShort(false)}
+                        data-testid="quiz-self-incorrect"
+                        className="rounded-full border border-[#b3261e]/40 px-4 py-1.5 text-sm text-[#b3261e] hover:bg-[#b3261e]/10 transition-colors"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <div className={`text-sm font-medium ${selfChecks[index] ? "text-emerald-800" : "text-[#b3261e]"}`}>
+                      {selfChecks[index] ? "Marked correct" : "Marked incorrect"}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -238,16 +349,28 @@ const QuizViewer = ({ content, onFinish }) => {
         </motion.div>
       </AnimatePresence>
 
-      {locked && (
-        <button
-          type="button"
-          onClick={next}
-          data-testid="quiz-next"
-          className="mt-6 rounded-full bg-[#1f6f5c] px-7 py-3 text-base font-semibold text-white hover:bg-[#18594a] transition-colors"
-        >
-          {index + 1 >= total ? "See results" : "Next question"}
-        </button>
-      )}
+      <div className="mt-6 flex items-center gap-3">
+        {index > 0 && (
+          <button
+            type="button"
+            onClick={goPrev}
+            data-testid="quiz-prev"
+            className="inline-flex items-center gap-1 rounded-full border border-[#3b2f1a]/20 px-5 py-3 text-base text-[#2b2620] hover:border-[#1f6f5c] hover:text-[#1f6f5c] transition-colors"
+          >
+            <ChevronLeft size={16} /> Previous
+          </button>
+        )}
+        {locked && (
+          <button
+            type="button"
+            onClick={next}
+            data-testid="quiz-next"
+            className="rounded-full bg-[#1f6f5c] px-7 py-3 text-base font-semibold text-white hover:bg-[#18594a] transition-colors"
+          >
+            {index + 1 >= total ? "See results" : "Next question"}
+          </button>
+        )}
+      </div>
     </div>
   );
 };

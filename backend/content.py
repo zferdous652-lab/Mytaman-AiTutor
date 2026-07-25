@@ -1,6 +1,7 @@
 """Content generation & storage endpoints."""
 import io
 import json
+import random
 import re
 import uuid
 from collections import Counter
@@ -244,6 +245,17 @@ def _normalize_quiz_payload(raw: dict) -> dict:
     return {"questions": normalized}
 
 
+def _shuffle_mcq_options(payload: dict) -> dict:
+    """Models writing quiz JSON have a strong stylistic bias toward listing the correct
+    option first -- asking nicely in the prompt doesn't reliably fix this across many
+    generations, so shuffle the options for real here. correct_answer is matched by
+    string value elsewhere, not position, so reordering options is safe."""
+    for q in payload.get("questions", []):
+        if q.get("type") == "mcq" and q.get("options"):
+            random.shuffle(q["options"])
+    return payload
+
+
 def _notes_from_plain_text(text: str) -> dict:
     """Falls back to splitting plain-text lines into notes when the AI didn't return JSON
     -- covers a not-yet-updated Model Router prompt that still asks for free-form notes."""
@@ -283,6 +295,8 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
             raw_payload = _normalize_quiz_payload(raw_payload)
 
     validated = _validate_payload(payload.content_type, raw_payload)
+    if payload.content_type == "quiz":
+        validated = _shuffle_mcq_options(validated)
     return AiDraftItemOut(
         chapter_id=payload.chapter_id,
         content_type=payload.content_type,

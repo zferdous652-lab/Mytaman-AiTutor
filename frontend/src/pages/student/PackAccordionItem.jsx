@@ -3,7 +3,9 @@ import { ChevronDown, ChevronRight, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import ContentViewer from "./ContentViewer";
 
-const ContentCard = ({ content, done, onOpen }) => (
+const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Flashcards", mindmap: "Mind Map", notes: "Notes" };
+
+const ContentCard = ({ content, done, quizScore, onOpen }) => (
   <button
     onClick={onOpen}
     data-testid={`content-${content.id}`}
@@ -12,14 +14,20 @@ const ContentCard = ({ content, done, onOpen }) => (
     }`}
   >
     <div className="flex justify-between items-start gap-2">
-      <div className="overline text-[#00f0ff]">{content.content_type} · {content.language}</div>
+      <div className="overline text-[#00f0ff]">{CONTENT_TYPE_LABELS[content.content_type] || content.content_type} · {content.language}</div>
       {done && <Check size={14} className="text-emerald-400 shrink-0" />}
     </div>
     <div className="mt-2 font-display text-lg tracking-tight text-white">{content.title}</div>
     <div className="mt-3 h-1.5 bg-white/5 rounded-full overflow-hidden">
       <div className={`h-full ${done ? "bg-emerald-400 w-full" : "bg-gradient-to-r from-[#00f0ff] to-[#8a2be2] w-0"}`} />
     </div>
-    <div className="mt-2 text-xs text-white/40">{done ? "Completed" : "Tap to open"}</div>
+    <div className="mt-2 text-xs text-white/40">
+      {quizScore
+        ? `Last score: ${quizScore.score}/${quizScore.total}${quizScore.attempts > 1 ? ` · ${quizScore.attempts} attempts` : ""}`
+        : done
+        ? "Completed"
+        : "Tap to open"}
+    </div>
   </button>
 );
 
@@ -27,7 +35,7 @@ const LANG_FILTERS = ["all", "en", "bm"];
 
 // A chapter row inside an expanded course -- collapsed by default, reveals its content-type
 // cards when opened.
-const ChapterRow = ({ chapterId, title, items, completed, onOpenContent, isOpen, onToggle }) => (
+const ChapterRow = ({ chapterId, title, items, completed, quizScores, onOpenContent, isOpen, onToggle }) => (
   <div className="rounded-xl border border-white/8 overflow-hidden" data-testid={`chapter-${chapterId}`}>
     <button
       type="button"
@@ -44,7 +52,13 @@ const ChapterRow = ({ chapterId, title, items, completed, onOpenContent, isOpen,
     {isOpen && (
       <div className="grid lg:grid-cols-3 gap-4 px-4 pb-4" data-testid="content-grid">
         {items.map((c) => (
-          <ContentCard key={c.id} content={c} done={completed.has(c.id)} onOpen={() => onOpenContent(c)} />
+          <ContentCard
+            key={c.id}
+            content={c}
+            done={completed.has(c.id)}
+            quizScore={c.content_type === "quiz" ? quizScores[c.id] : undefined}
+            onOpen={() => onOpenContent(c)}
+          />
         ))}
       </div>
     )}
@@ -59,6 +73,7 @@ const PackAccordionItem = ({ pack, expanded, onToggle }) => {
   const [chaptersByCourse, setChaptersByCourse] = useState({});
   const [items, setItems] = useState([]);
   const [completed, setCompleted] = useState(new Set());
+  const [quizScores, setQuizScores] = useState({});
   const [selected, setSelected] = useState(null);
   const [langFilter, setLangFilter] = useState("all");
   const [openCourseId, setOpenCourseId] = useState(null);
@@ -75,6 +90,7 @@ const PackAccordionItem = ({ pack, expanded, onToggle }) => {
       setItems(itemsRes.data);
       setCourses(coursesRes.data);
       setCompleted(new Set(progressRes.data.completed_ids));
+      setQuizScores(progressRes.data.quiz_scores || {});
 
       const chapterLists = await Promise.all(coursesRes.data.map((c) => api.get(`/chapters/list?course_id=${c.id}`)));
       const map = {};
@@ -86,6 +102,8 @@ const PackAccordionItem = ({ pack, expanded, onToggle }) => {
 
   const markComplete = (id) => setCompleted((prev) => new Set(prev).add(id));
   const markIncomplete = (id) => setCompleted((prev) => { const next = new Set(prev); next.delete(id); return next; });
+  const updateQuizScore = (id, score, total) =>
+    setQuizScores((prev) => ({ ...prev, [id]: { score, total, attempts: (prev[id]?.attempts || 0) + 1 } }));
 
   const toggleChapter = (id) => {
     setOpenChapterIds((prev) => {
@@ -178,6 +196,7 @@ const PackAccordionItem = ({ pack, expanded, onToggle }) => {
                               title={ch.title}
                               items={itemsByChapter[ch.id] || []}
                               completed={completed}
+                              quizScores={quizScores}
                               onOpenContent={setSelected}
                               isOpen={openChapterIds.has(ch.id)}
                               onToggle={() => toggleChapter(ch.id)}
@@ -194,7 +213,13 @@ const PackAccordionItem = ({ pack, expanded, onToggle }) => {
                     <h2 className="font-display text-base text-white mb-3">Other content</h2>
                     <div className="grid lg:grid-cols-3 gap-4">
                       {itemsByChapter.other.map((c) => (
-                        <ContentCard key={c.id} content={c} done={completed.has(c.id)} onOpen={() => setSelected(c)} />
+                        <ContentCard
+                          key={c.id}
+                          content={c}
+                          done={completed.has(c.id)}
+                          quizScore={c.content_type === "quiz" ? quizScores[c.id] : undefined}
+                          onOpen={() => setSelected(c)}
+                        />
                       ))}
                     </div>
                   </div>
@@ -213,6 +238,7 @@ const PackAccordionItem = ({ pack, expanded, onToggle }) => {
         onClose={() => setSelected(null)}
         onComplete={markComplete}
         onUncomplete={markIncomplete}
+        onQuizScore={updateQuizScore}
       />
     </div>
   );
