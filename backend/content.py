@@ -263,6 +263,25 @@ def _notes_from_plain_text(text: str) -> dict:
     return {"notes": [ln for ln in lines if ln]}
 
 
+_MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_MD_BOLD_UNDERSCORE_RE = re.compile(r"__(.+?)__")
+_MD_HEADER_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_MD_BULLET_RE = re.compile(r"^[*+]\s+", re.MULTILINE)
+
+
+def _strip_markdown(text: str) -> str:
+    """Best-effort cleanup of Markdown syntax the model may still emit despite being told
+    not to -- either because it didn't fully comply, or because a not-yet-updated Model
+    Router prompt is still in play. Summaries/notes are shown as plain text to students, so
+    stray **/##/etc. would otherwise render as literal characters instead of formatting."""
+    text = _MD_BOLD_RE.sub(r"\1", text)
+    text = _MD_BOLD_UNDERSCORE_RE.sub(r"\1", text)
+    text = _MD_HEADER_RE.sub("", text)
+    text = _MD_BULLET_RE.sub("- ", text)
+    # Catches any leftover unpaired ** / __ the regexes above didn't match a partner for.
+    return text.replace("**", "").replace("__", "")
+
+
 @router.post("/ai-draft", response_model=AiDraftItemOut)
 async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(require_role("admin"))):
     """Generates a single chapter's content via the Model Router, validated against the same
@@ -277,7 +296,7 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
     result = await call_router(PROMPT_KEY[payload.content_type], user_text)
 
     if payload.content_type == "summary":
-        raw_payload = {"body": result["text"].strip()}
+        raw_payload = {"body": _strip_markdown(result["text"]).strip()}
     elif payload.content_type == "mindmap":
         raw_payload = {"html": _extract_html(result["text"])}
     else:
@@ -293,6 +312,8 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
                 )
         if payload.content_type == "quiz":
             raw_payload = _normalize_quiz_payload(raw_payload)
+        if payload.content_type == "notes" and "notes" in raw_payload:
+            raw_payload["notes"] = [_strip_markdown(n).strip() for n in raw_payload["notes"]]
 
     validated = _validate_payload(payload.content_type, raw_payload)
     if payload.content_type == "quiz":
@@ -772,6 +793,65 @@ async def mark_complete(content_id: str, user: dict = Depends(get_current_user))
 async def mark_incomplete(content_id: str, user: dict = Depends(get_current_user)):
     await db.progress.delete_one({"user_id": user["id"], "content_id": content_id})
     return {"ok": True}
+
+
+def _normalize_short_answer(s: str) -> str:
+    """Mirrors the frontend's exact-match fallback comparator: lowercase, strip
+    punctuation, collapse whitespace."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", (s or "").lower(), flags=re.UNICODE)).strip()
+
+
+class GradeShortAnswerIn(BaseModel):
+    question_index: int = Field(ge=0)
+    given_answer: str
+
+
+class GradeShortAnswerOut(BaseModel):
+    correct: bool
+    graded_by: Literal["ai", "fallback"]
+    provider: Optional[str] = None
+    model: Optional[str] = None
+
+
+@router.post("/{content_id}/grade-short-answer", response_model=GradeShortAnswerOut)
+async def grade_short_answer(content_id: str, payload: GradeShortAnswerIn, user: dict = Depends(get_current_user)):
+    """AI-graded short-answer scoring: a student's free-text answer rarely matches the
+    reference answer's exact wording, so this asks the model whether it's substantively
+    correct rather than doing a literal string comparison. Falls back to a normalized
+    exact-match if every provider fails (no key configured, outage, etc.), rather than
+    blocking the student's quiz on an AI call that can't currently succeed.
+
+    Looks the question up server-side from the published content by index, rather than
+    trusting question/correct_answer text from the client, so this can't be used to grade
+    arbitrary text unrelated to an actual assigned quiz."""
+    content = await db.contents.find_one({"id": content_id, "published": True}, {"_id": 0})
+    if not content:
+        raise HTTPException(status_code=404, detail="Not found")
+    if content["content_type"] != "quiz":
+        raise HTTPException(status_code=400, detail="Not a quiz")
+    questions = (content.get("payload") or {}).get("questions", [])
+    if payload.question_index >= len(questions):
+        raise HTTPException(status_code=400, detail="Invalid question index")
+    q = questions[payload.question_index]
+    if q.get("type") != "short_answer":
+        raise HTTPException(status_code=400, detail="Not a short-answer question")
+    correct_answer = (q.get("correct_answer") or "").strip()
+    if not correct_answer:
+        raise HTTPException(status_code=422, detail="This question has no reference answer to grade against")
+
+    given = (payload.given_answer or "").strip()
+    if not given:
+        return GradeShortAnswerOut(correct=False, graded_by="fallback")
+
+    lang_hint = "The question and answers are in Bahasa Melayu." if content.get("language") == "bm" else "The question and answers are in English."
+    user_text = f"{lang_hint}\n\nQuestion: {q['question']}\n\nReference answer: {correct_answer}\n\nStudent's answer: {given}"
+    try:
+        result = await call_router("short_answer_grading", user_text)
+        correct = result["text"].strip().lower().startswith("true")
+        return GradeShortAnswerOut(correct=correct, graded_by="ai", provider=result["provider"], model=result["model"])
+    except HTTPException:
+        correct = _normalize_short_answer(given) == _normalize_short_answer(correct_answer)
+        return GradeShortAnswerOut(correct=correct, graded_by="fallback")
 
 
 class QuizResultIn(BaseModel):

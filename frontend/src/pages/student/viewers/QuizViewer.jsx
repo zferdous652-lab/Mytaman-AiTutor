@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Check, X, Clock, ChevronLeft } from "lucide-react";
+import { Check, X, Clock, ChevronLeft, Loader2 } from "lucide-react";
+import { api } from "@/lib/api";
 
 const QUIZ_DURATION_SECONDS = 30 * 60;
 
@@ -50,6 +51,17 @@ const formatClock = (secs) => {
   return `${m}:${s}`;
 };
 
+// Normalizes free text for the exact-match FALLBACK comparator, used only when the AI
+// grading call fails (no provider configured, outage, etc.): lowercase, trim, strip
+// punctuation, collapse whitespace. Real grading is done server-side by the AI, since a
+// student answering in their own words rarely matches the reference answer's exact wording.
+const normalizeShortAnswer = (s) =>
+  (s || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ");
+
 // payload shape: { questions: [{ type: mcq|true_false|short_answer, question, options?, correct_answer? }] }
 const QuizViewer = ({ content, onFinish }) => {
   const reduce = useReducedMotion();
@@ -58,28 +70,30 @@ const QuizViewer = ({ content, onFinish }) => {
 
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [selfChecks, setSelfChecks] = useState({});
   const [finished, setFinished] = useState(false);
   const [shortDraft, setShortDraft] = useState("");
   const [timeLeft, setTimeLeft] = useState(QUIZ_DURATION_SECONDS);
+  // { [index]: { pending: true } | { correct: bool, graded_by: "ai"|"fallback" } } -- AI
+  // grading result per short-answer question, populated once /grade-short-answer resolves.
+  const [aiGrades, setAiGrades] = useState({});
 
   const locked = answers[index] !== undefined;
 
-  // Gradable = mcq/true_false questions (always auto-graded) plus short-answer questions
-  // the student self-rated. A short-answer question left un-self-rated simply doesn't
-  // count either way, rather than dragging the score down as an automatic miss.
+  // Gradable = every mcq/true_false question, plus short-answer questions that actually
+  // have a reference answer to auto-grade against (a short-answer question is allowed to
+  // have none, in which case it's excluded from scoring entirely rather than counted wrong).
   const gradable = useMemo(
-    () => questions.filter((q, i) => q.type !== "short_answer" || selfChecks[i] !== undefined).length,
-    [questions, selfChecks]
+    () => questions.filter((q) => q.type !== "short_answer" || !!q.correct_answer).length,
+    [questions]
   );
   const correctCount = useMemo(
     () =>
       questions.reduce((acc, q, i) => {
-        if (q.type === "short_answer") return acc + (selfChecks[i] === true ? 1 : 0);
         const given = answers[i];
+        if (q.type === "short_answer") return acc + (aiGrades[i]?.correct === true ? 1 : 0);
         return acc + (given && given.toLowerCase() === (q.correct_answer || "").toLowerCase() ? 1 : 0);
       }, 0),
-    [answers, questions, selfChecks]
+    [answers, questions, aiGrades]
   );
 
   const finishNow = () => {
@@ -102,18 +116,35 @@ const QuizViewer = ({ content, onFinish }) => {
   if (total === 0) return <div className="text-base text-[#5c5346]">No questions.</div>;
 
   const q = questions[index];
+  const gradingPending = q.type === "short_answer" && !!q.correct_answer && aiGrades[index]?.pending;
 
   const selectAnswer = (val) => {
     if (locked) return;
     setAnswers((a) => ({ ...a, [index]: val }));
   };
 
-  const submitShort = () => {
+  const submitShort = async () => {
     if (locked) return;
-    setAnswers((a) => ({ ...a, [index]: shortDraft }));
+    const given = shortDraft;
+    const qIndex = index;
+    setAnswers((a) => ({ ...a, [qIndex]: given }));
+    if (!q.correct_answer) return; // no reference answer -- nothing to grade
+    setAiGrades((g) => ({ ...g, [qIndex]: { pending: true } }));
+    if (!given.trim()) {
+      setAiGrades((g) => ({ ...g, [qIndex]: { correct: false, graded_by: "fallback" } }));
+      return;
+    }
+    try {
+      const { data } = await api.post(`/content/${content.id}/grade-short-answer`, {
+        question_index: qIndex,
+        given_answer: given,
+      });
+      setAiGrades((g) => ({ ...g, [qIndex]: { correct: data.correct, graded_by: data.graded_by } }));
+    } catch (err) {
+      const correct = normalizeShortAnswer(given) === normalizeShortAnswer(q.correct_answer);
+      setAiGrades((g) => ({ ...g, [qIndex]: { correct, graded_by: "fallback" } }));
+    }
   };
-
-  const rateShort = (correct) => setSelfChecks((s) => ({ ...s, [index]: correct }));
 
   const goPrev = () => {
     if (index === 0) return;
@@ -133,7 +164,7 @@ const QuizViewer = ({ content, onFinish }) => {
   const retake = () => {
     setIndex(0);
     setAnswers({});
-    setSelfChecks({});
+    setAiGrades({});
     setFinished(false);
     setShortDraft("");
     setTimeLeft(QUIZ_DURATION_SECONDS);
@@ -163,8 +194,8 @@ const QuizViewer = ({ content, onFinish }) => {
             )}
             {ungraded > 0 && (
               <div className="text-sm text-[#5c5346] mt-1">
-                {ungraded} short-answer question{ungraded === 1 ? "" : "s"} {gradable > 0 ? "aren't" : "isn't"} included
-                {gradable > 0 ? " unless self-rated" : ""}
+                {ungraded} short-answer question{ungraded === 1 ? "" : "s"} {gradable > 0 ? "aren't" : "isn't"} gradable
+                (no reference answer set)
               </div>
             )}
           </div>
@@ -172,19 +203,28 @@ const QuizViewer = ({ content, onFinish }) => {
         <div className="grid sm:grid-cols-2 gap-3 max-h-80 overflow-auto pr-1">
           {questions.map((qq, i) => {
             if (qq.type === "short_answer") {
-              const rated = selfChecks[i];
+              const gradeEntry = aiGrades[i];
+              const graded = qq.correct_answer && gradeEntry && !gradeEntry.pending ? gradeEntry.correct : null;
               const toneCls =
-                rated === true
+                graded === true
                   ? "border-emerald-700/25 bg-emerald-700/5 text-emerald-800"
-                  : rated === false
+                  : graded === false
                   ? "border-[#b3261e]/25 bg-[#b3261e]/5 text-[#b3261e]"
                   : "border-[#3b2f1a]/12 bg-white/40 text-[#5c5346]";
               return (
                 <div key={i} className={`rounded-lg border px-4 py-3 text-sm ${toneCls}`}>
-                  <div><span className="opacity-70">Q{i + 1}.</span> {qq.question}</div>
+                  <div className="flex items-start gap-2">
+                    {graded === true && <Check size={15} className="mt-0.5 shrink-0" />}
+                    {graded === false && <X size={15} className="mt-0.5 shrink-0" />}
+                    <span><span className="opacity-70">Q{i + 1}.</span> {qq.question}</span>
+                  </div>
                   <div className="mt-1">Your answer: "{answers[i] || "—"}"</div>
-                  {qq.correct_answer && <div className="opacity-70">Expected: "{qq.correct_answer}"</div>}
-                  {rated === undefined && <div className="mt-1 text-xs opacity-70">Not self-rated</div>}
+                  {graded === false && qq.correct_answer && <div className="opacity-70">Expected: "{qq.correct_answer}"</div>}
+                  {graded === null && (
+                    <div className="mt-1 text-xs opacity-70">
+                      {qq.correct_answer ? "Not graded" : "No reference answer -- not gradable"}
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -313,36 +353,25 @@ const QuizViewer = ({ content, onFinish }) => {
                   Submit answer
                 </button>
               ) : (
-                <div className="space-y-3">
-                  <div className="text-sm text-[#5c5346]">
-                    Answer recorded{q.correct_answer ? ` — expected: "${q.correct_answer}"` : ""}. Not auto-graded.
-                  </div>
-                  {selfChecks[index] === undefined ? (
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-[#5c5346]">Did you get this right?</span>
-                      <button
-                        type="button"
-                        onClick={() => rateShort(true)}
-                        data-testid="quiz-self-correct"
-                        className="rounded-full border border-emerald-700/40 px-4 py-1.5 text-sm text-emerald-800 hover:bg-emerald-700/10 transition-colors"
-                      >
-                        Yes
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => rateShort(false)}
-                        data-testid="quiz-self-incorrect"
-                        className="rounded-full border border-[#b3261e]/40 px-4 py-1.5 text-sm text-[#b3261e] hover:bg-[#b3261e]/10 transition-colors"
-                      >
-                        No
-                      </button>
+                (() => {
+                  if (!q.correct_answer) {
+                    return <div className="text-sm text-[#5c5346]">Answer recorded — no reference answer set, so this question isn't scored.</div>;
+                  }
+                  const entry = aiGrades[index];
+                  if (!entry || entry.pending) {
+                    return (
+                      <div className="flex items-center gap-2 text-sm text-[#5c5346]" data-testid="quiz-short-grading">
+                        <Loader2 size={15} className="animate-spin" /> Grading your answer…
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className={`flex items-center gap-2 text-sm font-medium ${entry.correct ? "text-emerald-800" : "text-[#b3261e]"}`} data-testid="quiz-short-graded">
+                      {entry.correct ? <Check size={16} /> : <X size={16} />}
+                      {entry.correct ? "Correct!" : `Not quite — expected: "${q.correct_answer}"`}
                     </div>
-                  ) : (
-                    <div className={`text-sm font-medium ${selfChecks[index] ? "text-emerald-800" : "text-[#b3261e]"}`}>
-                      {selfChecks[index] ? "Marked correct" : "Marked incorrect"}
-                    </div>
-                  )}
-                </div>
+                  );
+                })()
               )}
             </div>
           )}
@@ -364,8 +393,9 @@ const QuizViewer = ({ content, onFinish }) => {
           <button
             type="button"
             onClick={next}
+            disabled={gradingPending}
             data-testid="quiz-next"
-            className="rounded-full bg-[#1f6f5c] px-7 py-3 text-base font-semibold text-white hover:bg-[#18594a] transition-colors"
+            className="rounded-full bg-[#1f6f5c] px-7 py-3 text-base font-semibold text-white hover:bg-[#18594a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {index + 1 >= total ? "See results" : "Next question"}
           </button>
