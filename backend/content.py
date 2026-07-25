@@ -263,6 +263,25 @@ def _notes_from_plain_text(text: str) -> dict:
     return {"notes": [ln for ln in lines if ln]}
 
 
+_MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_MD_BOLD_UNDERSCORE_RE = re.compile(r"__(.+?)__")
+_MD_HEADER_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_MD_BULLET_RE = re.compile(r"^[*+]\s+", re.MULTILINE)
+
+
+def _strip_markdown(text: str) -> str:
+    """Best-effort cleanup of Markdown syntax the model may still emit despite being told
+    not to -- either because it didn't fully comply, or because a not-yet-updated Model
+    Router prompt is still in play. Summaries/notes are shown as plain text to students, so
+    stray **/##/etc. would otherwise render as literal characters instead of formatting."""
+    text = _MD_BOLD_RE.sub(r"\1", text)
+    text = _MD_BOLD_UNDERSCORE_RE.sub(r"\1", text)
+    text = _MD_HEADER_RE.sub("", text)
+    text = _MD_BULLET_RE.sub("- ", text)
+    # Catches any leftover unpaired ** / __ the regexes above didn't match a partner for.
+    return text.replace("**", "").replace("__", "")
+
+
 @router.post("/ai-draft", response_model=AiDraftItemOut)
 async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(require_role("admin"))):
     """Generates a single chapter's content via the Model Router, validated against the same
@@ -277,7 +296,7 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
     result = await call_router(PROMPT_KEY[payload.content_type], user_text)
 
     if payload.content_type == "summary":
-        raw_payload = {"body": result["text"].strip()}
+        raw_payload = {"body": _strip_markdown(result["text"]).strip()}
     elif payload.content_type == "mindmap":
         raw_payload = {"html": _extract_html(result["text"])}
     else:
@@ -293,6 +312,8 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
                 )
         if payload.content_type == "quiz":
             raw_payload = _normalize_quiz_payload(raw_payload)
+        if payload.content_type == "notes" and "notes" in raw_payload:
+            raw_payload["notes"] = [_strip_markdown(n).strip() for n in raw_payload["notes"]]
 
     validated = _validate_payload(payload.content_type, raw_payload)
     if payload.content_type == "quiz":

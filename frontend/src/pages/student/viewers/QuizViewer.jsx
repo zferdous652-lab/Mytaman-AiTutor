@@ -50,6 +50,23 @@ const formatClock = (secs) => {
   return `${m}:${s}`;
 };
 
+// Normalizes free text for short-answer auto-grading: lowercase, trim, strip punctuation,
+// collapse whitespace. This is a blunt exact-match comparator -- it won't recognize a
+// correctly-paraphrased answer, only one that matches the reference answer's wording.
+const normalizeShortAnswer = (s) =>
+  (s || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ");
+
+// Returns true/false once graded, or null when there's no reference answer to grade
+// against at all (short-answer questions aren't required to have one).
+const gradeShortAnswer = (question, given) => {
+  if (!question.correct_answer) return null;
+  return normalizeShortAnswer(given) === normalizeShortAnswer(question.correct_answer);
+};
+
 // payload shape: { questions: [{ type: mcq|true_false|short_answer, question, options?, correct_answer? }] }
 const QuizViewer = ({ content, onFinish }) => {
   const reduce = useReducedMotion();
@@ -58,28 +75,27 @@ const QuizViewer = ({ content, onFinish }) => {
 
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [selfChecks, setSelfChecks] = useState({});
   const [finished, setFinished] = useState(false);
   const [shortDraft, setShortDraft] = useState("");
   const [timeLeft, setTimeLeft] = useState(QUIZ_DURATION_SECONDS);
 
   const locked = answers[index] !== undefined;
 
-  // Gradable = mcq/true_false questions (always auto-graded) plus short-answer questions
-  // the student self-rated. A short-answer question left un-self-rated simply doesn't
-  // count either way, rather than dragging the score down as an automatic miss.
+  // Gradable = every mcq/true_false question, plus short-answer questions that actually
+  // have a reference answer to auto-grade against (a short-answer question is allowed to
+  // have none, in which case it's excluded from scoring entirely rather than counted wrong).
   const gradable = useMemo(
-    () => questions.filter((q, i) => q.type !== "short_answer" || selfChecks[i] !== undefined).length,
-    [questions, selfChecks]
+    () => questions.filter((q) => q.type !== "short_answer" || !!q.correct_answer).length,
+    [questions]
   );
   const correctCount = useMemo(
     () =>
       questions.reduce((acc, q, i) => {
-        if (q.type === "short_answer") return acc + (selfChecks[i] === true ? 1 : 0);
         const given = answers[i];
+        if (q.type === "short_answer") return acc + (gradeShortAnswer(q, given) === true ? 1 : 0);
         return acc + (given && given.toLowerCase() === (q.correct_answer || "").toLowerCase() ? 1 : 0);
       }, 0),
-    [answers, questions, selfChecks]
+    [answers, questions]
   );
 
   const finishNow = () => {
@@ -113,8 +129,6 @@ const QuizViewer = ({ content, onFinish }) => {
     setAnswers((a) => ({ ...a, [index]: shortDraft }));
   };
 
-  const rateShort = (correct) => setSelfChecks((s) => ({ ...s, [index]: correct }));
-
   const goPrev = () => {
     if (index === 0) return;
     setIndex((i) => i - 1);
@@ -133,7 +147,6 @@ const QuizViewer = ({ content, onFinish }) => {
   const retake = () => {
     setIndex(0);
     setAnswers({});
-    setSelfChecks({});
     setFinished(false);
     setShortDraft("");
     setTimeLeft(QUIZ_DURATION_SECONDS);
@@ -163,8 +176,8 @@ const QuizViewer = ({ content, onFinish }) => {
             )}
             {ungraded > 0 && (
               <div className="text-sm text-[#5c5346] mt-1">
-                {ungraded} short-answer question{ungraded === 1 ? "" : "s"} {gradable > 0 ? "aren't" : "isn't"} included
-                {gradable > 0 ? " unless self-rated" : ""}
+                {ungraded} short-answer question{ungraded === 1 ? "" : "s"} {gradable > 0 ? "aren't" : "isn't"} gradable
+                (no reference answer set)
               </div>
             )}
           </div>
@@ -172,19 +185,23 @@ const QuizViewer = ({ content, onFinish }) => {
         <div className="grid sm:grid-cols-2 gap-3 max-h-80 overflow-auto pr-1">
           {questions.map((qq, i) => {
             if (qq.type === "short_answer") {
-              const rated = selfChecks[i];
+              const graded = gradeShortAnswer(qq, answers[i]);
               const toneCls =
-                rated === true
+                graded === true
                   ? "border-emerald-700/25 bg-emerald-700/5 text-emerald-800"
-                  : rated === false
+                  : graded === false
                   ? "border-[#b3261e]/25 bg-[#b3261e]/5 text-[#b3261e]"
                   : "border-[#3b2f1a]/12 bg-white/40 text-[#5c5346]";
               return (
                 <div key={i} className={`rounded-lg border px-4 py-3 text-sm ${toneCls}`}>
-                  <div><span className="opacity-70">Q{i + 1}.</span> {qq.question}</div>
+                  <div className="flex items-start gap-2">
+                    {graded === true && <Check size={15} className="mt-0.5 shrink-0" />}
+                    {graded === false && <X size={15} className="mt-0.5 shrink-0" />}
+                    <span><span className="opacity-70">Q{i + 1}.</span> {qq.question}</span>
+                  </div>
                   <div className="mt-1">Your answer: "{answers[i] || "—"}"</div>
-                  {qq.correct_answer && <div className="opacity-70">Expected: "{qq.correct_answer}"</div>}
-                  {rated === undefined && <div className="mt-1 text-xs opacity-70">Not self-rated</div>}
+                  {graded === false && qq.correct_answer && <div className="opacity-70">Expected: "{qq.correct_answer}"</div>}
+                  {graded === null && <div className="mt-1 text-xs opacity-70">No reference answer -- not gradable</div>}
                 </div>
               );
             }
@@ -313,36 +330,18 @@ const QuizViewer = ({ content, onFinish }) => {
                   Submit answer
                 </button>
               ) : (
-                <div className="space-y-3">
-                  <div className="text-sm text-[#5c5346]">
-                    Answer recorded{q.correct_answer ? ` — expected: "${q.correct_answer}"` : ""}. Not auto-graded.
-                  </div>
-                  {selfChecks[index] === undefined ? (
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-[#5c5346]">Did you get this right?</span>
-                      <button
-                        type="button"
-                        onClick={() => rateShort(true)}
-                        data-testid="quiz-self-correct"
-                        className="rounded-full border border-emerald-700/40 px-4 py-1.5 text-sm text-emerald-800 hover:bg-emerald-700/10 transition-colors"
-                      >
-                        Yes
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => rateShort(false)}
-                        data-testid="quiz-self-incorrect"
-                        className="rounded-full border border-[#b3261e]/40 px-4 py-1.5 text-sm text-[#b3261e] hover:bg-[#b3261e]/10 transition-colors"
-                      >
-                        No
-                      </button>
+                (() => {
+                  const graded = gradeShortAnswer(q, answers[index]);
+                  if (graded === null) {
+                    return <div className="text-sm text-[#5c5346]">Answer recorded — no reference answer set, so this question isn't scored.</div>;
+                  }
+                  return (
+                    <div className={`flex items-center gap-2 text-sm font-medium ${graded ? "text-emerald-800" : "text-[#b3261e]"}`} data-testid="quiz-short-graded">
+                      {graded ? <Check size={16} /> : <X size={16} />}
+                      {graded ? "Correct!" : `Not quite — expected: "${q.correct_answer}"`}
                     </div>
-                  ) : (
-                    <div className={`text-sm font-medium ${selfChecks[index] ? "text-emerald-800" : "text-[#b3261e]"}`}>
-                      {selfChecks[index] ? "Marked correct" : "Marked incorrect"}
-                    </div>
-                  )}
-                </div>
+                  );
+                })()
               )}
             </div>
           )}
