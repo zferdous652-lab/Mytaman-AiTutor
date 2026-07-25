@@ -2,15 +2,15 @@ import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Check, X } from "lucide-react";
 
-const ELEVATED = "0 6px 0 rgba(0,240,255,0.18), 0 10px 24px rgba(0,0,0,0.35)";
-const PRESSED = "0 2px 0 rgba(0,240,255,0.18), 0 4px 10px rgba(0,0,0,0.3)";
+const ELEVATED = "0 6px 0 rgba(31,111,92,0.18), 0 10px 24px rgba(59,47,26,0.15)";
+const PRESSED = "0 2px 0 rgba(31,111,92,0.18), 0 4px 10px rgba(59,47,26,0.12)";
 
 const TONE_CLASS = {
-  idle: "border-white/12 bg-white/[0.04] text-white/80 hover:border-white/25",
-  selected: "border-[#00f0ff] bg-[#00f0ff]/10 text-[#00f0ff]",
-  correct: "border-emerald-400/70 bg-emerald-400/10 text-emerald-300",
-  incorrect: "border-[#ff0055]/70 bg-[#ff0055]/10 text-[#ff0055]",
-  faded: "border-white/8 text-white/30",
+  idle: "border-[#3b2f1a]/15 bg-white/50 text-[#2b2620] hover:border-[#3b2f1a]/35",
+  selected: "border-[#1f6f5c] bg-[#1f6f5c]/10 text-[#1f6f5c]",
+  correct: "border-emerald-700/60 bg-emerald-700/10 text-emerald-800",
+  incorrect: "border-[#b3261e]/60 bg-[#b3261e]/10 text-[#b3261e]",
+  faded: "border-[#3b2f1a]/10 text-[#5c5346]/50",
 };
 
 const OptionButton = ({ children, tone, onClick, disabled, testId, reduce }) => (
@@ -22,7 +22,7 @@ const OptionButton = ({ children, tone, onClick, disabled, testId, reduce }) => 
     whileTap={!disabled && !reduce ? { y: 4, boxShadow: PRESSED } : undefined}
     style={reduce ? undefined : { boxShadow: ELEVATED }}
     transition={{ type: "spring", stiffness: 500, damping: 32 }}
-    className={`w-full text-left rounded-xl border px-4 py-3.5 text-sm transition-colors ${TONE_CLASS[tone]}`}
+    className={`w-full text-left rounded-xl border px-4 py-3.5 text-base transition-colors ${TONE_CLASS[tone]}`}
   >
     {children}
   </motion.button>
@@ -32,12 +32,12 @@ const ScoreRing = ({ pct }) => (
   <div
     className="relative h-28 w-28 shrink-0 rounded-full grid place-items-center"
     style={{
-      background: `conic-gradient(#00f0ff ${pct * 3.6}deg, rgba(255,255,255,0.08) 0deg)`,
-      boxShadow: "0 0 30px rgba(0,240,255,0.2)",
+      background: `conic-gradient(#1f6f5c ${pct * 3.6}deg, rgba(59,47,26,0.1) 0deg)`,
+      boxShadow: "0 0 20px rgba(31,111,92,0.15)",
     }}
   >
-    <div className="h-[86%] w-[86%] rounded-full bg-[#0a0514] grid place-items-center">
-      <span className="font-display text-2xl text-white">{pct}%</span>
+    <div className="h-[86%] w-[86%] rounded-full bg-[#f8f4e9] grid place-items-center">
+      <span className="text-2xl font-bold text-[#2b2620]">{pct}%</span>
     </div>
   </div>
 );
@@ -103,23 +103,23 @@ const QuizViewer = ({ content, onFinish }) => {
   if (finished) {
     const pct = gradable ? Math.round((correctCount / gradable) * 100) : 0;
     return (
-      <div className="space-y-6" data-testid="quiz-score">
-        <div className="flex items-center gap-6">
+      <div className="space-y-7" data-testid="quiz-score">
+        <div className="flex items-center gap-8">
           <ScoreRing pct={pct} />
           <div>
-            <div className="text-sm text-white/60">Your score</div>
-            <div className="font-display text-xl text-white">{correctCount}/{gradable} correct</div>
+            <div className="text-base text-[#5c5346]">Your score</div>
+            <div className="text-2xl font-bold text-[#2b2620]">{correctCount}/{gradable} correct</div>
             {gradable < total && (
-              <div className="text-xs text-white/40 mt-1">{total - gradable} short-answer question(s) aren't auto-graded</div>
+              <div className="text-sm text-[#5c5346] mt-1">{total - gradable} short-answer question(s) aren't auto-graded</div>
             )}
           </div>
         </div>
-        <div className="space-y-2 max-h-64 overflow-auto pr-1">
+        <div className="grid sm:grid-cols-2 gap-3 max-h-80 overflow-auto pr-1">
           {questions.map((qq, i) => {
             if (qq.type === "short_answer") {
               return (
-                <div key={i} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/60">
-                  <span className="text-white/40">Q{i + 1}.</span> {qq.question} — your answer: "{answers[i] || "—"}"
+                <div key={i} className="rounded-lg border border-[#3b2f1a]/12 bg-white/40 px-4 py-3 text-sm text-[#5c5346]">
+                  <span className="text-[#5c5346]/70">Q{i + 1}.</span> {qq.question} — your answer: "{answers[i] || "—"}"
                 </div>
               );
             }
@@ -127,12 +127,12 @@ const QuizViewer = ({ content, onFinish }) => {
             return (
               <div
                 key={i}
-                className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${
-                  ok ? "border-emerald-400/30 text-emerald-300/90" : "border-[#ff0055]/30 text-[#ff0055]/90"
+                className={`flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
+                  ok ? "border-emerald-700/25 bg-emerald-700/5 text-emerald-800" : "border-[#b3261e]/25 bg-[#b3261e]/5 text-[#b3261e]"
                 }`}
               >
-                {ok ? <Check size={13} className="mt-0.5 shrink-0" /> : <X size={13} className="mt-0.5 shrink-0" />}
-                <span><span className="text-white/40">Q{i + 1}.</span> {qq.question}</span>
+                {ok ? <Check size={15} className="mt-0.5 shrink-0" /> : <X size={15} className="mt-0.5 shrink-0" />}
+                <span><span className="text-[#5c5346]/70">Q{i + 1}.</span> {qq.question}</span>
               </div>
             );
           })}
@@ -141,7 +141,7 @@ const QuizViewer = ({ content, onFinish }) => {
           type="button"
           onClick={retake}
           data-testid="quiz-retake"
-          className="rounded-full border border-white/15 px-5 py-2 text-sm text-white/80 hover:border-[#00f0ff] hover:text-[#00f0ff] transition-colors"
+          className="rounded-full border border-[#3b2f1a]/20 px-6 py-2.5 text-base text-[#2b2620] hover:border-[#1f6f5c] hover:text-[#1f6f5c] transition-colors"
         >
           Retake quiz
         </button>
@@ -151,14 +151,14 @@ const QuizViewer = ({ content, onFinish }) => {
 
   return (
     <div data-testid="quiz-view">
-      <div className="mb-4">
-        <div className="flex justify-between text-xs text-white/50 mb-1.5">
+      <div className="mb-6">
+        <div className="flex justify-between text-sm text-[#5c5346] mb-2">
           <span>Question {index + 1} of {total}</span>
           <span>{Math.round((index / total) * 100)}%</span>
         </div>
-        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-[#3b2f1a]/10 rounded-full overflow-hidden">
           <motion.div
-            className="h-full bg-gradient-to-r from-[#00f0ff] to-[#8a2be2]"
+            className="h-full bg-gradient-to-r from-[#1f6f5c] to-[#8a6d3b]"
             animate={{ width: `${(index / total) * 100}%` }}
             transition={{ duration: reduce ? 0 : 0.4 }}
           />
@@ -173,10 +173,10 @@ const QuizViewer = ({ content, onFinish }) => {
           exit={reduce ? undefined : { opacity: 0, x: -24 }}
           transition={{ duration: 0.25 }}
         >
-          <div className="text-base text-white mb-4">{q.question}</div>
+          <div className="text-xl text-[#2b2620] mb-6">{q.question}</div>
 
           {q.type === "mcq" && (
-            <div className="space-y-2.5">
+            <div className="grid sm:grid-cols-2 gap-3.5">
               {(q.options || []).map((opt) => {
                 let tone = "idle";
                 if (locked) {
@@ -194,7 +194,7 @@ const QuizViewer = ({ content, onFinish }) => {
           )}
 
           {q.type === "true_false" && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               {["true", "false"].map((opt) => {
                 let tone = "idle";
                 if (locked) {
@@ -212,24 +212,24 @@ const QuizViewer = ({ content, onFinish }) => {
           )}
 
           {q.type === "short_answer" && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <input
                 disabled={locked}
                 value={locked ? answers[index] || "" : shortDraft}
                 onChange={(e) => setShortDraft(e.target.value)}
                 placeholder="Your answer"
-                className="w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-[#00f0ff] outline-none disabled:opacity-60"
+                className="w-full rounded-lg border border-[#3b2f1a]/20 bg-white/50 px-4 py-3 text-lg text-[#2b2620] placeholder:text-[#5c5346]/50 focus:border-[#1f6f5c] outline-none disabled:opacity-60"
               />
               {!locked ? (
                 <button
                   type="button"
                   onClick={submitShort}
-                  className="rounded-full bg-[#00f0ff]/10 border border-[#00f0ff]/40 px-4 py-1.5 text-xs text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-colors"
+                  className="rounded-full bg-[#1f6f5c]/10 border border-[#1f6f5c]/40 px-5 py-2 text-sm text-[#1f6f5c] hover:bg-[#1f6f5c]/20 transition-colors"
                 >
                   Submit answer
                 </button>
               ) : (
-                <div className="text-xs text-white/50">
+                <div className="text-sm text-[#5c5346]">
                   Answer recorded{q.correct_answer ? ` — expected: "${q.correct_answer}"` : ""}. Not auto-graded.
                 </div>
               )}
@@ -243,7 +243,7 @@ const QuizViewer = ({ content, onFinish }) => {
           type="button"
           onClick={next}
           data-testid="quiz-next"
-          className="mt-5 rounded-full bg-[#00f0ff] px-6 py-2.5 text-sm font-semibold text-black hover:bg-white transition-colors"
+          className="mt-6 rounded-full bg-[#1f6f5c] px-7 py-3 text-base font-semibold text-white hover:bg-[#18594a] transition-colors"
         >
           {index + 1 >= total ? "See results" : "Next question"}
         </button>

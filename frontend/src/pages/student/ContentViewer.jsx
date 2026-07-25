@@ -6,9 +6,14 @@ import MindmapViewer from "./viewers/MindmapViewer";
 import NotesViewer from "./viewers/NotesViewer";
 import SummaryViewer from "./viewers/SummaryViewer";
 
+// Reading-heavy content types get the paper theme; flashcards/mindmap keep the neon glass look.
+const PAPER_TYPES = ["summary", "notes", "quiz"];
+
 const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete }) => {
   const scrollRef = useRef(null);
   if (!content) return null;
+
+  const paper = PAPER_TYPES.includes(content.content_type);
 
   const markComplete = async () => {
     try {
@@ -41,12 +46,20 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete }) => 
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-md p-3 sm:p-6" onClick={onClose}>
       <div
         ref={scrollRef}
-        className="max-w-2xl w-full glass rounded-2xl p-5 sm:p-8 max-h-[85vh] overflow-auto"
+        className={
+          paper
+            ? "paper-card paper-content max-w-4xl w-full rounded-2xl p-6 sm:p-10 lg:p-12 max-h-[90vh] overflow-auto"
+            : "max-w-2xl w-full glass rounded-2xl p-5 sm:p-8 max-h-[85vh] overflow-auto"
+        }
         onClick={(e) => e.stopPropagation()}
         data-testid="content-modal"
       >
-        <div className="overline text-[#00f0ff]">{content.content_type} · {content.language?.toUpperCase()}</div>
-        <div className="font-display text-2xl tracking-tighter text-white mt-2 mb-5">{content.title}</div>
+        <div className={`overline ${paper ? "text-[#1f6f5c]" : "text-[#00f0ff]"}`}>
+          {content.content_type} · {content.language?.toUpperCase()}
+        </div>
+        <div className={`font-display text-2xl tracking-tighter mt-2 mb-5 ${paper ? "text-[#2b2620]" : "text-white"}`}>
+          {content.title}
+        </div>
 
         {content.content_type === "quiz" && <QuizViewer content={content} onFinish={finishQuiz} />}
         {content.content_type === "flashcards" && <FlashcardsViewer content={content} />}
@@ -59,7 +72,11 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete }) => 
             <button
               data-testid="mark-complete"
               onClick={markComplete}
-              className="rounded-full bg-[#00f0ff]/10 border border-[#00f0ff]/40 px-5 py-2 text-sm text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-colors"
+              className={
+                paper
+                  ? "rounded-full bg-[#1f6f5c]/10 border border-[#1f6f5c]/40 px-5 py-2 text-sm text-[#1f6f5c] hover:bg-[#1f6f5c]/20 transition-colors"
+                  : "rounded-full bg-[#00f0ff]/10 border border-[#00f0ff]/40 px-5 py-2 text-sm text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-colors"
+              }
             >
               Mark as complete
             </button>
@@ -68,7 +85,11 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete }) => 
             <button
               data-testid="mark-incomplete"
               onClick={markIncomplete}
-              className="rounded-full border border-white/15 px-5 py-2 text-sm text-white/70 hover:border-[#ff0055] hover:text-[#ff0055] transition-colors"
+              className={
+                paper
+                  ? "rounded-full border border-[#3b2f1a]/25 px-5 py-2 text-sm text-[#5c5346] hover:border-[#b3261e] hover:text-[#b3261e] transition-colors"
+                  : "rounded-full border border-white/15 px-5 py-2 text-sm text-white/70 hover:border-[#ff0055] hover:text-[#ff0055] transition-colors"
+              }
             >
               Mark as incomplete
             </button>
@@ -76,7 +97,11 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete }) => 
           <button
             data-testid="modal-close"
             onClick={onClose}
-            className="rounded-full border border-white/15 px-5 py-2 text-sm text-white/80 hover:border-[#00f0ff] hover:text-[#00f0ff] transition-colors"
+            className={
+              paper
+                ? "rounded-full border border-[#3b2f1a]/25 px-5 py-2 text-sm text-[#5c5346] hover:border-[#1f6f5c] hover:text-[#1f6f5c] transition-colors"
+                : "rounded-full border border-white/15 px-5 py-2 text-sm text-white/80 hover:border-[#00f0ff] hover:text-[#00f0ff] transition-colors"
+            }
           >
             Close
           </button>
