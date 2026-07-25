@@ -112,7 +112,7 @@ const Packs = () => {
   // that one (chapter, content type, language) slot from the student portal via pack_id --
   // never touches pack_drafts at all, so the draft (and every other item in it) stays
   // completely untouched in Manual Content / Generate with AI.
-  const removeItemFromStudents = (item) => {
+  const removeItemFromStudents = (draft, item) => {
     const label = `${item.chapter_title} · ${CONTENT_TYPE_LABELS[item.content_type] || item.content_type} · ${item.language.toUpperCase()}`;
     askConfirm(
       `Remove ${label} from students?`,
@@ -125,6 +125,21 @@ const Packs = () => {
             language: item.language,
           });
           toast.success(data.removed ? `${label} removed from the student portal` : `${label} wasn't live for students`);
+          // Local-only: clears the tag from this list's display so it doesn't look stale.
+          // The draft's real items are untouched -- reopening this pop-up (or the draft in
+          // Manual Content / Generate with AI) still shows it, since nothing was deleted.
+          setConfirmedDrafts((prev) =>
+            prev.map((d) =>
+              d.id !== draft.id
+                ? d
+                : {
+                    ...d,
+                    items: d.items.filter(
+                      (x) => !(x.chapter_id === item.chapter_id && x.content_type === item.content_type && x.language === item.language)
+                    ),
+                  }
+            )
+          );
         } catch (err) {
           toast.error(err?.response?.data?.detail || "Failed");
         }
@@ -356,7 +371,7 @@ const Packs = () => {
                               {it.chapter_title} · {CONTENT_TYPE_LABELS[it.content_type] || it.content_type} · {it.language.toUpperCase()}
                               <button
                                 type="button"
-                                onClick={(e) => { e.stopPropagation(); removeItemFromStudents(it); }}
+                                onClick={(e) => { e.stopPropagation(); removeItemFromStudents(d, it); }}
                                 className="text-white/30 hover:text-red-400 transition-colors"
                                 title="Remove this item from students"
                                 data-testid={`review-draft-${d.id}-item-${i}-remove`}
