@@ -108,6 +108,38 @@ const Packs = () => {
     );
   };
 
+  const isItemHidden = (draft, item) =>
+    (draft.hidden_review_items || []).some(
+      (h) => h.chapter_id === item.chapter_id && h.content_type === item.content_type && h.language === item.language
+    );
+
+  // Per-item remove: the (x) on a single content-type tag inside a draft row. Removes just
+  // that one (chapter, content type, language) slot from the student portal, and records it
+  // on this draft's own hidden_review_items so the tag stays gone from this list across
+  // reloads -- never touches the draft's actual items, which Manual Content / Generate with
+  // AI keep showing exactly as authored. Re-confirming the draft there brings it back.
+  const removeItemFromStudents = (draft, item) => {
+    const label = `${item.chapter_title} · ${CONTENT_TYPE_LABELS[item.content_type] || item.content_type} · ${item.language.toUpperCase()}`;
+    askConfirm(
+      `Remove ${label} from students?`,
+      "This removes this item from the student portal and clears its tag here — the draft stays fully untouched in Manual Content / Generate with AI. Re-confirm it there to bring the tag back.",
+      async () => {
+        try {
+          const { data: updatedDraft } = await api.post(`/content/drafts/${draft.id}/items/unpublish`, {
+            chapter_id: item.chapter_id,
+            content_type: item.content_type,
+            language: item.language,
+          });
+          toast.success(`${label} removed from the student portal`);
+          setConfirmedDrafts((prev) => prev.map((d) => (d.id === draft.id ? updatedDraft : d)));
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || "Failed");
+        }
+      },
+      "Remove"
+    );
+  };
+
   const publishSelection = async () => {
     if (!reviewPack || selectedDraftIds.length === 0) return;
     setPublishingSelection(true);
@@ -323,12 +355,21 @@ const Packs = () => {
                           <span className="ml-2 text-[10px] uppercase tracking-wide text-white/30">{d.source === "ai" ? "AI generated" : "Manual"}</span>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
-                          {d.items.map((it, i) => (
+                          {d.items.filter((it) => !isItemHidden(d, it)).map((it, i) => (
                             <span
                               key={i}
-                              className="text-[10px] uppercase tracking-wide text-white/60 bg-white/5 border border-white/10 rounded-full px-2 py-0.5"
+                              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-white/60 bg-white/5 border border-white/10 rounded-full pl-2 pr-1 py-0.5"
                             >
                               {it.chapter_title} · {CONTENT_TYPE_LABELS[it.content_type] || it.content_type} · {it.language.toUpperCase()}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); removeItemFromStudents(d, it); }}
+                                className="text-white/30 hover:text-red-400 transition-colors"
+                                title="Remove this item from students"
+                                data-testid={`review-draft-${d.id}-item-${i}-remove`}
+                              >
+                                <X size={10} />
+                              </button>
                             </span>
                           ))}
                         </div>
