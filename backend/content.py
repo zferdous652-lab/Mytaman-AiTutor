@@ -795,6 +795,65 @@ async def mark_incomplete(content_id: str, user: dict = Depends(get_current_user
     return {"ok": True}
 
 
+def _normalize_short_answer(s: str) -> str:
+    """Mirrors the frontend's exact-match fallback comparator: lowercase, strip
+    punctuation, collapse whitespace."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", (s or "").lower(), flags=re.UNICODE)).strip()
+
+
+class GradeShortAnswerIn(BaseModel):
+    question_index: int = Field(ge=0)
+    given_answer: str
+
+
+class GradeShortAnswerOut(BaseModel):
+    correct: bool
+    graded_by: Literal["ai", "fallback"]
+    provider: Optional[str] = None
+    model: Optional[str] = None
+
+
+@router.post("/{content_id}/grade-short-answer", response_model=GradeShortAnswerOut)
+async def grade_short_answer(content_id: str, payload: GradeShortAnswerIn, user: dict = Depends(get_current_user)):
+    """AI-graded short-answer scoring: a student's free-text answer rarely matches the
+    reference answer's exact wording, so this asks the model whether it's substantively
+    correct rather than doing a literal string comparison. Falls back to a normalized
+    exact-match if every provider fails (no key configured, outage, etc.), rather than
+    blocking the student's quiz on an AI call that can't currently succeed.
+
+    Looks the question up server-side from the published content by index, rather than
+    trusting question/correct_answer text from the client, so this can't be used to grade
+    arbitrary text unrelated to an actual assigned quiz."""
+    content = await db.contents.find_one({"id": content_id, "published": True}, {"_id": 0})
+    if not content:
+        raise HTTPException(status_code=404, detail="Not found")
+    if content["content_type"] != "quiz":
+        raise HTTPException(status_code=400, detail="Not a quiz")
+    questions = (content.get("payload") or {}).get("questions", [])
+    if payload.question_index >= len(questions):
+        raise HTTPException(status_code=400, detail="Invalid question index")
+    q = questions[payload.question_index]
+    if q.get("type") != "short_answer":
+        raise HTTPException(status_code=400, detail="Not a short-answer question")
+    correct_answer = (q.get("correct_answer") or "").strip()
+    if not correct_answer:
+        raise HTTPException(status_code=422, detail="This question has no reference answer to grade against")
+
+    given = (payload.given_answer or "").strip()
+    if not given:
+        return GradeShortAnswerOut(correct=False, graded_by="fallback")
+
+    lang_hint = "The question and answers are in Bahasa Melayu." if content.get("language") == "bm" else "The question and answers are in English."
+    user_text = f"{lang_hint}\n\nQuestion: {q['question']}\n\nReference answer: {correct_answer}\n\nStudent's answer: {given}"
+    try:
+        result = await call_router("short_answer_grading", user_text)
+        correct = result["text"].strip().lower().startswith("true")
+        return GradeShortAnswerOut(correct=correct, graded_by="ai", provider=result["provider"], model=result["model"])
+    except HTTPException:
+        correct = _normalize_short_answer(given) == _normalize_short_answer(correct_answer)
+        return GradeShortAnswerOut(correct=correct, graded_by="fallback")
+
+
 class QuizResultIn(BaseModel):
     score: int = Field(ge=0)
     total: int = Field(ge=0)

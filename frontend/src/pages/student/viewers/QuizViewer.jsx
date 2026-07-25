@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Check, X, Clock, ChevronLeft } from "lucide-react";
+import { Check, X, Clock, ChevronLeft, Loader2 } from "lucide-react";
+import { api } from "@/lib/api";
 
 const QUIZ_DURATION_SECONDS = 30 * 60;
 
@@ -50,22 +51,16 @@ const formatClock = (secs) => {
   return `${m}:${s}`;
 };
 
-// Normalizes free text for short-answer auto-grading: lowercase, trim, strip punctuation,
-// collapse whitespace. This is a blunt exact-match comparator -- it won't recognize a
-// correctly-paraphrased answer, only one that matches the reference answer's wording.
+// Normalizes free text for the exact-match FALLBACK comparator, used only when the AI
+// grading call fails (no provider configured, outage, etc.): lowercase, trim, strip
+// punctuation, collapse whitespace. Real grading is done server-side by the AI, since a
+// student answering in their own words rarely matches the reference answer's exact wording.
 const normalizeShortAnswer = (s) =>
   (s || "")
     .toLowerCase()
     .trim()
     .replace(/[^\p{L}\p{N}\s]/gu, "")
     .replace(/\s+/g, " ");
-
-// Returns true/false once graded, or null when there's no reference answer to grade
-// against at all (short-answer questions aren't required to have one).
-const gradeShortAnswer = (question, given) => {
-  if (!question.correct_answer) return null;
-  return normalizeShortAnswer(given) === normalizeShortAnswer(question.correct_answer);
-};
 
 // payload shape: { questions: [{ type: mcq|true_false|short_answer, question, options?, correct_answer? }] }
 const QuizViewer = ({ content, onFinish }) => {
@@ -78,6 +73,9 @@ const QuizViewer = ({ content, onFinish }) => {
   const [finished, setFinished] = useState(false);
   const [shortDraft, setShortDraft] = useState("");
   const [timeLeft, setTimeLeft] = useState(QUIZ_DURATION_SECONDS);
+  // { [index]: { pending: true } | { correct: bool, graded_by: "ai"|"fallback" } } -- AI
+  // grading result per short-answer question, populated once /grade-short-answer resolves.
+  const [aiGrades, setAiGrades] = useState({});
 
   const locked = answers[index] !== undefined;
 
@@ -92,10 +90,10 @@ const QuizViewer = ({ content, onFinish }) => {
     () =>
       questions.reduce((acc, q, i) => {
         const given = answers[i];
-        if (q.type === "short_answer") return acc + (gradeShortAnswer(q, given) === true ? 1 : 0);
+        if (q.type === "short_answer") return acc + (aiGrades[i]?.correct === true ? 1 : 0);
         return acc + (given && given.toLowerCase() === (q.correct_answer || "").toLowerCase() ? 1 : 0);
       }, 0),
-    [answers, questions]
+    [answers, questions, aiGrades]
   );
 
   const finishNow = () => {
@@ -118,15 +116,34 @@ const QuizViewer = ({ content, onFinish }) => {
   if (total === 0) return <div className="text-base text-[#5c5346]">No questions.</div>;
 
   const q = questions[index];
+  const gradingPending = q.type === "short_answer" && !!q.correct_answer && aiGrades[index]?.pending;
 
   const selectAnswer = (val) => {
     if (locked) return;
     setAnswers((a) => ({ ...a, [index]: val }));
   };
 
-  const submitShort = () => {
+  const submitShort = async () => {
     if (locked) return;
-    setAnswers((a) => ({ ...a, [index]: shortDraft }));
+    const given = shortDraft;
+    const qIndex = index;
+    setAnswers((a) => ({ ...a, [qIndex]: given }));
+    if (!q.correct_answer) return; // no reference answer -- nothing to grade
+    setAiGrades((g) => ({ ...g, [qIndex]: { pending: true } }));
+    if (!given.trim()) {
+      setAiGrades((g) => ({ ...g, [qIndex]: { correct: false, graded_by: "fallback" } }));
+      return;
+    }
+    try {
+      const { data } = await api.post(`/content/${content.id}/grade-short-answer`, {
+        question_index: qIndex,
+        given_answer: given,
+      });
+      setAiGrades((g) => ({ ...g, [qIndex]: { correct: data.correct, graded_by: data.graded_by } }));
+    } catch (err) {
+      const correct = normalizeShortAnswer(given) === normalizeShortAnswer(q.correct_answer);
+      setAiGrades((g) => ({ ...g, [qIndex]: { correct, graded_by: "fallback" } }));
+    }
   };
 
   const goPrev = () => {
@@ -147,6 +164,7 @@ const QuizViewer = ({ content, onFinish }) => {
   const retake = () => {
     setIndex(0);
     setAnswers({});
+    setAiGrades({});
     setFinished(false);
     setShortDraft("");
     setTimeLeft(QUIZ_DURATION_SECONDS);
@@ -185,7 +203,8 @@ const QuizViewer = ({ content, onFinish }) => {
         <div className="grid sm:grid-cols-2 gap-3 max-h-80 overflow-auto pr-1">
           {questions.map((qq, i) => {
             if (qq.type === "short_answer") {
-              const graded = gradeShortAnswer(qq, answers[i]);
+              const gradeEntry = aiGrades[i];
+              const graded = qq.correct_answer && gradeEntry && !gradeEntry.pending ? gradeEntry.correct : null;
               const toneCls =
                 graded === true
                   ? "border-emerald-700/25 bg-emerald-700/5 text-emerald-800"
@@ -201,7 +220,11 @@ const QuizViewer = ({ content, onFinish }) => {
                   </div>
                   <div className="mt-1">Your answer: "{answers[i] || "—"}"</div>
                   {graded === false && qq.correct_answer && <div className="opacity-70">Expected: "{qq.correct_answer}"</div>}
-                  {graded === null && <div className="mt-1 text-xs opacity-70">No reference answer -- not gradable</div>}
+                  {graded === null && (
+                    <div className="mt-1 text-xs opacity-70">
+                      {qq.correct_answer ? "Not graded" : "No reference answer -- not gradable"}
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -331,14 +354,21 @@ const QuizViewer = ({ content, onFinish }) => {
                 </button>
               ) : (
                 (() => {
-                  const graded = gradeShortAnswer(q, answers[index]);
-                  if (graded === null) {
+                  if (!q.correct_answer) {
                     return <div className="text-sm text-[#5c5346]">Answer recorded — no reference answer set, so this question isn't scored.</div>;
                   }
+                  const entry = aiGrades[index];
+                  if (!entry || entry.pending) {
+                    return (
+                      <div className="flex items-center gap-2 text-sm text-[#5c5346]" data-testid="quiz-short-grading">
+                        <Loader2 size={15} className="animate-spin" /> Grading your answer…
+                      </div>
+                    );
+                  }
                   return (
-                    <div className={`flex items-center gap-2 text-sm font-medium ${graded ? "text-emerald-800" : "text-[#b3261e]"}`} data-testid="quiz-short-graded">
-                      {graded ? <Check size={16} /> : <X size={16} />}
-                      {graded ? "Correct!" : `Not quite — expected: "${q.correct_answer}"`}
+                    <div className={`flex items-center gap-2 text-sm font-medium ${entry.correct ? "text-emerald-800" : "text-[#b3261e]"}`} data-testid="quiz-short-graded">
+                      {entry.correct ? <Check size={16} /> : <X size={16} />}
+                      {entry.correct ? "Correct!" : `Not quite — expected: "${q.correct_answer}"`}
                     </div>
                   );
                 })()
@@ -363,8 +393,9 @@ const QuizViewer = ({ content, onFinish }) => {
           <button
             type="button"
             onClick={next}
+            disabled={gradingPending}
             data-testid="quiz-next"
-            className="rounded-full bg-[#1f6f5c] px-7 py-3 text-base font-semibold text-white hover:bg-[#18594a] transition-colors"
+            className="rounded-full bg-[#1f6f5c] px-7 py-3 text-base font-semibold text-white hover:bg-[#18594a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {index + 1 >= total ? "See results" : "Next question"}
           </button>
