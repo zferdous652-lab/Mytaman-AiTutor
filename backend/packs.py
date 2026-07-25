@@ -161,33 +161,6 @@ async def publish_pack(pack_id: str, payload: PublishIn = PublishIn(), user: dic
     return {"ok": True, "published_count": published_count}
 
 
-class UnpublishItemIn(BaseModel):
-    chapter_id: str
-    content_type: str
-    language: str
-
-
-@router.post("/{pack_id}/unpublish-item")
-async def unpublish_pack_item(pack_id: str, payload: UnpublishItemIn, _: dict = Depends(require_role("admin"))):
-    """Removes exactly one published (chapter, content type, language) slot from the
-    student/parent-facing contents collection -- this is what the (x) on each content-type
-    tag in the Tutor Pack Publish review pop-up calls. Only ever touches the contents
-    collection; never pack_drafts, so the draft it came from (and every other item in it)
-    stays completely untouched in Manual Content / Generate with AI."""
-    existing = await db.contents.find_one({
-        "pack_id": pack_id,
-        "chapter_id": payload.chapter_id,
-        "content_type": payload.content_type,
-        "language": payload.language,
-    })
-    if not existing:
-        return {"ok": True, "removed": False}
-    await db.contents.delete_one({"id": existing["id"]})
-    await db.progress.delete_many({"content_id": existing["id"]})
-    await db.quiz_results.delete_many({"content_id": existing["id"]})
-    return {"ok": True, "removed": True}
-
-
 class EnrollIn(BaseModel):
     pack_id: str
 

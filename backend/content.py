@@ -341,6 +341,12 @@ class DraftItemOut(BaseModel):
     source_pdf: Optional[SourcePdfIn] = None
 
 
+class HiddenReviewItem(BaseModel):
+    chapter_id: str
+    content_type: str
+    language: str
+
+
 class PackDraftOut(BaseModel):
     id: str
     pack_id: str
@@ -351,6 +357,7 @@ class PackDraftOut(BaseModel):
     items: List[DraftItemOut]
     created_at: str
     hidden_from_review: bool = False
+    hidden_review_items: List[HiddenReviewItem] = Field(default_factory=list)
 
 
 def _draft_out(doc: dict) -> PackDraftOut:
@@ -361,6 +368,7 @@ def _draft_out(doc: dict) -> PackDraftOut:
     d = {k: doc.get(k) for k in PackDraftOut.model_fields.keys()}
     d["source"] = doc.get("source") or "manual"
     d["hidden_from_review"] = bool(doc.get("hidden_from_review"))
+    d["hidden_review_items"] = doc.get("hidden_review_items") or []
     return PackDraftOut(**d)
 
 
@@ -458,7 +466,7 @@ async def confirm_pack_draft(draft_id: str, _: dict = Depends(require_role("admi
     # explicitly signals "this is ready to be reviewed for publishing again."
     res = await db.pack_drafts.find_one_and_update(
         {"id": draft_id},
-        {"$set": {"status": "confirmed", "hidden_from_review": False}},
+        {"$set": {"status": "confirmed", "hidden_from_review": False, "hidden_review_items": []}},
         return_document=True,
         projection={"_id": 0},
     )
@@ -518,21 +526,27 @@ async def rename_pack_draft(draft_id: str, payload: RenameDraftIn, _: dict = Dep
     return _draft_out(res)
 
 
+async def _unpublish_item(pack_id: str, chapter_id: str, content_type: str, language: str) -> bool:
+    """Removes one published (chapter, content type, language) slot -- plus any student
+    progress/quiz_results referencing it -- from the contents collection. Never touches
+    pack_drafts. Returns whether anything was actually live to remove."""
+    existing = await db.contents.find_one({
+        "pack_id": pack_id, "chapter_id": chapter_id, "content_type": content_type, "language": language,
+    })
+    if not existing:
+        return False
+    await db.contents.delete_one({"id": existing["id"]})
+    await db.progress.delete_many({"content_id": existing["id"]})
+    await db.quiz_results.delete_many({"content_id": existing["id"]})
+    return True
+
+
 async def _unpublish_draft_items(draft: dict) -> int:
-    """Removes a draft's items from the published contents collection (plus any student
-    progress/quiz_results referencing them), without touching the draft itself."""
+    """Removes every item of a draft from the published contents collection, without
+    touching the draft itself."""
     removed = 0
     for item in draft["items"]:
-        existing = await db.contents.find_one({
-            "pack_id": draft["pack_id"],
-            "chapter_id": item["chapter_id"],
-            "content_type": item["content_type"],
-            "language": item["language"],
-        })
-        if existing:
-            await db.contents.delete_one({"id": existing["id"]})
-            await db.progress.delete_many({"content_id": existing["id"]})
-            await db.quiz_results.delete_many({"content_id": existing["id"]})
+        if await _unpublish_item(draft["pack_id"], item["chapter_id"], item["content_type"], item["language"]):
             removed += 1
     return removed
 
@@ -589,6 +603,35 @@ async def bulk_unpublish_pack_drafts(payload: BulkUnpublishDraftsIn, _: dict = D
         removed_from_students += await _unpublish_draft_items(draft)
     await _hide_drafts_from_review(payload.ids)
     return {"ok": True, "removed_from_students": removed_from_students}
+
+
+class UnpublishDraftItemIn(BaseModel):
+    chapter_id: str
+    content_type: str
+    language: str
+
+
+@router.post("/drafts/{draft_id}/items/unpublish", response_model=PackDraftOut)
+async def unpublish_pack_draft_item(draft_id: str, payload: UnpublishDraftItemIn, _: dict = Depends(require_role("admin"))):
+    """The (x) on a single content-type tag in the Tutor Pack Publish review pop-up.
+    Removes that one item from the published contents collection (like _unpublish_item
+    elsewhere) AND records it in this draft's own hidden_review_items, so the tag stays
+    gone from the review pop-up across reloads -- without ever touching the draft's actual
+    items, which Manual Content / Generate with AI keep showing exactly as authored.
+    (Re)confirming the draft there clears hidden_review_items, bringing every tag back."""
+    draft = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    await _unpublish_item(draft["pack_id"], payload.chapter_id, payload.content_type, payload.language)
+
+    key = {"chapter_id": payload.chapter_id, "content_type": payload.content_type, "language": payload.language}
+    hidden = draft.get("hidden_review_items") or []
+    if key not in hidden:
+        hidden = hidden + [key]
+    res = await db.pack_drafts.find_one_and_update(
+        {"id": draft_id}, {"$set": {"hidden_review_items": hidden}}, return_document=True, projection={"_id": 0}
+    )
+    return _draft_out(res)
 
 
 UPLOAD_DIR = Path(__file__).parent / "uploads" / "mindmaps"
