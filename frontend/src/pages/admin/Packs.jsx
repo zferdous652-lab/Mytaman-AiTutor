@@ -108,6 +108,31 @@ const Packs = () => {
     );
   };
 
+  // Per-item remove: the (x) on a single content-type tag inside a draft row. Removes just
+  // that one (chapter, content type, language) slot from the student portal via pack_id --
+  // never touches pack_drafts at all, so the draft (and every other item in it) stays
+  // completely untouched in Manual Content / Generate with AI.
+  const removeItemFromStudents = (item) => {
+    const label = `${item.chapter_title} · ${CONTENT_TYPE_LABELS[item.content_type] || item.content_type} · ${item.language.toUpperCase()}`;
+    askConfirm(
+      `Remove ${label} from students?`,
+      "This only removes this item from the student portal — the draft stays fully untouched in Manual Content / Generate with AI.",
+      async () => {
+        try {
+          const { data } = await api.post(`/packs/${reviewPack.id}/unpublish-item`, {
+            chapter_id: item.chapter_id,
+            content_type: item.content_type,
+            language: item.language,
+          });
+          toast.success(data.removed ? `${label} removed from the student portal` : `${label} wasn't live for students`);
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || "Failed");
+        }
+      },
+      "Remove"
+    );
+  };
+
   const publishSelection = async () => {
     if (!reviewPack || selectedDraftIds.length === 0) return;
     setPublishingSelection(true);
@@ -326,9 +351,18 @@ const Packs = () => {
                           {d.items.map((it, i) => (
                             <span
                               key={i}
-                              className="text-[10px] uppercase tracking-wide text-white/60 bg-white/5 border border-white/10 rounded-full px-2 py-0.5"
+                              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-white/60 bg-white/5 border border-white/10 rounded-full pl-2 pr-1 py-0.5"
                             >
                               {it.chapter_title} · {CONTENT_TYPE_LABELS[it.content_type] || it.content_type} · {it.language.toUpperCase()}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); removeItemFromStudents(it); }}
+                                className="text-white/30 hover:text-red-400 transition-colors"
+                                title="Remove this item from students"
+                                data-testid={`review-draft-${d.id}-item-${i}-remove`}
+                              >
+                                <X size={10} />
+                              </button>
                             </span>
                           ))}
                         </div>
