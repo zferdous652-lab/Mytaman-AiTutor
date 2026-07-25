@@ -1,7 +1,55 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
+
+const CHART_ACCENT = "#00f0ff";
+const CHART_TRACK = "rgba(255,255,255,0.06)";
+const CHART_ROW_H = 34;
+
+const ChartTooltip = ({ active, payload, suffix = "" }) => {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#120a1f] px-3 py-1.5 text-xs shadow-xl">
+      <div className="text-white/70">{p.name}</div>
+      <div className="text-white font-medium">{p.value}{suffix}</div>
+    </div>
+  );
+};
+
+// Horizontal bar chart card -- one metric per category (pack or student), so a single
+// accent hue is correct (see dataviz skill: sequential = one hue, no legend needed for a
+// single series). Bars are capped at 16px thick with a rounded data-end.
+const BarChartCard = ({ title, data, suffix = "", emptyLabel }) => (
+  <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6">
+    <div className="overline text-white/50 mb-3">{title}</div>
+    {data.length === 0 ? (
+      <div className="text-sm text-white/40 py-8 text-center">{emptyLabel}</div>
+    ) : (
+      <ResponsiveContainer width="100%" height={Math.max(CHART_ROW_H * data.length, CHART_ROW_H * 2)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 28, bottom: 0, left: 0 }} barCategoryGap={8}>
+          <CartesianGrid horizontal={false} stroke={CHART_TRACK} />
+          <XAxis type="number" hide domain={[0, suffix === "%" ? 100 : "dataMax"]} />
+          <YAxis
+            type="category"
+            dataKey="name"
+            width={110}
+            tickLine={false}
+            axisLine={false}
+            tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 11 }}
+            tickFormatter={(v) => (v.length > 16 ? `${v.slice(0, 15)}…` : v)}
+          />
+          <Tooltip content={<ChartTooltip suffix={suffix} />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+          <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16} label={{ position: "right", fill: "rgba(255,255,255,0.6)", fontSize: 11, formatter: (v) => `${v}${suffix}` }}>
+            {data.map((_, i) => <Cell key={i} fill={CHART_ACCENT} />)}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    )}
+  </div>
+);
 
 const fmtDate = (iso) => {
   if (!iso) return "—";
@@ -90,6 +138,34 @@ const Students = () => {
     return roster.filter((s) => s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q));
   }, [roster, query]);
 
+  // Derived chart data -- computed client-side from the roster already fetched, no extra
+  // network round trip. All three are single-metric-per-category, so each chart uses one
+  // accent hue with no legend, per the dataviz "sequential = one hue" rule.
+  const enrollmentByPack = useMemo(() => {
+    const counts = new Map();
+    roster.forEach((s) => s.packs.forEach((p) => counts.set(p.pack_title, (counts.get(p.pack_title) || 0) + 1)));
+    return [...counts.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [roster]);
+
+  const completionByStudent = useMemo(
+    () => [...roster].sort((a, b) => b.overall_completion_pct - a.overall_completion_pct).map((s) => ({ name: s.name, value: s.overall_completion_pct })),
+    [roster]
+  );
+
+  const quizAvgByPack = useMemo(() => {
+    const sums = new Map();
+    roster.forEach((s) =>
+      s.packs.forEach((p) => {
+        if (p.quiz_avg_pct === null || p.quiz_avg_pct === undefined) return;
+        const cur = sums.get(p.pack_title) || { total: 0, count: 0 };
+        cur.total += p.quiz_avg_pct;
+        cur.count += 1;
+        sums.set(p.pack_title, cur);
+      })
+    );
+    return [...sums.entries()].map(([name, { total, count }]) => ({ name, value: Math.round(total / count) })).sort((a, b) => b.value - a.value);
+  }, [roster]);
+
   return (
     <div className="p-8 lg:p-12">
       <div className="overline text-[#00f0ff]">{t("students_label")}</div>
@@ -109,6 +185,14 @@ const Students = () => {
           <div className="font-display text-4xl text-white mt-2 tracking-tighter">{stats.packs ?? "—"}</div>
         </div>
       </div>
+
+      {!loading && roster.length > 0 && (
+        <div className="mt-4 grid md:grid-cols-3 gap-4" data-testid="students-charts">
+          <BarChartCard title="Enrollment by Tutor Pack" data={enrollmentByPack} emptyLabel="No enrollments yet." />
+          <BarChartCard title="Completion by student" data={completionByStudent} suffix="%" emptyLabel="No completion data yet." />
+          <BarChartCard title="Quiz average by Tutor Pack" data={quizAvgByPack} suffix="%" emptyLabel="No quiz attempts yet." />
+        </div>
+      )}
 
       <div className="mt-10 flex items-center justify-between gap-4">
         <div className="overline text-[#00f0ff]">Roster</div>
