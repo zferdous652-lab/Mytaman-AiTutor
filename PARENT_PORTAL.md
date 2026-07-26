@@ -4,6 +4,34 @@ This branch (`phase6/parent_module`) is dedicated to building a real Parent port
 Everything below reflects what was actually observed in the codebase as of this
 branch's creation — not aspirational spec, the real current gap.
 
+## Status: implemented
+
+The open questions below were resolved as follows (no user sign-off obtained before
+building — flagged here so the decisions can be revisited):
+
+1. **Linking**: parent creates the child account directly from the parent portal
+   (`POST /parents/children`), which sets `parent_id` on the new student's user doc.
+   No separate child self-signup path for a linked child.
+2. **One child or many**: data model supports many (`parent_id` on the student doc,
+   queried per parent), and the frontend has a child switcher that only renders when
+   a parent has more than one child — but the only way to add a child today is the
+   create-child flow above, so in practice it's usually one.
+3. **Enrollment**: parent-initiated, via `POST /parents/children/{student_id}/enroll`.
+4. **Student without a parent**: untouched — `/auth/register` still lets a student
+   self-register with no `parent_id` at all.
+
+Backend: `backend/parents.py` (new router) — `POST/GET /parents/children`,
+`GET /parents/children/{student_id}/packs` (real completed/total/percent + quiz
+average per pack, reusing `progress`/`quiz_results` the same way `content.py`'s
+`/content/progress` does), `POST /parents/children/{student_id}/enroll`. Every
+child-scoped route re-verifies `parent_id` server-side before touching that
+student's data.
+
+Frontend: `frontend/src/pages/parent/Parent.jsx` rebuilt — real per-pack progress
+bars (no more hardcoded 25%), an "Add a child" form when the parent has none yet,
+a child switcher for multi-child parents, and `ParentPacks` now enrolls the
+selected child instead of the parent's own account.
+
 ## Current state (what exists today)
 
 `frontend/src/pages/parent/Parent.jsx` is a placeholder, not a real parent
