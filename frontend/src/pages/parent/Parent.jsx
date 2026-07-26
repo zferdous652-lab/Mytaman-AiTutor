@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
@@ -69,16 +69,27 @@ const AddChildForm = ({ onAdded }) => {
   );
 };
 
+// Persisted across ParentHome/ParentPacks (each mounts its own useChildren instance),
+// so picking a child on one page doesn't silently reset back to children[0] on the other.
+const SELECTED_CHILD_KEY = "mytaman_parent_selected_child";
+
 const useChildren = () => {
   const [children, setChildren] = useState(null);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedIdState] = useState(() => localStorage.getItem(SELECTED_CHILD_KEY));
 
-  const load = async () => {
+  const setSelectedId = useCallback((id) => {
+    setSelectedIdState(id);
+    if (id) localStorage.setItem(SELECTED_CHILD_KEY, id);
+    else localStorage.removeItem(SELECTED_CHILD_KEY);
+  }, []);
+
+  const load = useCallback(async () => {
     const { data } = await api.get("/parents/children");
     setChildren(data);
-    setSelectedId((cur) => (cur && data.some((c) => c.id === cur)) ? cur : data[0]?.id ?? null);
-  };
-  useEffect(() => { load(); }, []);
+    const cur = localStorage.getItem(SELECTED_CHILD_KEY);
+    setSelectedId((cur && data.some((c) => c.id === cur)) ? cur : data[0]?.id ?? null);
+  }, [setSelectedId]);
+  useEffect(() => { load(); }, [load]);
 
   return { children, selectedId, setSelectedId, reload: load };
 };
@@ -98,6 +109,91 @@ const ChildSwitcher = ({ children, selectedId, onSelect }) => {
           {c.name}
         </button>
       ))}
+    </div>
+  );
+};
+
+const RemoveChildModal = ({ child, onCancel, onConfirm }) => {
+  const [removing, setRemoving] = useState(false);
+  const confirm = async () => {
+    setRemoving(true);
+    try {
+      await onConfirm();
+    } finally {
+      setRemoving(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onCancel} data-testid="remove-child-modal">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#120a1f] p-6"
+      >
+        <div className="font-display text-lg text-white tracking-tight">Remove {child.name}?</div>
+        <p className="mt-2 text-sm text-white/60">
+          This removes {child.name} from your parent portal. Their account, enrollments, and progress are kept —
+          they just won't appear here anymore.
+        </p>
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            data-testid="remove-child-cancel"
+            className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/70 hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={confirm}
+            disabled={removing}
+            data-testid="remove-child-confirm"
+            className="rounded-full bg-[#ff0055] px-4 py-2 text-sm font-semibold text-white hover:bg-[#ff3377] transition-colors disabled:opacity-50"
+          >
+            {removing ? "Removing…" : "Remove"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ManageChildren = ({ children, onRemoved }) => {
+  const [target, setTarget] = useState(null);
+
+  const remove = async () => {
+    await api.delete(`/parents/children/${target.id}`);
+    toast.success(`${target.name} removed`);
+    setTarget(null);
+    onRemoved();
+  };
+
+  return (
+    <div className="mt-10">
+      <div className="overline text-white/40 mb-3">Manage children</div>
+      <div className="space-y-2" data-testid="manage-children-list">
+        {children.map((c) => (
+          <div
+            key={c.id}
+            className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.02] px-4 py-2.5"
+            data-testid={`manage-child-${c.id}`}
+          >
+            <div className="min-w-0">
+              <div className="text-sm text-white truncate">{c.name}</div>
+              <div className="text-xs text-white/40 truncate">{c.email}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTarget(c)}
+              data-testid={`remove-child-${c.id}`}
+              className="shrink-0 text-xs text-[#ff0055]/80 hover:text-[#ff0055] transition-colors"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+      {target && <RemoveChildModal child={target} onCancel={() => setTarget(null)} onConfirm={remove} />}
     </div>
   );
 };
@@ -168,6 +264,8 @@ const ParentHome = () => {
           ))}
         </div>
       )}
+
+      <ManageChildren children={children} onRemoved={reload} />
     </div>
   );
 };

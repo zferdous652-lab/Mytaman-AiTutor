@@ -32,6 +32,36 @@ bars (no more hardcoded 25%), an "Add a child" form when the parent has none yet
 a child switcher for multi-child parents, and `ParentPacks` now enrolls the
 selected child instead of the parent's own account.
 
+### Follow-up round (after merge to main)
+
+- **`DELETE /parents/children/{student_id}`**: unlinks a child (unsets `parent_id`
+  on the student doc rather than deleting the account, so enrollments/progress
+  survive an accidental click). No re-link flow exists yet if a parent wants the
+  child back — that's a real gap, see below.
+- **Fixed a real bug**: `ParentHome` and `ParentPacks` each ran their own
+  `useChildren()` and independently defaulted to `children[0]`, so picking a
+  non-default child on Overview silently reset back to the first child on Tutor
+  Packs. Selection is now persisted in `localStorage` and shared across both pages.
+- **"Manage children"** list added to `ParentHome` with the remove action above.
+
+### Known gaps still open (not implemented)
+
+- **No re-link flow**: once a child is removed, there's no UI/endpoint to link them
+  back to a parent (or to a different one) — the account just becomes an ordinary
+  unlinked student.
+- **One parent per child, still**: `parent_id` is a single field, so the two-guardian
+  case from decision 2 above is still unsupported. Would need the
+  `parent_child_links` collection this doc originally proposed.
+- **No content-type breakdown for a child**: `GET /parents/children/{id}/packs` is
+  pack-level only (completed/total/percent/quiz average), matching what
+  `/students/roster` already exposes to admins — neither has a per-content-type
+  (summary vs quiz vs flashcard) view.
+- **No view of a child's actual submitted answers** — quiz_results only stores
+  score/total per attempt, not per-question answers, so there's nothing to surface
+  even if a UI were built for it.
+- **No admin↔parent or parent↔student messaging/notifications** anywhere in the app.
+- **No cap or rate limit** on how many children a parent can create.
+
 ## Current state (what exists today)
 
 `frontend/src/pages/parent/Parent.jsx` is a placeholder, not a real parent

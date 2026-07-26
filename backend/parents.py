@@ -129,6 +129,17 @@ async def child_packs(student_id: str, parent: dict = Depends(require_role("pare
     return out
 
 
+@router.delete("/children/{student_id}")
+async def remove_child(student_id: str, parent: dict = Depends(require_role("parent"))):
+    """Unlinks a child from this parent -- unsets parent_id rather than deleting the
+    student account, so the child's enrollments/progress aren't destroyed by an
+    accidental click. The account becomes an ordinary unlinked student until re-linked
+    (there's no re-link flow yet -- see PARENT_PORTAL.md)."""
+    await _require_child(parent["id"], student_id)
+    await db.users.update_one({"id": student_id}, {"$unset": {"parent_id": ""}})
+    return {"ok": True}
+
+
 class EnrollChildIn(BaseModel):
     pack_id: str
 
