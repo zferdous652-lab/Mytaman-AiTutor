@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
@@ -54,6 +55,7 @@ const StudentHome = () => {
 
 const StudentBrowse = () => {
   const { t } = useLang();
+  const navigate = useNavigate();
   const [packs, setPacks] = useState([]);
   const [enrolled, setEnrolled] = useState(new Set());
   const [coursesByPack, setCoursesByPack] = useState({});
@@ -73,7 +75,7 @@ const StudentBrowse = () => {
   const enroll = async (id) => {
     await api.post("/packs/enroll", { pack_id: id });
     toast.success("Enrolled");
-    load();
+    navigate("/student");
   };
 
   return (
@@ -106,10 +108,12 @@ const StudentBrowse = () => {
 
               <button
                 data-testid={`enroll-${p.id}`}
-                disabled={enrolled.has(p.id)}
-                onClick={() => enroll(p.id)}
+                onClick={() => (enrolled.has(p.id) ? navigate("/student") : enroll(p.id))}
+                title={enrolled.has(p.id) ? "Go to My Tutor Packs" : undefined}
                 className={`mt-4 w-full rounded-full py-2 text-sm font-semibold transition-colors ${
-                  enrolled.has(p.id) ? "border border-white/10 text-white/50" : "bg-[#00f0ff] text-black hover:bg-white"
+                  enrolled.has(p.id)
+                    ? "border border-white/10 text-white/70 hover:border-[#00f0ff]/40 hover:text-[#00f0ff]"
+                    : "bg-[#00f0ff] text-black hover:bg-white"
                 }`}
               >
                 {enrolled.has(p.id) ? t("enrolled") : t("enroll")}
