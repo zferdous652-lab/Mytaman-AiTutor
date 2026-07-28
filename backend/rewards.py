@@ -185,10 +185,16 @@ async def open_chest(chest_id: str, user: dict = Depends(get_current_user)):
         return {"already_opened": True, "amount": chest["amount"]}
     amounts, weights = zip(*CHEST_AMOUNTS)
     amount = random.choices(amounts, weights=weights, k=1)[0]
-    await db.xp_chests.update_one(
-        {"id": chest_id},
+    # Guard the pending->opened transition with a filter on the current status so two
+    # concurrent opens can't both roll a value and stomp each other's amount on the chest
+    # doc -- only the request that actually flips it gets to award XP for its roll.
+    result = await db.xp_chests.update_one(
+        {"id": chest_id, "status": "pending"},
         {"$set": {"status": "opened", "amount": amount, "opened_at": datetime.now(timezone.utc).isoformat()}},
     )
+    if result.modified_count == 0:
+        refreshed = await db.xp_chests.find_one({"id": chest_id, "user_id": user["id"]})
+        return {"already_opened": True, "amount": refreshed["amount"]}
     awarded = await _award_xp(user["id"], chest.get("pack_id"), f"chest:{chest_id}", "chest", amount, "Mystery chest")
     return {"already_opened": False, "amount": awarded}
 

@@ -24,7 +24,7 @@ const ProgressList = ({ items }) => (
   </div>
 );
 
-const RewardsPanel = () => {
+const RewardsPanel = ({ onXpChanged }) => {
   const [missions, setMissions] = useState([]);
   const [challenges, setChallenges] = useState([]);
   const [chests, setChests] = useState([]);
@@ -45,10 +45,14 @@ const RewardsPanel = () => {
     setChests(ch.data);
     setSpinStatus(sp.data);
     setSeason(se.data);
+    // Missions/challenges auto-claim server-side on this same GET, and level-up chests may
+    // have just been granted too -- keep the dashboard's level/streak cards in sync.
+    onXpChanged?.();
   };
 
   useEffect(() => {
     loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openChest = async (chestId) => {

@@ -37,13 +37,15 @@ const StudentDashboard = () => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const refresh = async () => {
+    const [me, hist] = await Promise.all([api.get("/xp/me"), api.get("/xp/history")]);
+    setSummary(me.data);
+    setHistory(hist.data);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    (async () => {
-      const [me, hist] = await Promise.all([api.get("/xp/me"), api.get("/xp/history")]);
-      setSummary(me.data);
-      setHistory(hist.data);
-      setLoading(false);
-    })();
+    refresh();
   }, []);
 
   if (loading) {
@@ -152,7 +154,7 @@ const StudentDashboard = () => {
         </div>
       </div>
 
-      <RewardsPanel />
+      <RewardsPanel onXpChanged={refresh} />
     </div>
   );
 };
