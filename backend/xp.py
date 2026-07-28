@@ -1,11 +1,16 @@
-"""XP / leveling system -- Phase 1 (core loop): lesson + quiz XP, anti-farming, level
-progression, and endpoints for the student dashboard. Daily goals, streaks, and the
-motivation features (mystery chest, missions, season pass, etc.) are deliberately out of
-scope here -- they need new stateful concepts (a daily-goal target, streak tracking) and
-product decisions (reward contents) that this phase doesn't make.
+"""XP / leveling system.
+
+Phase 1 (core loop): lesson + quiz XP, anti-farming, level progression, and endpoints for
+the student dashboard.
+
+Phase 2 (this addition): a daily goal, streak tracking off that goal, and a weekly
+consistency bonus. The remaining motivation features (daily rewards calendar, mystery
+chest, weekly missions, monthly challenges, XP multiplier weekends, lucky spin, season
+pass) are still out of scope -- those need new stateful concepts and reward-content
+product decisions this phase doesn't make.
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, date
 
 from fastapi import APIRouter, Depends
 
@@ -19,6 +24,17 @@ QUIZ_XP = 30
 FIRST_LESSON_OF_DAY_BONUS = 8
 PERFECT_QUIZ_BONUS = 15
 QUIZ_PASS_THRESHOLD = 0.8  # quiz XP only pays out at >=80%
+
+# Daily goal / streak: a day "counts" once the student has earned this much XP that day --
+# roughly one completed lesson. Streak is derived from xp_events on read, not stored, so
+# there's no separate state to keep in sync.
+DAILY_GOAL_XP = 20
+STREAK_LOOKBACK_DAYS = 60
+
+# Weekly consistency bonus: hit the daily goal on this many days within the current
+# Mon-Sun week and get a one-time bonus for that week.
+WEEKLY_CONSISTENCY_DAYS = 5
+WEEKLY_CONSISTENCY_BONUS = 50
 
 # Tiered growth: XP needed for level L (from L-1) = rate(L) * L, rate stepping up per tier.
 # Matches the spec's Level 1-50 table exactly; the same top-tier rate (150) continues past
@@ -89,13 +105,69 @@ async def _award_xp(user_id: str, pack_id: str, key: str, kind: str, amount: int
     return amount
 
 
+def _iso_week_key(d: date) -> str:
+    year, week, _ = d.isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+async def _daily_xp_totals(user_id: str, start_date: date, end_date: date) -> dict:
+    """Sum of amount per calendar day (UTC), for days in [start_date, end_date]."""
+    start_iso = start_date.isoformat()
+    end_iso = (end_date + timedelta(days=1)).isoformat()
+    docs = await db.xp_events.aggregate([
+        {"$match": {"user_id": user_id, "created_at": {"$gte": start_iso, "$lt": end_iso}}},
+        {"$group": {"_id": {"$substrCP": ["$created_at", 0, 10]}, "total": {"$sum": "$amount"}}},
+    ]).to_list(STREAK_LOOKBACK_DAYS + 7)
+    return {d["_id"]: d["total"] for d in docs}
+
+
+async def _maybe_award_weekly_consistency_bonus(user_id: str, pack_id: str) -> int:
+    today = datetime.now(timezone.utc).date()
+    week_start = today - timedelta(days=today.weekday())  # Monday
+    totals = await _daily_xp_totals(user_id, week_start, today)
+    days_met = sum(
+        1 for i in range((today - week_start).days + 1)
+        if totals.get((week_start + timedelta(days=i)).isoformat(), 0) >= DAILY_GOAL_XP
+    )
+    if days_met < WEEKLY_CONSISTENCY_DAYS:
+        return 0
+    return await _award_xp(
+        user_id, pack_id, _iso_week_key(today), "weekly_consistency", WEEKLY_CONSISTENCY_BONUS, "Weekly consistency bonus"
+    )
+
+
+async def compute_streak(user_id: str) -> dict:
+    today = datetime.now(timezone.utc).date()
+    start = today - timedelta(days=STREAK_LOOKBACK_DAYS)
+    totals = await _daily_xp_totals(user_id, start, today)
+
+    def met(d: date) -> bool:
+        return totals.get(d.isoformat(), 0) >= DAILY_GOAL_XP
+
+    today_met = met(today)
+    cursor = today if today_met else today - timedelta(days=1)
+    streak = 0
+    while met(cursor):
+        streak += 1
+        cursor -= timedelta(days=1)
+
+    return {
+        "current_streak": streak,
+        "today_goal_met": today_met,
+        "today_xp": totals.get(today.isoformat(), 0),
+        "daily_goal_xp": DAILY_GOAL_XP,
+    }
+
+
 async def award_lesson_xp(user_id: str, pack_id: str, content_id: str, title: str) -> dict:
     awarded = await _award_xp(user_id, pack_id, content_id, "lesson", LESSON_XP, f"Lesson completed: {title}")
     bonus = 0
+    weekly_bonus = 0
     if awarded:
         today = datetime.now(timezone.utc).date().isoformat()
         bonus = await _award_xp(user_id, pack_id, today, "lesson_first_of_day", FIRST_LESSON_OF_DAY_BONUS, "First lesson of the day")
-    return {"xp_awarded": awarded + bonus}
+        weekly_bonus = await _maybe_award_weekly_consistency_bonus(user_id, pack_id)
+    return {"xp_awarded": awarded + bonus + weekly_bonus}
 
 
 async def award_quiz_xp(user_id: str, pack_id: str, content_id: str, title: str, score: int, total: int, is_first_attempt: bool) -> dict:
@@ -105,9 +177,12 @@ async def award_quiz_xp(user_id: str, pack_id: str, content_id: str, title: str,
         return {"xp_awarded": 0}
     awarded = await _award_xp(user_id, pack_id, content_id, "quiz", QUIZ_XP, f"Quiz completed: {title}")
     bonus = 0
-    if awarded and score == total:
-        bonus = await _award_xp(user_id, pack_id, content_id, "quiz_perfect", PERFECT_QUIZ_BONUS, f"Perfect quiz bonus: {title}")
-    return {"xp_awarded": awarded + bonus}
+    weekly_bonus = 0
+    if awarded:
+        if score == total:
+            bonus = await _award_xp(user_id, pack_id, content_id, "quiz_perfect", PERFECT_QUIZ_BONUS, f"Perfect quiz bonus: {title}")
+        weekly_bonus = await _maybe_award_weekly_consistency_bonus(user_id, pack_id)
+    return {"xp_awarded": awarded + bonus + weekly_bonus}
 
 
 @router.get("/me")
@@ -117,7 +192,7 @@ async def my_xp(user: dict = Depends(get_current_user)):
         {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
     ]).to_list(1)
     total_xp = agg[0]["total"] if agg else 0
-    return level_from_xp(total_xp)
+    return {**level_from_xp(total_xp), **(await compute_streak(user["id"]))}
 
 
 @router.get("/history")

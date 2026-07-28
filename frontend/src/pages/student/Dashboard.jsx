@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sparkles, Trophy } from "lucide-react";
+import { Sparkles, Trophy, Flame, Target } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -8,6 +8,7 @@ const KIND_LABELS = {
   lesson_first_of_day: "First lesson of the day",
   quiz: "Quiz completed",
   quiz_perfect: "Perfect quiz bonus",
+  weekly_consistency: "Weekly consistency bonus",
 };
 
 const formatWhen = (iso) => {
@@ -49,7 +50,7 @@ const StudentDashboard = () => {
       <div className="overline text-[#00f0ff]">{t("dashboard") || "Dashboard"}</div>
       <h1 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mt-2 mb-8">My progress</h1>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-4 gap-6">
         <div className="lg:col-span-1 rounded-2xl border border-[#00f0ff]/20 bg-gradient-to-br from-[#120a1f] to-[#0a0514] p-6" data-testid="xp-summary-card">
           <div className="flex items-center gap-3">
             <div className="h-14 w-14 rounded-2xl bg-[#00f0ff]/10 border border-[#00f0ff]/30 grid place-items-center">
@@ -73,6 +74,41 @@ const StudentDashboard = () => {
 
           <div className="mt-4 text-sm text-white/60" data-testid="xp-total">
             <span className="text-white font-semibold">{summary.total_xp}</span> total XP earned
+          </div>
+        </div>
+
+        <div className="lg:col-span-1 rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6" data-testid="xp-streak-card">
+          <div className="flex items-center gap-3">
+            <div className="h-14 w-14 rounded-2xl bg-[#ff8a00]/10 border border-[#ff8a00]/30 grid place-items-center">
+              <Flame size={24} className="text-[#ff8a00]" />
+            </div>
+            <div>
+              <div className="text-xs text-white/50 uppercase tracking-widest">Streak</div>
+              <div className="font-display text-3xl text-white" data-testid="xp-streak-days">
+                {summary.current_streak} {summary.current_streak === 1 ? "day" : "days"}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <div className="flex items-center gap-2 text-xs text-white/50 mb-1.5">
+              <Target size={12} />
+              <span>
+                Today: {summary.today_xp}/{summary.daily_goal_xp} XP
+              </span>
+            </div>
+            <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all ${summary.today_goal_met ? "bg-[#2ecc71]" : "bg-[#ff8a00]"}`}
+                style={{ width: `${Math.min(100, Math.round((summary.today_xp / summary.daily_goal_xp) * 100))}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 text-sm text-white/60">
+            {summary.today_goal_met
+              ? "Daily goal met — keep the streak going!"
+              : "Complete a lesson or quiz today to keep your streak."}
           </div>
         </div>
 
