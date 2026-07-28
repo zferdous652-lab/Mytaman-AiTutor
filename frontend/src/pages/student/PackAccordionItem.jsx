@@ -96,6 +96,9 @@ const PackAccordionItem = ({ pack, expanded, onToggle }) => {
       const map = {};
       coursesRes.data.forEach((c, i) => { map[c.id] = chapterLists[i].data; });
       setChaptersByCourse(map);
+      // A single-course pack opens with that course already expanded (its chapter rows
+      // stay collapsed until tapped); multi-course packs keep the accordion fully closed.
+      if (coursesRes.data.length === 1) setOpenCourseId(coursesRes.data[0].id);
       setLoaded(true);
     })();
   }, [expanded, loaded, pack.id]);
