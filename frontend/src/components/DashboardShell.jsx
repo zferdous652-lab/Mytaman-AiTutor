@@ -9,6 +9,7 @@ import {
   Users,
   LogOut,
   BookOpen,
+  Trophy,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
@@ -26,6 +27,7 @@ const items = {
   student: (t) => [
     { to: "/student", label: t("my_packs"), icon: BookOpen, end: true, id: "my-packs" },
     { to: "/student/browse", label: t("browse_packs"), icon: Package, id: "browse" },
+    { to: "/student/dashboard", label: t("dashboard") || "Dashboard", icon: Trophy, id: "dashboard" },
   ],
   parent: (t) => [
     { to: "/parent", label: t("overview"), icon: LayoutDashboard, end: true, id: "overview" },
