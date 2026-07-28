@@ -3,11 +3,13 @@
 Phase 1 (core loop): lesson + quiz XP, anti-farming, level progression, and endpoints for
 the student dashboard.
 
-Phase 2 (this addition): a daily goal, streak tracking off that goal, and a weekly
-consistency bonus. The remaining motivation features (daily rewards calendar, mystery
-chest, weekly missions, monthly challenges, XP multiplier weekends, lucky spin, season
-pass) are still out of scope -- those need new stateful concepts and reward-content
-product decisions this phase doesn't make.
+Phase 2: a daily goal, streak tracking off that goal, and a weekly consistency bonus.
+
+Phase 3 (see rewards.py for the rest): this module now also applies the weekend XP
+multiplier to the base lesson/quiz awards. The remaining motivation features (daily
+rewards calendar, mystery chest, weekly missions, monthly challenges, lucky spin, season
+pass) live in rewards.py to avoid a circular import -- they build on _award_xp and
+level_from_xp from here, and content.py calls both modules after each XP-earning action.
 """
 import uuid
 from datetime import datetime, timezone, timedelta, date
@@ -35,6 +37,13 @@ STREAK_LOOKBACK_DAYS = 60
 # Mon-Sun week and get a one-time bonus for that week.
 WEEKLY_CONSISTENCY_DAYS = 5
 WEEKLY_CONSISTENCY_BONUS = 50
+
+# XP multiplier weekend: base lesson/quiz XP (not the bonuses) pays out extra on Sat/Sun UTC.
+WEEKEND_XP_MULTIPLIER = 1.5
+
+
+def _current_xp_multiplier() -> float:
+    return WEEKEND_XP_MULTIPLIER if datetime.now(timezone.utc).weekday() >= 5 else 1.0
 
 # Tiered growth: XP needed for level L (from L-1) = rate(L) * L, rate stepping up per tier.
 # Matches the spec's Level 1-50 table exactly; the same top-tier rate (150) continues past
@@ -160,7 +169,8 @@ async def compute_streak(user_id: str) -> dict:
 
 
 async def award_lesson_xp(user_id: str, pack_id: str, content_id: str, title: str) -> dict:
-    awarded = await _award_xp(user_id, pack_id, content_id, "lesson", LESSON_XP, f"Lesson completed: {title}")
+    base_amount = round(LESSON_XP * _current_xp_multiplier())
+    awarded = await _award_xp(user_id, pack_id, content_id, "lesson", base_amount, f"Lesson completed: {title}")
     bonus = 0
     weekly_bonus = 0
     if awarded:
@@ -175,7 +185,8 @@ async def award_quiz_xp(user_id: str, pack_id: str, content_id: str, title: str,
     # quiz can earn XP at all. Retakes are for learning, not for re-earning the reward.
     if not is_first_attempt or total == 0 or (score / total) < QUIZ_PASS_THRESHOLD:
         return {"xp_awarded": 0}
-    awarded = await _award_xp(user_id, pack_id, content_id, "quiz", QUIZ_XP, f"Quiz completed: {title}")
+    base_amount = round(QUIZ_XP * _current_xp_multiplier())
+    awarded = await _award_xp(user_id, pack_id, content_id, "quiz", base_amount, f"Quiz completed: {title}")
     bonus = 0
     weekly_bonus = 0
     if awarded:
@@ -192,7 +203,11 @@ async def my_xp(user: dict = Depends(get_current_user)):
         {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
     ]).to_list(1)
     total_xp = agg[0]["total"] if agg else 0
-    return {**level_from_xp(total_xp), **(await compute_streak(user["id"]))}
+    return {
+        **level_from_xp(total_xp),
+        **(await compute_streak(user["id"])),
+        "weekend_multiplier_active": _current_xp_multiplier() > 1.0,
+    }
 
 
 @router.get("/history")

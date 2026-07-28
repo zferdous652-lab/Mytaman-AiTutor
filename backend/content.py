@@ -16,6 +16,7 @@ from db import db
 from auth import require_role, get_current_user
 from model_router import call_router
 from xp import award_lesson_xp, award_quiz_xp
+from rewards import on_xp_earned
 
 router = APIRouter(prefix="/content", tags=["content"])
 
@@ -788,7 +789,8 @@ async def mark_complete(content_id: str, user: dict = Depends(get_current_user))
         upsert=True,
     )
     xp_result = await award_lesson_xp(user["id"], content["pack_id"], content_id, content.get("title") or "Lesson")
-    return {"ok": True, **xp_result}
+    bonus_result = await on_xp_earned(user["id"], content["pack_id"])
+    return {"ok": True, "xp_awarded": xp_result["xp_awarded"] + bonus_result["xp_awarded"]}
 
 
 @router.delete("/{content_id}/complete")
@@ -900,7 +902,8 @@ async def submit_quiz_result(content_id: str, payload: QuizResultIn, user: dict 
     xp_result = await award_quiz_xp(
         user["id"], content["pack_id"], content_id, content.get("title") or "Quiz", payload.score, payload.total, is_first_attempt
     )
-    return {"ok": True, **xp_result}
+    bonus_result = await on_xp_earned(user["id"], content["pack_id"])
+    return {"ok": True, "xp_awarded": xp_result["xp_awarded"] + bonus_result["xp_awarded"]}
 
 
 @router.get("/progress")

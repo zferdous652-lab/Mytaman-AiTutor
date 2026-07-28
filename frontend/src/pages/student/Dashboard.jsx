@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Sparkles, Trophy, Flame, Target } from "lucide-react";
+import { Sparkles, Trophy, Flame, Target, Zap } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
+import RewardsPanel from "./RewardsPanel";
 
 const KIND_LABELS = {
   lesson: "Lesson completed",
@@ -9,6 +10,12 @@ const KIND_LABELS = {
   quiz: "Quiz completed",
   quiz_perfect: "Perfect quiz bonus",
   weekly_consistency: "Weekly consistency bonus",
+  daily_reward: "Daily reward",
+  chest: "Mystery chest",
+  lucky_spin: "Lucky spin",
+  weekly_mission: "Weekly mission",
+  monthly_challenge: "Monthly challenge",
+  season_reward: "Season pass reward",
 };
 
 const formatWhen = (iso) => {
@@ -48,7 +55,14 @@ const StudentDashboard = () => {
   return (
     <div className="p-8 lg:p-12">
       <div className="overline text-[#00f0ff]">{t("dashboard") || "Dashboard"}</div>
-      <h1 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mt-2 mb-8">My progress</h1>
+      <h1 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mt-2 mb-6">My progress</h1>
+
+      {summary.weekend_multiplier_active && (
+        <div className="flex items-center gap-2 rounded-xl border border-[#ff8a00]/30 bg-[#ff8a00]/10 px-4 py-2.5 text-sm text-[#ff8a00] mb-6" data-testid="weekend-multiplier-banner">
+          <Zap size={14} />
+          XP weekend is live — lessons and quizzes pay 1.5x XP!
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-4 gap-6">
         <div className="lg:col-span-1 rounded-2xl border border-[#00f0ff]/20 bg-gradient-to-br from-[#120a1f] to-[#0a0514] p-6" data-testid="xp-summary-card">
@@ -137,6 +151,8 @@ const StudentDashboard = () => {
           </div>
         </div>
       </div>
+
+      <RewardsPanel />
     </div>
   );
 };
