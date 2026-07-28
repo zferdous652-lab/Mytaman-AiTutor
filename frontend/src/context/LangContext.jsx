@@ -75,6 +75,7 @@ const dict = {
     // student
     my_packs: "My Tutor Packs",
     browse_packs: "Browse packs",
+    dashboard: "Dashboard",
     enroll: "Enroll",
     enrolled: "Enrolled",
   },
@@ -144,6 +145,7 @@ const dict = {
     system_prompts: "Prompt sistem",
     my_packs: "Pek Tutor Saya",
     browse_packs: "Semak imbas pek",
+    dashboard: "Papan Pemuka",
     enroll: "Daftar",
     enrolled: "Didaftarkan",
   },

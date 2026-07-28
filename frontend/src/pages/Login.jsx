@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
 
-const roleDest = { admin: "/admin", parent: "/parent", student: "/student/browse" };
+const roleDest = { admin: "/admin", parent: "/parent", student: "/student/dashboard" };
 
 const Login = () => {
   const { login } = useAuth();
