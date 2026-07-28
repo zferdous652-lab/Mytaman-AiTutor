@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, ValidationError
 from db import db
 from auth import require_role, get_current_user
 from model_router import call_router
+from xp import award_lesson_xp, award_quiz_xp
 
 router = APIRouter(prefix="/content", tags=["content"])
 
@@ -786,7 +787,8 @@ async def mark_complete(content_id: str, user: dict = Depends(get_current_user))
         }},
         upsert=True,
     )
-    return {"ok": True}
+    xp_result = await award_lesson_xp(user["id"], content["pack_id"], content_id, content.get("title") or "Lesson")
+    return {"ok": True, **xp_result}
 
 
 @router.delete("/{content_id}/complete")
@@ -866,6 +868,8 @@ async def submit_quiz_result(content_id: str, payload: QuizResultIn, user: dict 
         raise HTTPException(status_code=404, detail="Not found")
     if content["content_type"] != "quiz":
         raise HTTPException(status_code=400, detail="Not a quiz")
+    existing = await db.quiz_results.find_one({"user_id": user["id"], "content_id": content_id}, {"_id": 0, "attempts": 1})
+    is_first_attempt = existing is None
     now = datetime.now(timezone.utc).isoformat()
     await db.quiz_results.update_one(
         {"user_id": user["id"], "content_id": content_id},
@@ -893,7 +897,10 @@ async def submit_quiz_result(content_id: str, payload: QuizResultIn, user: dict 
         }},
         upsert=True,
     )
-    return {"ok": True}
+    xp_result = await award_quiz_xp(
+        user["id"], content["pack_id"], content_id, content.get("title") or "Quiz", payload.score, payload.total, is_first_attempt
+    )
+    return {"ok": True, **xp_result}
 
 
 @router.get("/progress")

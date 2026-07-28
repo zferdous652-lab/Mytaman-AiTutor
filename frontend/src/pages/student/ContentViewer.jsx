@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import QuizViewer from "./viewers/QuizViewer";
 import FlashcardsViewer from "./viewers/FlashcardsViewer";
@@ -18,7 +19,8 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQui
 
   const markComplete = async () => {
     try {
-      await api.post(`/content/${content.id}/complete`);
+      const { data } = await api.post(`/content/${content.id}/complete`);
+      if (data?.xp_awarded > 0) toast.success(`+${data.xp_awarded} XP`);
       onComplete?.(content.id);
     } catch (e) {
       // best-effort — completion tracking shouldn't block reading content
@@ -36,7 +38,8 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQui
 
   const finishQuiz = async (score, total) => {
     try {
-      await api.post(`/content/${content.id}/quiz-result`, { score, total });
+      const { data } = await api.post(`/content/${content.id}/quiz-result`, { score, total });
+      if (data?.xp_awarded > 0) toast.success(`+${data.xp_awarded} XP`);
     } catch (e) {
       // never block the score screen on a network hiccup — the attempt is still shown locally
     }
