@@ -44,11 +44,60 @@ selected child instead of the parent's own account.
   Packs. Selection is now persisted in `localStorage` and shared across both pages.
 - **"Manage children"** list added to `ParentHome` with the remove action above.
 
+### Round 3: students can no longer exist without a parent
+
+The linking gap above is now closed structurally rather than by adding a repair flow.
+Public self-registration creates a **parent** and nothing else, so a student account
+only comes into existence one of two ways:
+
+1. **Parent creates it** in the portal — `POST /parents/children`, with a student ID
+   (no email: many 13-year-olds don't have one, and reusing the parent's collides).
+2. **Student asks, parent approves** — `POST /auth/register-student` writes a
+   `pending_registrations` record and emails the nominated parent a one-time link.
+   No `users` document exists until the parent approves at
+   `POST /parents/child-requests/{token}/approve`. The link lands on `/approve-child`,
+   which walks a parent with no account through creating one first (email locked to
+   the address the child nominated), then shows them exactly what their child
+   submitted plus the remaining fields to confirm.
+
+Because `parent_id` is set at creation on both paths, "unparented student" stops being
+a reachable state. Consequently **removing a child now deactivates the account**
+(`active: false`) instead of clearing `parent_id`, which would orphan an account that
+can no longer be re-created without a parent.
+
+Supporting changes:
+
+- Login takes a **student ID or an email** — one form, role comes from the account.
+- `/auth/register` no longer accepts a `role`, which also closed a real
+  privilege-escalation hole: the old shape let anyone `POST {"role": "admin"}` and
+  mint themselves an admin account.
+- Password minimum raised 6 → 8. Parent-set passwords carry `must_change_password`
+  so the child picks their own on first sign-in; a password the child chose
+  themselves does not, since they already know it.
+- The child's chosen password is Fernet-encrypted on the pending record (the parent
+  is shown it and may replace it), then bcrypt-hashed onto the real account, and the
+  pending record is destroyed. The reversible copy never touches a user document.
+- Approval links are stored as sha256, single-use, expire in 72h, and both student-ID
+  reservation and per-parent-email send rate are capped so the endpoint can't be used
+  to spam a stranger's inbox.
+- `email_service.py` sends via SMTP env config, and logs the message to the console
+  when unconfigured — **SMTP is not set up yet**; set `SMTP_HOST`/`SMTP_PORT`/
+  `SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM` and `APP_BASE_URL` to switch it on.
+
+Verified with a 36-check backend pass over an in-memory Mongo and a full browser walk
+of the real UI (student signup → emailed link → parent registration → approval →
+student sign-in → duplicate-ID rejection).
+
 ### Known gaps still open (not implemented)
 
-- **No re-link flow**: once a child is removed, there's no UI/endpoint to link them
-  back to a parent (or to a different one) — the account just becomes an ordinary
-  unlinked student.
+- **Parents who weren't emailed see nothing about pending requests** — by design; the
+  approval panel is reachable only via the tokened link. If a parent loses the email,
+  the child re-submits after the 72h expiry.
+- **Legacy self-registered students** (any created before this round) still have no
+  `parent_id` and no way to acquire one — there's no admin-assisted linking endpoint
+  yet. The demo seed now creates a properly linked parent/child pair.
+- **No parent email verification** — the parent's address is the consent anchor but
+  isn't confirmed before they can approve a child.
 - **One parent per child, still**: `parent_id` is a single field, so the two-guardian
   case from decision 2 above is still unsupported. Would need the
   `parent_child_links` collection this doc originally proposed.

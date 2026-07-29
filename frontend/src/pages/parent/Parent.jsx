@@ -3,18 +3,35 @@ import { toast } from "sonner";
 import { TrendingUp, Target, Lightbulb, Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
+import { BIRTH_YEARS, GRADES } from "@/pages/RegisterStudent";
+
+const fieldCls =
+  "mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white outline-none focus:border-[#00f0ff]";
 
 const AddChildForm = ({ onAdded }) => {
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({
+    name: "",
+    username: "",
+    password: "",
+    grade: GRADES[0],
+    birth_year: "",
+    relationship: "guardian",
+    language: "en",
+  });
   const [submitting, setSubmitting] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const submit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await api.post("/parents/children", form);
+      await api.post("/parents/children", {
+        ...form,
+        username: form.username.trim().toLowerCase(),
+        birth_year: Number(form.birth_year),
+      });
       toast.success("Child account created");
-      setForm({ name: "", email: "", password: "" });
+      setForm({ name: "", username: "", password: "", grade: GRADES[0], birth_year: "", relationship: "guardian", language: "en" });
       onAdded();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Could not create child account");
@@ -24,40 +41,78 @@ const AddChildForm = ({ onAdded }) => {
   };
 
   return (
-    <form onSubmit={submit} data-testid="add-child-form" className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6 max-w-md space-y-4">
+    <form onSubmit={submit} data-testid="add-child-form" className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6 max-w-lg space-y-4">
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-white/50">Child's name</label>
+          <input required value={form.name} onChange={set("name")} className={fieldCls} data-testid="add-child-name" />
+        </div>
+        <div>
+          <label className="text-xs text-white/50">Your relationship</label>
+          <select value={form.relationship} onChange={set("relationship")} className={fieldCls} data-testid="add-child-relationship">
+            <option value="mother">Mother</option>
+            <option value="father">Father</option>
+            <option value="guardian">Guardian</option>
+          </select>
+        </div>
+      </div>
+
       <div>
-        <label className="text-xs text-white/50">Child's name</label>
+        <label className="text-xs text-white/50">Student ID</label>
         <input
           required
-          value={form.name}
-          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white outline-none focus:border-[#00f0ff]"
-          data-testid="add-child-name"
+          autoCapitalize="none"
+          autoCorrect="off"
+          value={form.username}
+          onChange={set("username")}
+          placeholder="e.g. aisyah_01"
+          className={`${fieldCls} placeholder-white/25`}
+          data-testid="add-child-username"
         />
+        <p className="mt-1 text-xs text-white/40">
+          Your child signs in with this — no email needed. 4–24 characters.
+        </p>
       </div>
-      <div>
-        <label className="text-xs text-white/50">Child's email</label>
-        <input
-          required
-          type="email"
-          value={form.email}
-          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white outline-none focus:border-[#00f0ff]"
-          data-testid="add-child-email"
-        />
+
+      <div className="grid sm:grid-cols-3 gap-3">
+        <div>
+          <label className="text-xs text-white/50">Form</label>
+          <select value={form.grade} onChange={set("grade")} className={fieldCls} data-testid="add-child-grade">
+            {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-white/50">Year of birth</label>
+          <select required value={form.birth_year} onChange={set("birth_year")} className={fieldCls} data-testid="add-child-birth-year">
+            <option value="">Select…</option>
+            {BIRTH_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-white/50">Language</label>
+          <select value={form.language} onChange={set("language")} className={fieldCls} data-testid="add-child-language">
+            <option value="en">English</option>
+            <option value="bm">Bahasa Melayu</option>
+          </select>
+        </div>
       </div>
+
       <div>
         <label className="text-xs text-white/50">Password</label>
         <input
           required
           type="password"
-          minLength={6}
+          minLength={8}
           value={form.password}
-          onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-          className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white outline-none focus:border-[#00f0ff]"
+          onChange={set("password")}
+          className={fieldCls}
           data-testid="add-child-password"
         />
+        <p className="mt-1 text-xs text-white/40">
+          At least 8 characters. Your child will set their own the first time they sign in.
+        </p>
       </div>
+
       <button
         type="submit"
         disabled={submitting}
@@ -132,8 +187,8 @@ const RemoveChildModal = ({ child, onCancel, onConfirm }) => {
       >
         <div className="font-display text-lg text-white tracking-tight">Remove {child.name}?</div>
         <p className="mt-2 text-sm text-white/60">
-          This removes {child.name} from your parent portal. Their account, enrollments, and progress are kept —
-          they just won't appear here anymore.
+          {child.name} will stop appearing here and won't be able to sign in. Their account, enrolled packs and
+          progress are all kept, so you can add them back later.
         </p>
         <div className="mt-5 flex justify-end gap-3">
           <button
@@ -181,7 +236,10 @@ const ManageChildren = ({ children, onRemoved }) => {
           >
             <div className="min-w-0">
               <div className="text-sm text-white truncate">{c.name}</div>
-              <div className="text-xs text-white/40 truncate">{c.email}</div>
+              <div className="text-xs text-white/40 truncate">
+                <span className="font-mono">{c.username}</span>
+                {c.grade && <span> · {c.grade}</span>}
+              </div>
             </div>
             <button
               type="button"

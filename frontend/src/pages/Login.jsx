@@ -17,7 +17,7 @@ const Login = () => {
   const seed = {
     admin: "admin@mytaman.ai",
     parent: "parent@mytaman.ai",
-    student: "student@mytaman.ai",
+    student: "demostudent",
   }[hintedRole] || "";
 
   const [email, setEmail] = useState(seed);
@@ -68,14 +68,16 @@ const Login = () => {
           <h1 className="font-display text-3xl tracking-tighter text-white mb-6">Welcome back</h1>
           <form onSubmit={submit} className="space-y-4" data-testid="login-form">
             <div>
-              <label className="text-xs text-white/60">Email</label>
+              <label className="text-xs text-white/60">Email or Student ID</label>
               <input
                 data-testid="login-email"
-                type="email"
+                type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder={t("email_ph")}
+                placeholder="you@example.com or your student ID"
                 className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-white/30 focus:border-[#00f0ff] focus:bg-white/10"
               />
             </div>
@@ -99,11 +101,19 @@ const Login = () => {
               {loading ? "…" : t("sign_in")}
             </button>
           </form>
-          <div className="mt-6 text-sm text-white/60">
-            {t("no_account")}{" "}
-            <Link to="/register" className="text-[#00f0ff] hover:underline" data-testid="login-to-register">
-              {t("sign_up")}
-            </Link>
+          <div className="mt-6 space-y-1.5 text-sm text-white/60">
+            <div>
+              {t("no_account")}{" "}
+              <Link to="/register" className="text-[#00f0ff] hover:underline" data-testid="login-to-register">
+                Create a parent account
+              </Link>
+            </div>
+            <div>
+              Are you a student?{" "}
+              <Link to="/register-student" className="text-[#00f0ff] hover:underline" data-testid="login-to-student-register">
+                Sign up with a parent's approval
+              </Link>
+            </div>
           </div>
         </div>
       </div>

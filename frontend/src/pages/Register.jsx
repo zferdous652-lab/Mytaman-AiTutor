@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
@@ -7,11 +7,19 @@ import LanguageToggle from "@/components/LanguageToggle";
 
 const roleDest = { admin: "/admin", parent: "/parent", student: "/student/dashboard" };
 
+// Public sign-up creates a PARENT account only. Children are minors and are created
+// either from inside the parent portal or via a parent-approved request, so there is
+// no role picker here any more.
 const Register = () => {
   const { register } = useAuth();
   const { t } = useLang();
   const nav = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "student" });
+  const [sp] = useSearchParams();
+  // Arriving from a child's approval email: lock the address to the one the child
+  // nominated, so the account they create is the one allowed to approve the request.
+  const approvalToken = sp.get("token");
+  const lockedEmail = sp.get("email") || "";
+  const [form, setForm] = useState({ name: "", email: lockedEmail, password: "" });
   const [loading, setLoading] = useState(false);
 
   const submit = async (e) => {
@@ -20,7 +28,7 @@ const Register = () => {
     try {
       const u = await register(form);
       toast.success(`Account created — ${u.name}`);
-      nav(roleDest[u.role] || "/");
+      nav(approvalToken ? `/approve-child?token=${encodeURIComponent(approvalToken)}` : roleDest[u.role] || "/");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Registration failed");
     }
@@ -38,7 +46,12 @@ const Register = () => {
           <LanguageToggle testId="register-lang" />
         </div>
         <div className="overline text-[#00f0ff] mb-3">{t("sign_up")}</div>
-        <h1 className="font-display text-3xl tracking-tighter text-white mb-6">Create your account</h1>
+        <h1 className="font-display text-3xl tracking-tighter text-white mb-2">Create your parent account</h1>
+        <p className="text-sm text-white/50 mb-6">
+          {approvalToken
+            ? "Create your account to review and approve your child's request."
+            : "You'll add your child's account from inside the portal once you're signed in."}
+        </p>
         <form onSubmit={submit} className="space-y-4" data-testid="register-form">
           <div>
             <label className="text-xs text-white/60">{t("name")}</label>
@@ -56,10 +69,14 @@ const Register = () => {
               data-testid="register-email"
               type="email"
               required
+              readOnly={Boolean(lockedEmail)}
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-[#00f0ff]"
+              className={`mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-[#00f0ff] ${lockedEmail ? "opacity-70 cursor-not-allowed" : ""}`}
             />
+            {lockedEmail && (
+              <p className="mt-1 text-xs text-white/40">This is the address your child listed for you.</p>
+            )}
           </div>
           <div>
             <label className="text-xs text-white/60">{t("password")}</label>
@@ -67,23 +84,12 @@ const Register = () => {
               data-testid="register-password"
               type="password"
               required
-              minLength={6}
+              minLength={8}
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-[#00f0ff]"
             />
-          </div>
-          <div>
-            <label className="text-xs text-white/60">{t("role")}</label>
-            <select
-              data-testid="register-role"
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-[#00f0ff]"
-            >
-              <option value="student">Student / Learner</option>
-              <option value="parent">Parent</option>
-            </select>
+            <p className="mt-1 text-xs text-white/40">At least 8 characters.</p>
           </div>
           <button
             data-testid="register-submit"

@@ -74,7 +74,8 @@ const DashboardShell = ({ children }) => {
         <div className="pt-4 border-t border-white/8 space-y-3">
           <LanguageToggle testId="dash-lang" />
           <div className="text-xs text-white/60">
-            <div className="font-mono truncate" title={user.email}>{user.email}</div>
+            {/* Students have a student ID instead of an email. */}
+            <div className="font-mono truncate" title={user.email || user.username}>{user.email || user.username}</div>
             <div className="text-white/40">{user.name}</div>
           </div>
           <button

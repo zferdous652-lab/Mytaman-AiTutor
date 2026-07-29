@@ -24,8 +24,9 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => { load(); }, [load]);
 
-  const login = async (email, password) => {
-    const { data } = await api.post("/auth/login", { email, password });
+  // `identifier` is an email for parents/admins and a student ID for children.
+  const login = async (identifier, password) => {
+    const { data } = await api.post("/auth/login", { identifier, password });
     sessionStorage.setItem("mytaman_token", data.token);
     setUser(data.user);
     return data.user;
@@ -42,7 +43,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthCtx.Provider value={{ user, loading, login, register, logout }}>
+    <AuthCtx.Provider value={{ user, loading, login, register, logout, refresh: load }}>
       {children}
     </AuthCtx.Provider>
   );
