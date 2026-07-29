@@ -20,6 +20,7 @@ from content import router as content_router  # noqa: E402
 from packs import router as packs_router, seed_packs  # noqa: E402
 from courses import router as courses_router  # noqa: E402
 from parents import router as parents_router  # noqa: E402
+from registrations import router as registrations_router  # noqa: E402
 from students import router as students_router  # noqa: E402
 from xp import router as xp_router  # noqa: E402
 from rewards import router as rewards_router  # noqa: E402
@@ -57,6 +58,7 @@ api_router.include_router(content_router)
 api_router.include_router(packs_router)
 api_router.include_router(courses_router)
 api_router.include_router(parents_router)
+api_router.include_router(registrations_router)
 api_router.include_router(students_router)
 api_router.include_router(xp_router)
 api_router.include_router(rewards_router)
