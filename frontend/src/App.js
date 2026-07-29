@@ -20,6 +20,7 @@ import AdminPacks from "@/pages/admin/Packs";
 import AdminStudents from "@/pages/admin/Students";
 
 import { StudentHome, StudentBrowse } from "@/pages/student/Student";
+import StudentDashboard from "@/pages/student/Dashboard";
 import { ParentHome, ParentPacks } from "@/pages/parent/Parent";
 
 const AdminLayout = ({ children }) => (
@@ -59,6 +60,7 @@ function App() {
 
               <Route path="/student" element={<StudentLayout><StudentHome /></StudentLayout>} />
               <Route path="/student/browse" element={<StudentLayout><StudentBrowse /></StudentLayout>} />
+              <Route path="/student/dashboard" element={<StudentLayout><StudentDashboard /></StudentLayout>} />
 
               <Route path="/parent" element={<ParentLayout><ParentHome /></ParentLayout>} />
               <Route path="/parent/packs" element={<ParentLayout><ParentPacks /></ParentLayout>} />
