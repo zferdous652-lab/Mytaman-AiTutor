@@ -62,6 +62,50 @@ Edit `.env` and fill in:
   ```
 - `APP_PORT` → the public port you'll expose (default `3000`)
 - `EMERGENT_LLM_KEY` is pre-filled with the shared universal key
+- `APP_BASE_URL` → `http://<your-vm-public-ip>:<APP_PORT>` (see §3a — this is what
+  parent-approval emails link to, so it must be reachable from a parent's browser)
+
+### 3a. Email (parent-approval links)
+
+When a student signs up, their account is not created until a parent approves it via
+a link emailed to them. **Until SMTP is configured the link is written to the backend
+log instead of being sent** — the flow still works, it just isn't self-service:
+
+```bash
+docker compose logs backend | grep approve-child
+```
+
+To send real email, set these in `.env`:
+
+| Variable | Notes |
+|---|---|
+| `SMTP_HOST` | e.g. `smtp.gmail.com`. **Blank = console mode.** |
+| `SMTP_PORT` | `587` for STARTTLS (default) |
+| `SMTP_USER` | the mailbox you send from |
+| `SMTP_PASSWORD` | for Gmail this is an **App Password**, not your normal password |
+| `SMTP_FROM` | display name + address recipients see |
+| `SMTP_STARTTLS` | `true` unless your provider needs it off |
+| `APP_BASE_URL` | **the address a parent's browser can reach** — `localhost` will not work |
+
+**Gmail specifics:** enable 2-Step Verification on the account, then create an App
+Password at <https://myaccount.google.com/apppasswords> and use that 16-character
+value as `SMTP_PASSWORD`. Gmail caps sending at roughly 500/day and rewrites the
+From address to the account's own — fine for pilot use. For real volume or your own
+domain, use a transactional provider (Brevo, SendGrid, Amazon SES) and set
+`SMTP_HOST`/`SMTP_USER`/`SMTP_PASSWORD` to the credentials they issue.
+
+Apply and verify:
+
+```bash
+docker compose up -d backend          # env changes need a restart, not a rebuild
+docker compose exec backend python -c \
+  "from email_service import send_email, is_configured; \
+   print('configured:', is_configured()); \
+   print('sent:', send_email('you@example.com','MYTAMAN SMTP test','It works.'))"
+```
+
+`configured: True` / `sent: True` means delivery succeeded. If `sent: False`, the
+reason is in `docker compose logs backend`.
 
 ---
 
@@ -87,11 +131,15 @@ http://<your-vm-public-ip>:3000
 
 Seeded demo accounts (created automatically on first backend boot):
 
-| Role    | Email                 | Password        |
+| Role    | Sign in with          | Password        |
 |---------|-----------------------|-----------------|
 | Admin   | admin@mytaman.ai      | Admin@12345     |
 | Parent  | parent@mytaman.ai     | Parent@12345    |
-| Student | student@mytaman.ai    | Student@12345   |
+| Student | `demostudent`         | Student@12345   |
+
+Students sign in with a **student ID**, not an email — the demo student is linked as
+a child of the demo parent. New student accounts are only created by a parent, or by
+a student whose parent approves the request (§3a).
 
 ---
 
