@@ -65,14 +65,16 @@ Edit `.env` and fill in:
 - `APP_BASE_URL` → `http://<your-vm-public-ip>:<APP_PORT>` (see §3a — this is what
   parent-approval emails link to, so it must be reachable from a parent's browser)
 
-### 3a. Email (parent-approval links)
+### 3a. Email (parent invitations)
 
-When a student signs up, their account is not created until a parent approves it via
-a link emailed to them. **Until SMTP is configured the link is written to the backend
-log instead of being sent** — the flow still works, it just isn't self-service:
+A student registers on their own and gets access immediately — no approval needed.
+Registration also emails the parent an *invitation* to join and follow their child's
+progress. **Until SMTP is configured that invitation link is written to the backend log
+instead of being sent** — student signup still works either way, only the invitation
+isn't delivered:
 
 ```bash
-docker compose logs backend | grep approve-child
+docker compose logs backend | grep connect-child
 ```
 
 To send real email, set these in `.env`:

@@ -59,21 +59,35 @@ def send_email(to: str, subject: str, text_body: str) -> bool:
         return False
 
 
-def send_child_approval_email(parent_email: str, student_name: str, username: str, token: str) -> bool:
-    link = f"{APP_BASE_URL}/approve-child?token={token}"
+def send_parent_invite_email(parent_email: str, student_name: str, token: str) -> bool:
+    """An invitation, not a gate. The child is already learning -- this asks the parent
+    to come along, so the tone is welcoming rather than administrative and it leads with
+    what the parent gets rather than what the system needs from them."""
+    link = f"{APP_BASE_URL}/connect-child?token={token}"
     body = (
-        f"Hello,\n\n"
-        f"{student_name} has asked to join MYTAMAN AI Tutor and listed this address as "
-        f"their parent or guardian's email.\n\n"
-        f"Because {student_name} is a child, their account cannot be activated until you "
-        f"approve it. Open the link below to review what they submitted and finish setting "
-        f"up their account:\n\n"
+        f"Hi,\n\n"
+        f"Great news -- {student_name} has started learning on MYTAMAN AI Tutor!\n\n"
+        f"They listed you as their parent or guardian. Join as a Parent to follow their "
+        f"learning journey and support their academic growth. Creating an account only "
+        f"takes a minute.\n\n"
+        f"As a parent you'll be able to:\n\n"
+        f"  * Monitor {student_name}'s learning progress as it happens\n"
+        f"  * See which subjects they're strongest in, and which topics need work\n"
+        f"  * Track how consistently they're studying, day to day\n"
+        f"  * Receive AI-generated insights and reports on their learning\n"
+        f"  * Support their academic growth with what actually helps\n\n"
+        f"Create your Parent account and connect with {student_name}:\n\n"
         f"    {link}\n\n"
-        f"Requested student ID: {username}\n\n"
-        f"If you don't have a MYTAMAN parent account yet, the link will walk you through "
-        f"creating one first.\n\n"
-        f"This link expires in 72 hours. If you weren't expecting this, you can ignore "
-        f"this email -- no account will be created.\n\n"
+        f"Already have a MYTAMAN parent account? The same link will connect "
+        f"{student_name} to it.\n\n"
+        f"This invitation expires in 30 days. {student_name} can send you a fresh one "
+        f"from their portal at any time.\n\n"
+        f"If you weren't expecting this, you can safely ignore this email -- nothing "
+        f"will be shared with you unless you accept.\n\n"
         f"-- MYTAMAN AI Tutor"
     )
-    return send_email(parent_email, f"Approve {student_name}'s MYTAMAN account", body)
+    return send_email(
+        parent_email,
+        f"{student_name} has started learning on MYTAMAN -- join them!",
+        body,
+    )

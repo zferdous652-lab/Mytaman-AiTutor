@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
+import ParentLinkBanner from "@/components/ParentLinkBanner";
 
 const items = {
   admin: (t) => [
@@ -87,7 +88,16 @@ const DashboardShell = ({ children }) => {
           </button>
         </div>
       </aside>
-      <main className="min-h-screen">{children}</main>
+      <main className="min-h-screen">
+        {/* Sits above every student page so the invite prompt can't be missed, and
+            removes itself once the parent has connected. */}
+        {user.role === "student" && (
+          <div className="px-8 lg:px-12 pt-8 lg:pt-12 [&+*]:pt-0">
+            <ParentLinkBanner />
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 };

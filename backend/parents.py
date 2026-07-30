@@ -1,15 +1,18 @@
 """Parent portal endpoints — child accounts, per-child progress, parent-initiated enrollment.
 
-Linking model: a single `parent_id` field on the student's user doc. A student account
-only ever comes into existence through a parent, by one of two routes:
+Linking model: a single `parent_id` field on the student's user doc, set by one of two
+routes:
 
-  1. the parent creates it directly here (`POST /parents/children`), or
-  2. the student fills in the signup form themselves and the parent approves the
-     resulting pending request (`POST /parents/child-requests/{token}/approve`).
+  1. the parent creates the child's account directly here (`POST /parents/children`),
+     in which case it's set at creation, or
+  2. the student registered independently and the parent accepts their invitation
+     (`POST /parents/child-invites/{token}/accept`), which sets it afterwards.
 
-Either way `parent_id` is set at creation, so an unparented student is not a state the
-app can reach. Removing a child therefore deactivates the account rather than clearing
-`parent_id`, which would orphan it permanently.
+Parent linking is therefore additive, not a gate: a student registers and studies with
+no parent attached, and accepting an invitation grants the parent visibility without
+changing anything about the student's own access. Removing a child deactivates the
+account rather than clearing `parent_id`, so the child's history survives and the
+removal is reversible.
 """
 import uuid
 from datetime import datetime, timezone
@@ -18,11 +21,11 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from db import db, decrypt
+from db import db
 from auth import require_role, _hash
 from registrations import (
     assert_username_available,
-    load_pending_by_token,
+    load_invite_by_token,
     normalize_username,
     validate_birth_year,
 )
@@ -135,96 +138,89 @@ async def _require_child(parent_id: str, student_id: str) -> dict:
     return child
 
 
-# ---------- Approving a student-initiated signup ----------
+# ---------- Accepting a student's invitation to connect ----------
 
-async def _require_own_request(parent: dict, token: str) -> dict:
+async def _require_own_invite(parent: dict, token: str) -> dict:
     """The token comes from the parent's own inbox, but check the signed-in account's
     email matches it too -- so a forwarded link can't be used to attach someone else's
     child to an unrelated account."""
-    doc = await load_pending_by_token(token)
+    doc = await load_invite_by_token(token)
     if (parent.get("email") or "").lower() != doc["parent_email"]:
         raise HTTPException(
             status_code=403,
-            detail=f"This request was sent to {doc['parent_email']}. Sign in with that account to approve it.",
+            detail=f"This invitation was sent to {doc['parent_email']}. Sign in with that account to accept it.",
         )
     return doc
 
 
-class ChildRequestDetail(BaseModel):
+class ChildInviteDetail(BaseModel):
+    """What the accepting parent sees. Note there is no password here: the student
+    already owns their account, so linking never involves their credential."""
     student_name: str
     username: str
     parent_email: str
-    birth_year: int
-    grade: str
+    grade: Optional[str] = None
+    birth_year: Optional[int] = None
     expires_at: str
-    # Revealed only here, to the matching signed-in parent, so they can vet it and
-    # replace it with something stronger before the account is created.
-    chosen_password: str
 
 
-@router.get("/child-requests/{token}", response_model=ChildRequestDetail)
-async def get_child_request(token: str, parent: dict = Depends(require_role("parent"))):
-    doc = await _require_own_request(parent, token)
-    return ChildRequestDetail(
-        student_name=doc["student_name"],
-        username=doc["username"],
+@router.get("/child-invites/{token}", response_model=ChildInviteDetail)
+async def get_child_invite(token: str, parent: dict = Depends(require_role("parent"))):
+    doc = await _require_own_invite(parent, token)
+    student = await db.users.find_one({"id": doc["student_id"]}, {"_id": 0, "password": 0})
+    if not student:
+        raise HTTPException(status_code=404, detail="This invitation link is not valid")
+    return ChildInviteDetail(
+        student_name=student["name"],
+        username=student.get("username") or "",
         parent_email=doc["parent_email"],
-        birth_year=doc["birth_year"],
-        grade=doc["grade"],
+        grade=student.get("grade"),
+        birth_year=student.get("birth_year"),
         expires_at=doc["expires_at"],
-        chosen_password=decrypt(doc["password_enc"]),
     )
 
 
-class ApproveChildIn(BaseModel):
-    """Everything the parent confirms or overrides at approval time. Name/grade/birth
-    year arrive prefilled from what the child submitted and can be corrected."""
-    name: str = Field(min_length=1, max_length=80)
-    grade: str = Field(min_length=1, max_length=40)
-    birth_year: int
+class AcceptInviteIn(BaseModel):
     relationship: Relationship = "guardian"
-    language: ChildLanguage = "en"
-    password: Optional[str] = Field(default=None, min_length=8)
-    pack_ids: List[str] = Field(default_factory=list)
 
 
-@router.post("/child-requests/{token}/approve", response_model=ChildOut)
-async def approve_child_request(token: str, payload: ApproveChildIn, parent: dict = Depends(require_role("parent"))):
-    doc = await _require_own_request(parent, token)
+@router.post("/child-invites/{token}/accept", response_model=ChildOut)
+async def accept_child_invite(token: str, payload: AcceptInviteIn, parent: dict = Depends(require_role("parent"))):
+    """Links an existing, already-active student to this parent. Nothing about the
+    student's own access changes -- they could already sign in before this, and this
+    only grants the parent visibility."""
+    doc = await _require_own_invite(parent, token)
     await _assert_room_for_another_child(parent["id"])
-    # Re-check at approval, not just at request time: another child may have claimed
-    # this ID during the hours the request sat in an inbox. Skip this request's own
-    # pending record, which is obviously still holding the name.
-    await assert_username_available(doc["username"], exclude_pending_id=doc["id"])
 
-    overridden = payload.password is not None
-    child = _new_student_doc(
-        name=payload.name.strip(),
-        username=doc["username"],
-        password=payload.password if overridden else decrypt(doc["password_enc"]),
-        parent_id=parent["id"],
-        grade=payload.grade.strip(),
-        birth_year=validate_birth_year(payload.birth_year),
-        relationship=payload.relationship,
-        language=payload.language,
-        # The child already knows the password they chose; only force a reset if the
-        # parent swapped it for one the child hasn't been told.
-        must_change_password=overridden,
+    student = await db.users.find_one({"id": doc["student_id"]}, {"_id": 0})
+    if not student:
+        raise HTTPException(status_code=404, detail="That student account no longer exists")
+    if student.get("parent_id"):
+        raise HTTPException(
+            status_code=409,
+            detail="This student is already connected to a parent account.",
+        )
+
+    await db.users.update_one(
+        {"id": student["id"]},
+        {"$set": {
+            "parent_id": parent["id"],
+            "relationship": payload.relationship,
+            "consented_at": datetime.now(timezone.utc).isoformat(),
+        }, "$unset": {"parent_invite_email": ""}},
     )
-    await db.users.insert_one(child)
+    await db.parent_invites.update_one({"id": doc["id"]}, {"$set": {"status": "accepted"}})
 
-    for pack_id in payload.pack_ids:
-        await _enroll(child["id"], pack_id)
-
-    # The reversible copy of the password dies with the pending record.
-    await db.pending_registrations.delete_one({"id": doc["id"]})
-    return _child_out(child)
+    linked = await db.users.find_one({"id": student["id"]}, {"_id": 0, "password": 0})
+    return _child_out(linked)
 
 
-@router.post("/child-requests/{token}/reject")
-async def reject_child_request(token: str, parent: dict = Depends(require_role("parent"))):
-    doc = await _require_own_request(parent, token)
-    await db.pending_registrations.delete_one({"id": doc["id"]})
+@router.post("/child-invites/{token}/decline")
+async def decline_child_invite(token: str, parent: dict = Depends(require_role("parent"))):
+    """Declining only discards the invitation. The student keeps their account and
+    their access either way."""
+    doc = await _require_own_invite(parent, token)
+    await db.parent_invites.update_one({"id": doc["id"]}, {"$set": {"status": "declined"}})
     return {"ok": True}
 
 

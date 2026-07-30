@@ -12,7 +12,7 @@ import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import RegisterStudent from "@/pages/RegisterStudent";
-import ApproveChild from "@/pages/ApproveChild";
+import ConnectChild from "@/pages/ConnectChild";
 
 import AdminOverview from "@/pages/admin/Overview";
 import AdminGenerate from "@/pages/admin/Generate";
@@ -53,7 +53,9 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/register-student" element={<RegisterStudent />} />
-              <Route path="/approve-child" element={<ApproveChild />} />
+              <Route path="/connect-child" element={<ConnectChild />} />
+              {/* Older invitation emails may still point at the previous path. */}
+              <Route path="/approve-child" element={<ConnectChild />} />
 
               <Route path="/admin" element={<AdminLayout><AdminOverview /></AdminLayout>} />
               <Route path="/admin/generate" element={<AdminLayout><AdminGenerate /></AdminLayout>} />

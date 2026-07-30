@@ -88,6 +88,39 @@ Verified with a 36-check backend pass over an in-memory Mongo and a full browser
 of the real UI (student signup → emailed link → parent registration → approval →
 student sign-in → duplicate-ID rejection).
 
+### Round 4: student access is independent; parent linking is an invitation
+
+Round 3's approval gate is removed. A student registers on their own and gets immediate
+access — their account is real and usable the moment they submit the form. Parent
+linking became additive rather than a precondition:
+
+- `POST /auth/register-student` creates the student and returns an auth token, so the
+  signup form logs them straight into the portal.
+- It also records the parent's address on the student doc and sends that address an
+  **invitation** (`send_parent_invite_email`) — friendly, benefit-led, with a
+  *Create Parent Account* call to action. It never asks anyone to approve anything.
+- `POST /parents/child-invites/{token}/accept` links an **existing** student to the
+  parent by setting `parent_id`. Declining discards the invitation and changes nothing
+  about the student's access.
+- The `pending_registrations` collection is replaced by `parent_invites`, keyed to a
+  real `student_id`. Invitations last 30 days (an invitation, not a security
+  challenge), are superseded when a new one is issued, and are single-use.
+- **The reversible copy of the student's password is gone entirely.** The student owns
+  their credential; a parent accepting an invitation is linking to an account that
+  already exists, so they never see or set it. This removed the one place plaintext
+  could be recovered.
+- Students see a banner across the portal while unlinked, with *Resend email to parent*
+  and *Use a different email* (a mistyped address would otherwise be unrecoverable).
+  It removes itself as soon as `GET /auth/link-status` reports `linked`.
+- Resends are rate-limited (5-minute cooldown, 5/day per parent address); correcting
+  the address bypasses the cooldown, since that's a fix rather than a retry.
+
+Verified with 42 backend checks and a full browser walk: immediate access, the banner
+appearing/persisting/disappearing, resend with a corrected address, the invitation
+landing page, parent registration with a locked email, accepting, and the student's
+password still working afterwards. The walk also asserts the parent is never shown a
+password and that no "approve" wording survives on the invitation page.
+
 ### Known gaps still open (not implemented)
 
 - **Parents who weren't emailed see nothing about pending requests** — by design; the

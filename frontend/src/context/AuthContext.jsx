@@ -37,13 +37,19 @@ export const AuthProvider = ({ children }) => {
     setUser(data.user);
     return data.user;
   };
+  // For flows that get a token back from an endpoint other than login/register --
+  // e.g. student self-registration, which signs the student straight in.
+  const setSession = useCallback((token, u) => {
+    sessionStorage.setItem("mytaman_token", token);
+    setUser(u);
+  }, []);
   const logout = () => {
     sessionStorage.removeItem("mytaman_token");
     setUser(null);
   };
 
   return (
-    <AuthCtx.Provider value={{ user, loading, login, register, logout, refresh: load }}>
+    <AuthCtx.Provider value={{ user, loading, login, register, logout, setSession, refresh: load }}>
       {children}
     </AuthCtx.Provider>
   );

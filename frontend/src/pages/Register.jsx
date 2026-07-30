@@ -28,7 +28,7 @@ const Register = () => {
     try {
       const u = await register(form);
       toast.success(`Account created — ${u.name}`);
-      nav(approvalToken ? `/approve-child?token=${encodeURIComponent(approvalToken)}` : roleDest[u.role] || "/");
+      nav(approvalToken ? `/connect-child?token=${encodeURIComponent(approvalToken)}` : roleDest[u.role] || "/");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Registration failed");
     }
@@ -49,7 +49,7 @@ const Register = () => {
         <h1 className="font-display text-3xl tracking-tighter text-white mb-2">Create your parent account</h1>
         <p className="text-sm text-white/50 mb-6">
           {approvalToken
-            ? "Create your account to review and approve your child's request."
+            ? "Create your account to connect with your child and follow their progress."
             : "You'll add your child's account from inside the portal once you're signed in."}
         </p>
         <form onSubmit={submit} className="space-y-4" data-testid="register-form">
