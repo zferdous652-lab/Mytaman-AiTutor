@@ -26,6 +26,7 @@ from registrations import (
     normalize_username,
     validate_birth_year,
 )
+from xp import xp_summary_for
 
 router = APIRouter(prefix="/parents", tags=["parents"])
 
@@ -291,6 +292,29 @@ async def child_packs(student_id: str, parent: dict = Depends(require_role("pare
             last_active=last_active,
         ))
     return out
+
+
+class ChildProgressionOut(BaseModel):
+    """The child's gamified progression -- effort and consistency rather than marks,
+    which is the half of the picture the pack percentages don't show."""
+    level: int
+    total_xp: int
+    xp_into_level: int
+    xp_for_next_level: Optional[int] = None
+    xp_to_next_level: Optional[int] = None
+    progress_pct: int
+    current_streak: int
+    today_goal_met: bool
+    today_xp: int
+    daily_goal_xp: int
+
+
+@router.get("/children/{student_id}/progression", response_model=ChildProgressionOut)
+async def child_progression(student_id: str, parent: dict = Depends(require_role("parent"))):
+    """Same level/streak figures the child sees on their own dashboard, scoped to one
+    child and gated on this parent actually being linked to them."""
+    await _require_child(parent["id"], student_id)
+    return ChildProgressionOut(**await xp_summary_for(student_id))
 
 
 # ---------- Lifecycle & enrollment ----------

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { TrendingUp, Target, Lightbulb, Sparkles } from "lucide-react";
+import { TrendingUp, Target, Lightbulb, Sparkles, Trophy, Flame } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 import { BIRTH_YEARS, GRADES } from "@/pages/RegisterStudent";
@@ -264,7 +264,7 @@ const ManageChildren = ({ children, onRemoved }) => {
 // parent dashboard needs to be explainable at a glance, not statistically clever.
 const STALE_MS = 14 * 24 * 60 * 60 * 1000;
 
-const buildInsights = (packs, childName) => {
+const buildInsights = (packs, childName, progression = null) => {
   const totalCompleted = packs.reduce((s, p) => s + p.completed, 0);
   const totalItems = packs.reduce((s, p) => s + p.total, 0);
   const overallProgress = totalItems ? Math.round((totalCompleted / totalItems) * 100) : 0;
@@ -288,6 +288,15 @@ const buildInsights = (packs, childName) => {
     .slice(0, 2);
 
   const recommendations = [];
+  // Consistency first: a broken or missing streak is more actionable for a parent than
+  // any individual subject score, and it's the thing a parent can actually influence.
+  if (progression) {
+    if (progression.current_streak >= 7) {
+      recommendations.push(`${childName} is on a ${progression.current_streak}-day streak — worth telling them you noticed.`);
+    } else if (progression.current_streak === 0 && progression.total_xp > 0) {
+      recommendations.push(`${childName}'s daily streak has lapsed. One short lesson today restarts it.`);
+    }
+  }
   growing.forEach((p) => {
     if (p.quiz_average != null && p.quiz_average < 60) {
       recommendations.push(`Review ${p.title} together — recent quiz scores suggest a few topics haven't clicked yet.`);
@@ -363,6 +372,72 @@ const InsightList = ({ title, icon: Icon, tone, items, emptyLabel }) => {
   );
 };
 
+// Mirrors the Level / Streak cards on the student's own dashboard (same Trophy/Flame
+// and accent hues, so a parent and child are visibly looking at the same thing), but
+// worded in the third person for a parent reading about their child.
+const ProgressionCards = ({ progression, firstName }) => {
+  if (!progression) return null;
+  const { level, total_xp, xp_into_level, xp_for_next_level, progress_pct } = progression;
+  const { current_streak, today_goal_met, today_xp, daily_goal_xp } = progression;
+  const todayPct = daily_goal_xp ? Math.min(100, Math.round((today_xp / daily_goal_xp) * 100)) : 0;
+
+  return (
+    <div className="grid md:grid-cols-2 gap-4 mt-4" data-testid="parent-progression">
+      <div className="rounded-2xl border border-[#00f0ff]/20 bg-gradient-to-br from-[#120a1f] to-[#0a0514] p-6" data-testid="parent-level-card">
+        <div className="flex items-center gap-3">
+          <div className="h-14 w-14 rounded-2xl bg-[#00f0ff]/10 border border-[#00f0ff]/30 grid place-items-center">
+            <Trophy size={24} className="text-[#00f0ff]" />
+          </div>
+          <div>
+            <div className="overline text-white/50">Level</div>
+            <div className="font-display text-3xl text-white tracking-tighter" data-testid="parent-level">{level}</div>
+          </div>
+        </div>
+        <div className="mt-6">
+          <div className="flex justify-between text-xs text-white/50 mb-1.5">
+            <span>{xp_into_level} XP</span>
+            <span>{xp_for_next_level ? `${xp_for_next_level - xp_into_level} XP to level ${level + 1}` : "Max level"}</span>
+          </div>
+          <Meter percent={xp_for_next_level ? progress_pct : 100} />
+        </div>
+        <div className="mt-4 text-sm text-white/60">
+          <span className="text-white font-semibold">{total_xp}</span> total XP earned
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6" data-testid="parent-streak-card">
+        <div className="flex items-center gap-3">
+          <div className="h-14 w-14 rounded-2xl bg-[#ff8a00]/10 border border-[#ff8a00]/30 grid place-items-center">
+            <Flame size={24} className="text-[#ff8a00]" />
+          </div>
+          <div>
+            <div className="overline text-white/50">Streak</div>
+            <div className="font-display text-3xl text-white tracking-tighter" data-testid="parent-streak">
+              {current_streak} {current_streak === 1 ? "day" : "days"}
+            </div>
+          </div>
+        </div>
+        <div className="mt-6">
+          <div className="flex items-center gap-2 text-xs text-white/50 mb-1.5">
+            <Target size={12} />
+            <span>Today: {today_xp}/{daily_goal_xp} XP</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
+            <div className={`h-full ${today_goal_met ? "bg-emerald-400" : "bg-[#ff8a00]"}`} style={{ width: `${todayPct}%` }} />
+          </div>
+        </div>
+        <div className="mt-4 text-sm text-white/60">
+          {today_goal_met
+            ? `${firstName} has already studied today — the streak is safe.`
+            : current_streak > 0
+            ? `A short session today keeps ${firstName}'s ${current_streak}-day streak alive.`
+            : `${firstName} hasn't started a streak yet — one lesson a day builds it.`}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Recommendations = ({ items }) => (
   <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6" data-testid="parent-recommendations">
     <div className="flex items-center gap-2">
@@ -384,17 +459,23 @@ const ParentHome = () => {
   const { t } = useLang();
   const { children, selectedId, setSelectedId, reload } = useChildren();
   const [packs, setPacks] = useState([]);
+  const [progression, setProgression] = useState(null);
   const [loadingPacks, setLoadingPacks] = useState(false);
 
   useEffect(() => {
-    if (!selectedId) { setPacks([]); return; }
+    if (!selectedId) { setPacks([]); setProgression(null); return; }
     setLoadingPacks(true);
-    api.get(`/parents/children/${selectedId}/packs`).then((r) => setPacks(r.data)).finally(() => setLoadingPacks(false));
+    Promise.all([
+      api.get(`/parents/children/${selectedId}/packs`),
+      api.get(`/parents/children/${selectedId}/progression`),
+    ])
+      .then(([p, prog]) => { setPacks(p.data); setProgression(prog.data); })
+      .finally(() => setLoadingPacks(false));
   }, [selectedId]);
 
   const child = children?.find((c) => c.id === selectedId);
   const firstName = child?.name?.split(" ")[0] || "your child";
-  const insights = useMemo(() => buildInsights(packs, firstName), [packs, firstName]);
+  const insights = useMemo(() => buildInsights(packs, firstName, progression), [packs, firstName, progression]);
 
   if (children === null) {
     return <div className="p-8 lg:p-12 text-sm text-white/40">Loading…</div>;
@@ -437,6 +518,8 @@ const ParentHome = () => {
             />
             <StatTile label="Tutor Packs" value={packs.length} sublabel={`${packs.filter((p) => p.total > 0 && p.completed === p.total).length} completed`} />
           </div>
+
+          <ProgressionCards progression={progression} firstName={firstName} />
 
           <div className="grid md:grid-cols-2 gap-4 mt-4">
             <InsightList

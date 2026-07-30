@@ -196,16 +196,28 @@ async def award_quiz_xp(user_id: str, pack_id: str, content_id: str, title: str,
     return {"xp_awarded": awarded + bonus + weekly_bonus}
 
 
-@router.get("/me")
-async def my_xp(user: dict = Depends(get_current_user)):
+async def total_xp_for(user_id: str) -> int:
     agg = await db.xp_events.aggregate([
-        {"$match": {"user_id": user["id"]}},
+        {"$match": {"user_id": user_id}},
         {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
     ]).to_list(1)
-    total_xp = agg[0]["total"] if agg else 0
+    return agg[0]["total"] if agg else 0
+
+
+async def xp_summary_for(user_id: str) -> dict:
+    """Level + streak for one user id. Shared by the student's own dashboard and the
+    parent portal's per-child progression view, so the number a parent sees can never
+    drift from the one their child sees."""
     return {
-        **level_from_xp(total_xp),
-        **(await compute_streak(user["id"])),
+        **level_from_xp(await total_xp_for(user_id)),
+        **(await compute_streak(user_id)),
+    }
+
+
+@router.get("/me")
+async def my_xp(user: dict = Depends(get_current_user)):
+    return {
+        **(await xp_summary_for(user["id"])),
         "weekend_multiplier_active": _current_xp_multiplier() > 1.0,
     }
 
