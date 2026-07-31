@@ -100,17 +100,16 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
     });
   };
 
-  // "All" keeps every pair as-is; "en"/"bm" only show pairs that actually have that
-  // language. Both language ids stay on the pair either way -- ContentViewer/CourseSidebar
-  // decide what to *display* from `langFilter`, but "done" is always checked against both
-  // ids, so completing a lesson under one filter still reads as done under the others.
-  // Three disjoint sets, not "has at least this language": "All" is lessons that exist in
-  // both BM and EN; "En" is English-only lessons (no BM counterpart); "Bm" is BM-only
-  // lessons (no EN counterpart). A lesson with only one language never shows under "All".
+  // "All" shows bilingual pairs (BM primary, EN secondary). "En"/"Bm" each show every
+  // lesson generated in that language, regardless of whether the other language also
+  // exists for it -- "has this language", not "only this language". Both language ids
+  // stay on the pair either way -- ContentViewer/CourseSidebar decide what to *display*
+  // from `langFilter`, but "done" is always checked against both ids, so completing a
+  // lesson under one filter still reads as done under the others.
   const filteredItems = useMemo(() => {
     if (langFilter === "all") return items.filter((it) => it.bm && it.en);
-    if (langFilter === "en") return items.filter((it) => it.en && !it.bm);
-    return items.filter((it) => it.bm && !it.en);
+    if (langFilter === "en") return items.filter((it) => it.en);
+    return items.filter((it) => it.bm);
   }, [items, langFilter]);
 
   useEffect(() => {
