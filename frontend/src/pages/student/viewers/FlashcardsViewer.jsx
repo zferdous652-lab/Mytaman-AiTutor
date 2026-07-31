@@ -6,6 +6,19 @@ const MIN_CARD_HEIGHT = 220;
 const MAX_CARD_HEIGHT = 520;
 const FACE_VERTICAL_PADDING = 48; // p-6 top + bottom on each face -- not part of the measured inner content
 
+// Cards with more text get a wider frame, not just a taller one -- more text per line
+// means fewer wrapped lines, which keeps longer bilingual cards from turning into a tall,
+// cramped column. Tiered on character count rather than measured, since (unlike height)
+// the "right" width is a design choice, not something with one correct answer to measure.
+const CARD_WIDTH_MIN = 420;
+const CARD_WIDTH_MAX = 720;
+const widthForLength = (len) => {
+  if (len > 220) return CARD_WIDTH_MAX;
+  if (len > 130) return 620;
+  if (len > 70) return 520;
+  return CARD_WIDTH_MIN;
+};
+
 // Shared markup for both the visible (flipping) faces and their invisible measurement
 // clones below, so the two can never drift out of sync with each other. `measuring` swaps
 // out the visible faces' "flex-1 + justify-center" (which vertically centers content within
@@ -23,7 +36,7 @@ const FaceContent = ({ label, labelClass, main, mainClass, sub, subClass, measur
       }
     >
       <div className={mainClass}>{main}</div>
-      {sub && <div className={`mt-2 text-sm italic ${subClass}`}>{sub}</div>}
+      {sub && <div className={`mt-2 text-sm italic leading-relaxed ${subClass}`}>{sub}</div>}
     </div>
   </>
 );
@@ -51,6 +64,14 @@ const FlashcardsViewer = ({ pair }) => {
   const [cardHeight, setCardHeight] = useState(MIN_CARD_HEIGHT);
 
   const card = cards[index];
+  const cardWidth = widthForLength(
+    Math.max(
+      (card.front.main || "").length,
+      (card.front.sub || "").length,
+      (card.back.main || "").length,
+      (card.back.sub || "").length
+    )
+  );
 
   // The card frame grows/shrinks per card to fit whichever face (front or back) needs more
   // room -- measured off invisible clones so the visible, absolutely-positioned flip faces
@@ -120,17 +141,21 @@ const FlashcardsViewer = ({ pair }) => {
         </div>
       </div>
 
-      <div ref={containerRef} className="relative mx-auto transition-[height] duration-200" style={{ height: cardHeight, maxWidth: 420 }}>
+      <div
+        ref={containerRef}
+        className="relative mx-auto"
+        style={{ height: cardHeight, maxWidth: cardWidth, transition: "height 200ms ease, max-width 200ms ease" }}
+      >
         {/* Invisible clones, one per face, used only to measure the height each face's real
             content needs at the card's actual width -- never shown or interactive. */}
         <div className="absolute left-0 right-0 top-0 invisible pointer-events-none p-6 flex flex-col" aria-hidden="true">
           <div ref={frontMeasureRef} className="flex flex-col">
-            <FaceContent measuring label="Question · tap to flip" labelClass="" main={card.front.main} mainClass="text-xl" sub={card.front.sub} subClass="" />
+            <FaceContent measuring label="Question · tap to flip" labelClass="" main={card.front.main} mainClass="text-xl leading-relaxed" sub={card.front.sub} subClass="" />
           </div>
         </div>
         <div className="absolute left-0 right-0 top-0 invisible pointer-events-none p-6 flex flex-col" aria-hidden="true">
           <div ref={backMeasureRef} className="flex flex-col">
-            <FaceContent measuring label="Answer" labelClass="" main={card.back.main} mainClass="text-lg" sub={card.back.sub} subClass="" />
+            <FaceContent measuring label="Answer" labelClass="" main={card.back.main} mainClass="text-lg leading-relaxed" sub={card.back.sub} subClass="" />
           </div>
         </div>
 
@@ -169,7 +194,7 @@ const FlashcardsViewer = ({ pair }) => {
                 label="Question · tap to flip"
                 labelClass="text-[#00f0ff]/70"
                 main={card.front.main}
-                mainClass="text-xl text-white"
+                mainClass="text-xl leading-relaxed text-white"
                 sub={card.front.sub}
                 subClass="text-white/50"
               />
@@ -182,7 +207,7 @@ const FlashcardsViewer = ({ pair }) => {
                 label="Answer"
                 labelClass="text-[#8a2be2]/80"
                 main={card.back.main}
-                mainClass="text-lg text-white/90"
+                mainClass="text-lg leading-relaxed text-white/90"
                 sub={card.back.sub}
                 subClass="text-white/40"
               />
