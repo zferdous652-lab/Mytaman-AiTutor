@@ -39,7 +39,7 @@ const NotesViewer = ({ pair, scrollRef }) => {
                 <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[#1f6f5c] shrink-0" />
                 <span className="text-xl text-[#2b2620] leading-relaxed">{main}</span>
               </div>
-              {sub && <div className="mt-1.5 pl-[18px] text-sm text-[#5c5346] italic">{sub}</div>}
+              {sub && <div className="mt-1.5 pl-[18px] text-base text-[#5c5346] italic">{sub}</div>}
             </motion.div>
           );
         })}

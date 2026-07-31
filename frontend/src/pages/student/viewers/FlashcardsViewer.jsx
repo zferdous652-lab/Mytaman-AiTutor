@@ -36,7 +36,7 @@ const FaceContent = ({ label, labelClass, main, mainClass, sub, subClass, measur
       }
     >
       <div className={mainClass}>{main}</div>
-      {sub && <div className={`mt-2 text-sm italic leading-relaxed ${subClass}`}>{sub}</div>}
+      {sub && <div className={`mt-2 text-base italic leading-relaxed ${subClass}`}>{sub}</div>}
     </div>
   </>
 );

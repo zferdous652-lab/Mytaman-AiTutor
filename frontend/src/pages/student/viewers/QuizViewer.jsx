@@ -302,7 +302,7 @@ const QuizViewer = ({ content, secondaryQuestions = [], onFinish }) => {
           <div className="mb-6">
             <div className="text-2xl text-[#2b2620]">{q.question}</div>
             {secondaryQuestions[index] && (
-              <div className="mt-1.5 text-sm text-[#5c5346] italic" data-testid="quiz-question-secondary">
+              <div className="mt-1.5 text-lg text-[#5c5346] italic" data-testid="quiz-question-secondary">
                 {secondaryQuestions[index]}
               </div>
             )}
