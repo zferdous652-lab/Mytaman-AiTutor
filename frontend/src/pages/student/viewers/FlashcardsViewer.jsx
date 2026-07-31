@@ -1,6 +1,21 @@
-import React, { useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { RotateCcw } from "lucide-react";
+
+const MIN_CARD_HEIGHT = 220;
+const MAX_CARD_HEIGHT = 520;
+
+// Shared markup for both the visible (flipping) faces and their invisible measurement
+// clones below, so the two can never drift out of sync with each other.
+const FaceContent = ({ label, labelClass, main, mainClass, sub, subClass }) => (
+  <>
+    <div className={`text-[10px] uppercase tracking-widest shrink-0 ${labelClass}`}>{label}</div>
+    <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center px-2 py-2">
+      <div className={mainClass}>{main}</div>
+      {sub && <div className={`mt-2 text-sm italic ${subClass}`}>{sub}</div>}
+    </div>
+  </>
+);
 
 // pair shape: { bm: {payload:{cards}}|null, en: {payload:{cards}}|null }. Cards are paired
 // by index; each face shows its BM text as the main line with the matching EN text as a
@@ -19,9 +34,30 @@ const FlashcardsViewer = ({ pair }) => {
   const [ratings, setRatings] = useState({});
   const [done, setDone] = useState(false);
 
-  if (cards.length === 0) return <div className="text-sm text-white/40">No flashcards.</div>;
+  const containerRef = useRef(null);
+  const frontMeasureRef = useRef(null);
+  const backMeasureRef = useRef(null);
+  const [cardHeight, setCardHeight] = useState(MIN_CARD_HEIGHT);
 
   const card = cards[index];
+
+  // The card frame grows/shrinks per card to fit whichever face (front or back) needs more
+  // room -- measured off invisible clones so the visible, absolutely-positioned flip faces
+  // never have to guess a height up front. Re-measures on card change and on resize, since
+  // the clones' width (and therefore their text wrapping) tracks the real card's width.
+  useLayoutEffect(() => {
+    const measure = () => {
+      const frontH = frontMeasureRef.current?.offsetHeight || 0;
+      const backH = backMeasureRef.current?.offsetHeight || 0;
+      const natural = Math.max(frontH, backH);
+      if (natural > 0) setCardHeight(Math.min(MAX_CARD_HEIGHT, Math.max(MIN_CARD_HEIGHT, natural)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [card]);
+
+  if (cards.length === 0) return <div className="text-sm text-white/40">No flashcards.</div>;
 
   const advance = (rating) => {
     setRatings((r) => ({ ...r, [index]: rating }));
@@ -73,7 +109,20 @@ const FlashcardsViewer = ({ pair }) => {
         </div>
       </div>
 
-      <div className="relative mx-auto" style={{ height: 260, maxWidth: 420 }}>
+      <div ref={containerRef} className="relative mx-auto transition-[height] duration-200" style={{ height: cardHeight, maxWidth: 420 }}>
+        {/* Invisible clones, one per face, used only to measure the height each face's real
+            content needs at the card's actual width -- never shown or interactive. */}
+        <div className="absolute left-0 right-0 top-0 invisible pointer-events-none p-6 flex flex-col" aria-hidden="true">
+          <div ref={frontMeasureRef} className="flex flex-col">
+            <FaceContent label="Question · tap to flip" labelClass="" main={card.front.main} mainClass="text-xl" sub={card.front.sub} subClass="" />
+          </div>
+        </div>
+        <div className="absolute left-0 right-0 top-0 invisible pointer-events-none p-6 flex flex-col" aria-hidden="true">
+          <div ref={backMeasureRef} className="flex flex-col">
+            <FaceContent label="Answer" labelClass="" main={card.back.main} mainClass="text-lg" sub={card.back.sub} subClass="" />
+          </div>
+        </div>
+
         {[2, 1].map((depth) => {
           const stackIdx = index + depth;
           if (stackIdx >= cards.length) return null;
@@ -105,21 +154,27 @@ const FlashcardsViewer = ({ pair }) => {
               className="absolute inset-0 rounded-2xl border border-[#00f0ff]/25 bg-gradient-to-br from-[#120a1f] to-[#0a0514] p-6 flex flex-col overflow-hidden"
               style={{ backfaceVisibility: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,240,255,0.05)" }}
             >
-              <div className="text-[10px] uppercase tracking-widest text-[#00f0ff]/70 shrink-0">Question · tap to flip</div>
-              <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center text-center px-2 py-2">
-                <div className="text-xl text-white">{card.front.main}</div>
-                {card.front.sub && <div className="mt-2 text-sm text-white/50 italic">{card.front.sub}</div>}
-              </div>
+              <FaceContent
+                label="Question · tap to flip"
+                labelClass="text-[#00f0ff]/70"
+                main={card.front.main}
+                mainClass="text-xl text-white"
+                sub={card.front.sub}
+                subClass="text-white/50"
+              />
             </div>
             <div
               className="absolute inset-0 rounded-2xl border border-[#8a2be2]/30 bg-gradient-to-br from-[#1a0f2e] to-[#0a0514] p-6 flex flex-col overflow-hidden"
               style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}
             >
-              <div className="text-[10px] uppercase tracking-widest text-[#8a2be2]/80 shrink-0">Answer</div>
-              <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center text-center px-2 py-2">
-                <div className="text-lg text-white/90">{card.back.main}</div>
-                {card.back.sub && <div className="mt-2 text-sm text-white/40 italic">{card.back.sub}</div>}
-              </div>
+              <FaceContent
+                label="Answer"
+                labelClass="text-[#8a2be2]/80"
+                main={card.back.main}
+                mainClass="text-lg text-white/90"
+                sub={card.back.sub}
+                subClass="text-white/40"
+              />
             </div>
           </motion.button>
         </div>
