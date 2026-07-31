@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
-import { Package, Trophy, LogOut } from "lucide-react";
+import { Package, Trophy, LogOut, ArrowRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
@@ -112,6 +112,28 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
     return map;
   }, [visibleItems]);
 
+  // Reading order for "Go to next item": every course's chapters in order, each chapter's
+  // lessons in order -- lets the next-item button walk straight across chapter boundaries.
+  const flatLessons = useMemo(() => {
+    const out = [];
+    courses.forEach((course) => {
+      (chaptersByCourse[course.id] || []).forEach((ch) => {
+        (itemsByChapter[ch.id] || []).forEach((it) => out.push({ item: it, courseId: course.id, chapterId: ch.id }));
+      });
+    });
+    return out;
+  }, [courses, chaptersByCourse, itemsByChapter]);
+
+  const currentIndex = selected ? flatLessons.findIndex((l) => l.item.id === selected.id) : -1;
+  const nextLesson = currentIndex >= 0 ? flatLessons[currentIndex + 1] : undefined;
+
+  const goToNext = () => {
+    if (!nextLesson) return;
+    setOpenCourseId(nextLesson.courseId);
+    setOpenChapterIds((prev) => new Set(prev).add(nextLesson.chapterId));
+    setSelected(nextLesson.item);
+  };
+
   return (
     <div className="fixed inset-0 z-30 flex bg-[var(--bg)]">
       <motion.aside
@@ -211,18 +233,50 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
         </div>
       </motion.aside>
 
-      <main className="flex-1 min-w-0 overflow-hidden">
+      <main className="flex-1 min-w-0 overflow-hidden flex flex-col">
         {selected ? (
-          <ContentViewer
-            key={selected.id}
-            variant="pane"
-            content={selected}
-            done={completed.has(selected.id)}
-            onClose={() => setSelected(null)}
-            onComplete={markComplete}
-            onUncomplete={markIncomplete}
-            onQuizScore={updateQuizScore}
-          />
+          <>
+            <div className="shrink-0 border-b border-white/8 bg-[#0a0514]/60 px-6 sm:px-10 py-3 flex items-center gap-4" data-testid="lesson-progress-bar">
+              <span className="text-xs text-white/50 shrink-0">
+                Lesson {currentIndex + 1} of {flatLessons.length}
+              </span>
+              <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#00f0ff] to-[#8a2be2]"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <span className="text-xs text-white/50 shrink-0">
+                {completed.size}/{visibleItems.length} completed
+              </span>
+            </div>
+
+            <div className="flex-1 min-h-0">
+              <ContentViewer
+                key={selected.id}
+                variant="pane"
+                content={selected}
+                done={completed.has(selected.id)}
+                onClose={() => setSelected(null)}
+                onComplete={markComplete}
+                onUncomplete={markIncomplete}
+                onQuizScore={updateQuizScore}
+              />
+            </div>
+
+            <div className="shrink-0 border-t border-white/8 bg-[#0a0514]/60 px-6 sm:px-10 py-3 flex justify-end">
+              <button
+                type="button"
+                onClick={goToNext}
+                disabled={!nextLesson}
+                data-testid="go-to-next-item"
+                className="inline-flex items-center gap-2 rounded-full bg-[#00f0ff] px-6 py-2.5 text-sm font-semibold text-black hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#00f0ff]"
+              >
+                {nextLesson ? "Go to next item" : "You're all caught up"}
+                {nextLesson && <ArrowRight size={15} />}
+              </button>
+            </div>
+          </>
         ) : (
           <WelcomePane pack={activePack} progressPct={progressPct} itemCount={visibleItems.length} />
         )}
