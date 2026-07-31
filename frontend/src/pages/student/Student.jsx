@@ -104,9 +104,13 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   // language. Both language ids stay on the pair either way -- ContentViewer/CourseSidebar
   // decide what to *display* from `langFilter`, but "done" is always checked against both
   // ids, so completing a lesson under one filter still reads as done under the others.
+  // Three disjoint sets, not "has at least this language": "All" is lessons that exist in
+  // both BM and EN; "En" is English-only lessons (no BM counterpart); "Bm" is BM-only
+  // lessons (no EN counterpart). A lesson with only one language never shows under "All".
   const filteredItems = useMemo(() => {
-    if (langFilter === "all") return items;
-    return items.filter((it) => it[langFilter]);
+    if (langFilter === "all") return items.filter((it) => it.bm && it.en);
+    if (langFilter === "en") return items.filter((it) => it.en && !it.bm);
+    return items.filter((it) => it.bm && !it.en);
   }, [items, langFilter]);
 
   useEffect(() => {
