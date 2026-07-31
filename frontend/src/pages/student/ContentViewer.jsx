@@ -13,21 +13,36 @@ const PAPER_TYPES = ["summary", "notes", "quiz"];
 const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Flashcards", mindmap: "Mind Map", notes: "Notes" };
 
 // pair shape (from GET /content/list-paired): { key, content_type, title,
-// bm: {id,title,body,payload}|null, en: {...}|null }. BM is always the priority/main
-// language when it exists; EN renders as a subtle secondary wherever the content type
-// supports it, and is the sole content when no BM variant exists.
-const langBadge = (pair) => (pair.bm && pair.en ? "BM · EN" : pair.bm ? "BM" : "EN");
+// bm: {id,title,body,payload}|null, en: {...}|null }.
+//
+// focusLang controls which language is being *read*: "all" shows BM as the main content
+// with EN as a subtle secondary wherever the content type supports it (falling back to
+// whichever single language exists); "en"/"bm" show that language alone, matching the
+// original single-language behavior. Completion, though, is always tracked pair-wide --
+// marking complete only awards XP once (against whichever language is primary for the
+// active view), but marking *incomplete* clears both language ids, and "done" (passed in
+// from the caller) is computed by checking either id, so a lesson finished from "All"
+// still reads as done after switching to "En" or "Bm", and vice versa.
+const langBadge = (pair, focusLang) => {
+  if (focusLang !== "all") return focusLang.toUpperCase();
+  return pair.bm && pair.en ? "BM · EN" : pair.bm ? "BM" : "EN";
+};
 
 // variant="modal" (default) -- the original centered popover, still used anywhere a lesson
 // needs to float above other UI. variant="pane" -- fills its parent container edge-to-edge,
 // used by the course player's right-hand reading pane instead of a popup.
-const ContentViewer = ({ pair, done, onClose, onComplete, onUncomplete, onQuizScore, variant = "modal" }) => {
+const ContentViewer = ({ pair, done, onClose, onComplete, onUncomplete, onQuizScore, variant = "modal", focusLang = "all" }) => {
   const scrollRef = useRef(null);
   if (!pair) return null;
 
-  const primary = pair.bm || pair.en;
-  const secondary = pair.bm && pair.en ? pair.en : null;
+  const primary = focusLang === "en" ? pair.en || pair.bm : focusLang === "bm" ? pair.bm || pair.en : pair.bm || pair.en;
+  const secondary = focusLang === "all" && pair.bm && pair.en ? pair.en : null;
   if (!primary) return null;
+
+  // What the purely-presentational viewers (Summary/Notes/Flashcards) render -- reflects
+  // the active filter, unlike `pair` itself which always keeps both language ids around
+  // for completion tracking.
+  const displayPair = focusLang === "all" ? pair : { ...pair, bm: focusLang === "bm" ? pair.bm : null, en: focusLang === "en" ? pair.en : null };
 
   const paper = PAPER_TYPES.includes(pair.content_type);
   const pane = variant === "pane";
@@ -43,12 +58,17 @@ const ContentViewer = ({ pair, done, onClose, onComplete, onUncomplete, onQuizSc
   };
 
   const markIncomplete = async () => {
+    // Clears both language ids so the lesson can always be fully un-completed regardless
+    // of which language view (All/En/Bm) it was originally marked done from.
     try {
-      await api.delete(`/content/${primary.id}/complete`);
-      onUncomplete?.(primary.id);
+      await Promise.allSettled(
+        [pair.bm?.id, pair.en?.id].filter(Boolean).map((id) => api.delete(`/content/${id}/complete`))
+      );
     } catch (e) {
       // best-effort — completion tracking shouldn't block reading content
     }
+    if (pair.bm) onUncomplete?.(pair.bm.id);
+    if (pair.en) onUncomplete?.(pair.en.id);
   };
 
   const finishQuiz = async (score, total) => {
@@ -78,7 +98,7 @@ const ContentViewer = ({ pair, done, onClose, onComplete, onUncomplete, onQuizSc
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className={`overline ${paper ? "text-[#1f6f5c]" : "text-[#00f0ff]"}`}>
-            {CONTENT_TYPE_LABELS[pair.content_type] || pair.content_type} · {langBadge(pair)}
+            {CONTENT_TYPE_LABELS[pair.content_type] || pair.content_type} · {langBadge(pair, focusLang)}
           </div>
           <div className={`font-display text-2xl tracking-tighter mt-2 mb-5 ${paper ? "text-[#2b2620]" : "text-white"}`}>
             {pair.title}
@@ -108,7 +128,7 @@ const ContentViewer = ({ pair, done, onClose, onComplete, onUncomplete, onQuizSc
           onFinish={finishQuiz}
         />
       )}
-      {pair.content_type === "flashcards" && <FlashcardsViewer pair={pair} />}
+      {pair.content_type === "flashcards" && <FlashcardsViewer pair={displayPair} />}
       {pair.content_type === "mindmap" && (
         <MindmapViewer
           content={{ payload: primary.payload }}
@@ -116,8 +136,8 @@ const ContentViewer = ({ pair, done, onClose, onComplete, onUncomplete, onQuizSc
           secondaryLabel="EN"
         />
       )}
-      {pair.content_type === "notes" && <NotesViewer pair={pair} scrollRef={scrollRef} />}
-      {pair.content_type === "summary" && <SummaryViewer pair={pair} scrollRef={scrollRef} />}
+      {pair.content_type === "notes" && <NotesViewer pair={displayPair} scrollRef={scrollRef} />}
+      {pair.content_type === "summary" && <SummaryViewer pair={displayPair} scrollRef={scrollRef} />}
 
       <div className="mt-6 flex gap-3">
         {pair.content_type !== "quiz" && !done && (

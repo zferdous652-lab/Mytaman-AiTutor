@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
-import CourseSidebar, { primaryId } from "./CourseSidebar";
+import CourseSidebar, { isPairDone } from "./CourseSidebar";
 import ContentViewer from "./ContentViewer";
 
 const LANG_FILTERS = ["all", "en", "bm"];
@@ -100,23 +100,20 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
     });
   };
 
-  // "All" keeps every pair as-is (BM main, EN subtle, per ContentViewer's own rule). "En"/
-  // "bm" drop back to the original single-language behavior: only pairs that actually have
-  // that language are shown, and the other language is nulled out so nothing downstream
-  // (sidebar badges, ContentViewer's primary/secondary split) needs to know about the filter.
+  // "All" keeps every pair as-is; "en"/"bm" only show pairs that actually have that
+  // language. Both language ids stay on the pair either way -- ContentViewer/CourseSidebar
+  // decide what to *display* from `langFilter`, but "done" is always checked against both
+  // ids, so completing a lesson under one filter still reads as done under the others.
   const filteredItems = useMemo(() => {
     if (langFilter === "all") return items;
-    return items.filter((it) => it[langFilter]).map((it) => ({ ...it, [langFilter === "en" ? "bm" : "en"]: null }));
+    return items.filter((it) => it[langFilter]);
   }, [items, langFilter]);
 
   useEffect(() => {
     setSelected(null);
   }, [langFilter]);
 
-  // Count completed *pairs* (bounded by filteredItems.length) rather than raw completed_ids
-  // -- a pair predating this feature may have both its EN and BM ids marked complete from
-  // the old per-language flow, which would otherwise inflate the percentage past 100%.
-  const completedPairCount = filteredItems.filter((it) => completed.has(primaryId(it))).length;
+  const completedPairCount = filteredItems.filter((it) => isPairDone(it, completed)).length;
   const progressPct = filteredItems.length ? Math.round((completedPairCount / filteredItems.length) * 100) : 0;
 
   const itemsByChapter = useMemo(() => {
@@ -213,6 +210,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
               openChapterIds={openChapterIds}
               onToggleChapter={toggleChapter}
               selectedKey={selected?.key}
+              langFilter={langFilter}
               onSelectContent={setSelected}
             />
           )}
@@ -273,7 +271,8 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
                 key={selected.key}
                 variant="pane"
                 pair={selected}
-                done={completed.has(primaryId(selected))}
+                focusLang={langFilter}
+                done={isPairDone(selected, completed)}
                 onClose={() => setSelected(null)}
                 onComplete={markComplete}
                 onUncomplete={markIncomplete}

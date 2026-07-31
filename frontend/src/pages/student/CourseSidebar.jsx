@@ -4,15 +4,21 @@ import { ChevronDown, ChevronRight, Check, FileText, HelpCircle, Layers, Waypoin
 const CONTENT_TYPE_ICON = { summary: FileText, quiz: HelpCircle, flashcards: Layers, mindmap: Waypoints, notes: StickyNote };
 const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Flashcards", mindmap: "Mind Map", notes: "Notes" };
 
-// A pair's progress/selection identity is its BM item when one exists, else its EN item --
-// mirrors ContentViewer's own "BM is primary" rule so sidebar state and the reading pane
-// agree on what "done"/"selected" means for a given lesson.
-export const primaryId = (pair) => pair.bm?.id ?? pair.en?.id;
-const langBadge = (pair) => (pair.bm && pair.en ? "BM · EN" : pair.bm ? "BM" : "EN");
+// A pair counts as done if EITHER of its language ids has been marked complete -- so
+// completing a lesson from "All" (which completes the BM id) still reads as done when the
+// student later switches to the "En" filter, and vice versa. `completedIds` is the raw Set
+// of completed content ids from GET /content/progress.
+export const isPairDone = (pair, completedIds) =>
+  (!!pair.bm && completedIds.has(pair.bm.id)) || (!!pair.en && completedIds.has(pair.en.id));
+
+const langBadge = (pair, langFilter) => {
+  if (langFilter !== "all") return langFilter.toUpperCase();
+  return pair.bm && pair.en ? "BM · EN" : pair.bm ? "BM" : "EN";
+};
 
 // A single lesson row inside an expanded chapter -- the leaf of the course tree. `pair` is
 // one bilingual lesson: { key, content_type, title, bm, en }.
-const LessonRow = ({ pair, done, active, onSelect }) => {
+const LessonRow = ({ pair, done, active, langFilter, onSelect }) => {
   const Icon = CONTENT_TYPE_ICON[pair.content_type] || FileText;
   return (
     <button
@@ -27,7 +33,7 @@ const LessonRow = ({ pair, done, active, onSelect }) => {
       <span className="min-w-0 flex-1">
         <span className={`block text-sm truncate ${active ? "text-white font-medium" : "text-white/80"}`}>{pair.title}</span>
         <span className="block text-[10px] uppercase tracking-widest text-white/45">
-          {CONTENT_TYPE_LABELS[pair.content_type] || pair.content_type} · {langBadge(pair)}
+          {CONTENT_TYPE_LABELS[pair.content_type] || pair.content_type} · {langBadge(pair, langFilter)}
         </span>
       </span>
       {done ? (
@@ -41,8 +47,8 @@ const LessonRow = ({ pair, done, active, onSelect }) => {
 
 // Middle tier -- visually quieter than the course header (no bold display font) but louder
 // than lesson rows (a folder icon + all-caps label), so it reads as its own layer.
-const ChapterNode = ({ chapter, items, completed, isOpen, onToggle, selectedKey, onSelectContent }) => {
-  const doneCount = items.filter((it) => completed.has(primaryId(it))).length;
+const ChapterNode = ({ chapter, items, completed, isOpen, onToggle, selectedKey, langFilter, onSelectContent }) => {
+  const doneCount = items.filter((it) => isPairDone(it, completed)).length;
   return (
     <div data-testid={`sidebar-chapter-${chapter.id}`}>
       <button
@@ -67,8 +73,9 @@ const ChapterNode = ({ chapter, items, completed, isOpen, onToggle, selectedKey,
             <LessonRow
               key={it.key}
               pair={it}
-              done={completed.has(primaryId(it))}
+              done={isPairDone(it, completed)}
               active={selectedKey === it.key}
+              langFilter={langFilter}
               onSelect={() => onSelectContent(it)}
             />
           ))}
@@ -80,7 +87,7 @@ const ChapterNode = ({ chapter, items, completed, isOpen, onToggle, selectedKey,
 
 // Top tier -- the loudest element in the tree: bold display font, full opacity white, and a
 // gradient accent bar down the left edge so it visually anchors everything nested under it.
-const CourseNode = ({ course, chapters, itemsByChapter, completed, isOpen, onToggleCourse, openChapterIds, onToggleChapter, selectedKey, onSelectContent }) => (
+const CourseNode = ({ course, chapters, itemsByChapter, completed, isOpen, onToggleCourse, openChapterIds, onToggleChapter, selectedKey, langFilter, onSelectContent }) => (
   <div className="relative rounded-xl border border-white/10 bg-white/[0.04] overflow-hidden" data-testid={`sidebar-course-${course.id}`}>
     <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[#00f0ff] to-[#8a2be2]" aria-hidden />
     <button
@@ -106,6 +113,7 @@ const CourseNode = ({ course, chapters, itemsByChapter, completed, isOpen, onTog
             isOpen={openChapterIds.has(ch.id)}
             onToggle={() => onToggleChapter(ch.id)}
             selectedKey={selectedKey}
+            langFilter={langFilter}
             onSelectContent={onSelectContent}
           />
         ))}
@@ -116,7 +124,7 @@ const CourseNode = ({ course, chapters, itemsByChapter, completed, isOpen, onTog
 
 // The course-navigator tree: Course (expandable) -> Chapter (expandable) -> lessons.
 // Renders nothing but the tree itself; the caller owns layout/chrome around it.
-const CourseSidebar = ({ courses, chaptersByCourse, itemsByChapter, completed, openCourseId, onToggleCourse, openChapterIds, onToggleChapter, selectedKey, onSelectContent }) => (
+const CourseSidebar = ({ courses, chaptersByCourse, itemsByChapter, completed, openCourseId, onToggleCourse, openChapterIds, onToggleChapter, selectedKey, langFilter, onSelectContent }) => (
   <div className="space-y-2.5" data-testid="course-sidebar-tree">
     {courses.map((course) => {
       const chapters = (chaptersByCourse[course.id] || []).filter((ch) => itemsByChapter[ch.id]?.length);
@@ -133,6 +141,7 @@ const CourseSidebar = ({ courses, chaptersByCourse, itemsByChapter, completed, o
           openChapterIds={openChapterIds}
           onToggleChapter={onToggleChapter}
           selectedKey={selectedKey}
+          langFilter={langFilter}
           onSelectContent={onSelectContent}
         />
       );
