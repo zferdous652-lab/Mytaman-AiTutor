@@ -28,6 +28,13 @@ PROMPT_KEY = {
     "mindmap": "mindmap_generation",
     "notes": "notes_generation",
 }
+TRANSLATE_PROMPT_KEY = {
+    "summary": "translate_summary",
+    "quiz": "translate_quiz",
+    "flashcards": "translate_flashcards",
+    "mindmap": "translate_mindmap",
+    "notes": "translate_notes",
+}
 
 
 class GenerateIn(BaseModel):
@@ -213,6 +220,10 @@ class AiDraftItemIn(BaseModel):
     content_type: ContentType
     language: Literal["en", "bm"] = "en"
     source_text: str = Field(min_length=10)
+    # When set, this is the already-generated payload for the SAME chapter+content_type in
+    # the other language -- generation translates it directly (preserving structure/counts)
+    # instead of generating fresh from source_text, so BM/EN stay aligned line-for-line.
+    translate_payload: Optional[dict] = None
 
 
 class AiDraftItemOut(BaseModel):
@@ -293,9 +304,19 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found")
 
-    lang_hint = "Respond in Bahasa Melayu." if payload.language == "bm" else "Respond in English."
-    user_text = f"{lang_hint}\n\nChapter: {chapter['title']}\n\nSource material:\n{payload.source_text}"
-    result = await call_router(PROMPT_KEY[payload.content_type], user_text)
+    lang_name = "Bahasa Melayu" if payload.language == "bm" else "English"
+    if payload.translate_payload:
+        if payload.content_type == "summary":
+            source_content = payload.translate_payload.get("body", "")
+        elif payload.content_type == "mindmap":
+            source_content = payload.translate_payload.get("html", "")
+        else:
+            source_content = json.dumps(payload.translate_payload, ensure_ascii=False)
+        user_text = f"Respond in {lang_name}.\n\nChapter: {chapter['title']}\n\nContent to translate:\n{source_content}"
+        result = await call_router(TRANSLATE_PROMPT_KEY[payload.content_type], user_text)
+    else:
+        user_text = f"Respond in {lang_name}.\n\nChapter: {chapter['title']}\n\nSource material:\n{payload.source_text}"
+        result = await call_router(PROMPT_KEY[payload.content_type], user_text)
 
     if payload.content_type == "summary":
         raw_payload = {"body": _strip_markdown(result["text"]).strip()}

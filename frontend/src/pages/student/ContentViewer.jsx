@@ -124,7 +124,7 @@ const ContentViewer = ({ pair, done, onClose, onComplete, onUncomplete, onQuizSc
       {pair.content_type === "quiz" && (
         <QuizViewer
           content={{ id: primary.id, content_type: "quiz", payload: primary.payload }}
-          secondaryQuestions={secondary?.payload?.questions?.map((q) => q.question) || []}
+          secondaryQuestions={secondary?.payload?.questions || []}
           onFinish={finishQuiz}
         />
       )}

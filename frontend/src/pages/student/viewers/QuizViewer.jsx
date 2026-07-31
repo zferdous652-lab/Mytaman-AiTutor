@@ -16,7 +16,7 @@ const TONE_CLASS = {
   faded: "border-[#3b2f1a]/10 text-[#5c5346]/50",
 };
 
-const OptionButton = ({ children, tone, onClick, disabled, testId, reduce }) => (
+const OptionButton = ({ children, sub, tone, onClick, disabled, testId, reduce }) => (
   <motion.button
     type="button"
     disabled={disabled}
@@ -27,7 +27,8 @@ const OptionButton = ({ children, tone, onClick, disabled, testId, reduce }) => 
     transition={{ type: "spring", stiffness: 500, damping: 32 }}
     className={`w-full text-left rounded-xl border px-4 py-3.5 text-lg transition-colors ${TONE_CLASS[tone]}`}
   >
-    {children}
+    <div>{children}</div>
+    {sub && <div className="mt-1 text-base italic opacity-70" data-testid="quiz-option-secondary">{sub}</div>}
   </motion.button>
 );
 
@@ -63,8 +64,10 @@ const normalizeShortAnswer = (s) =>
     .replace(/\s+/g, " ");
 
 // payload shape: { questions: [{ type: mcq|true_false|short_answer, question, options?, correct_answer? }] }
-// secondaryQuestions: the other language's question text aligned by index (or []) -- shown
-// as a subtle gloss under the main (BM-priority) question, options stay single-language.
+// secondaryQuestions: the other language's full question objects aligned by index (or []) --
+// the question text shows as a subtle gloss under the main (BM-priority) question, and for
+// mcq, each option shows its own translated option underneath (paired by option index, only
+// when both languages have the same option count -- otherwise no per-option gloss is shown).
 const QuizViewer = ({ content, secondaryQuestions = [], onFinish }) => {
   const reduce = useReducedMotion();
   const questions = useMemo(() => content.payload?.questions || [], [content.payload?.questions]);
@@ -301,24 +304,26 @@ const QuizViewer = ({ content, secondaryQuestions = [], onFinish }) => {
         >
           <div className="mb-6">
             <div className="text-2xl text-[#2b2620]">{q.question}</div>
-            {secondaryQuestions[index] && (
+            {secondaryQuestions[index]?.question && (
               <div className="mt-1.5 text-lg text-[#5c5346] italic" data-testid="quiz-question-secondary">
-                {secondaryQuestions[index]}
+                {secondaryQuestions[index].question}
               </div>
             )}
           </div>
 
           {q.type === "mcq" && (
             <div className="grid sm:grid-cols-2 gap-3.5">
-              {(q.options || []).map((opt) => {
+              {(q.options || []).map((opt, i) => {
                 let tone = "idle";
                 if (locked) {
                   if (opt === q.correct_answer) tone = "correct";
                   else if (opt === answers[index]) tone = "incorrect";
                   else tone = "faded";
                 } else if (opt === answers[index]) tone = "selected";
+                const secondaryOptions = secondaryQuestions[index]?.options;
+                const sub = secondaryOptions?.length === (q.options || []).length ? secondaryOptions[i] : null;
                 return (
-                  <OptionButton key={opt} tone={tone} disabled={locked} reduce={reduce} onClick={() => selectAnswer(opt)} testId={`quiz-opt-${opt}`}>
+                  <OptionButton key={i} sub={sub} tone={tone} disabled={locked} reduce={reduce} onClick={() => selectAnswer(opt)} testId={`quiz-opt-${opt}`}>
                     {opt}
                   </OptionButton>
                 );
