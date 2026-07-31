@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import QuizViewer from "./viewers/QuizViewer";
@@ -11,11 +12,15 @@ import SummaryViewer from "./viewers/SummaryViewer";
 const PAPER_TYPES = ["summary", "notes", "quiz"];
 const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Flashcards", mindmap: "Mind Map", notes: "Notes" };
 
-const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQuizScore }) => {
+// variant="modal" (default) -- the original centered popover, still used anywhere a lesson
+// needs to float above other UI. variant="pane" -- fills its parent container edge-to-edge,
+// used by the course player's right-hand reading pane instead of a popup.
+const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQuizScore, variant = "modal" }) => {
   const scrollRef = useRef(null);
   if (!content) return null;
 
   const paper = PAPER_TYPES.includes(content.content_type);
+  const pane = variant === "pane";
 
   const markComplete = async () => {
     try {
@@ -47,58 +52,79 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQui
     onQuizScore?.(content.id, score, total);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-md p-3 sm:p-6" onClick={onClose}>
-      <div
-        ref={scrollRef}
-        className={
-          paper
-            ? "paper-card paper-content max-w-4xl w-full rounded-2xl p-6 sm:p-10 lg:p-12 max-h-[90vh] overflow-auto"
-            : "max-w-2xl w-full glass rounded-2xl p-5 sm:p-8 max-h-[85vh] overflow-auto"
-        }
-        onClick={(e) => e.stopPropagation()}
-        data-testid="content-modal"
-      >
-        <div className={`overline ${paper ? "text-[#1f6f5c]" : "text-[#00f0ff]"}`}>
-          {CONTENT_TYPE_LABELS[content.content_type] || content.content_type} · {content.language?.toUpperCase()}
+  const body = (
+    <div
+      ref={scrollRef}
+      className={
+        pane
+          ? `h-full w-full overflow-auto p-6 sm:p-10 lg:p-14 ${paper ? "paper-card paper-content" : "glass"}`
+          : paper
+          ? "paper-card paper-content max-w-4xl w-full rounded-2xl p-6 sm:p-10 lg:p-12 max-h-[90vh] overflow-auto"
+          : "max-w-2xl w-full glass rounded-2xl p-5 sm:p-8 max-h-[85vh] overflow-auto"
+      }
+      onClick={pane ? undefined : (e) => e.stopPropagation()}
+      data-testid="content-modal"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className={`overline ${paper ? "text-[#1f6f5c]" : "text-[#00f0ff]"}`}>
+            {CONTENT_TYPE_LABELS[content.content_type] || content.content_type} · {content.language?.toUpperCase()}
+          </div>
+          <div className={`font-display text-2xl tracking-tighter mt-2 mb-5 ${paper ? "text-[#2b2620]" : "text-white"}`}>
+            {content.title}
+          </div>
         </div>
-        <div className={`font-display text-2xl tracking-tighter mt-2 mb-5 ${paper ? "text-[#2b2620]" : "text-white"}`}>
-          {content.title}
-        </div>
+        {pane && (
+          <button
+            type="button"
+            data-testid="pane-close"
+            onClick={onClose}
+            aria-label="Close lesson"
+            className={
+              paper
+                ? "shrink-0 rounded-full border border-[#3b2f1a]/20 p-2 text-[#5c5346] hover:border-[#1f6f5c] hover:text-[#1f6f5c] transition-colors"
+                : "shrink-0 rounded-full border border-white/15 p-2 text-white/70 hover:border-[#00f0ff] hover:text-[#00f0ff] transition-colors"
+            }
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
 
-        {content.content_type === "quiz" && <QuizViewer content={content} onFinish={finishQuiz} />}
-        {content.content_type === "flashcards" && <FlashcardsViewer content={content} />}
-        {content.content_type === "mindmap" && <MindmapViewer content={content} />}
-        {content.content_type === "notes" && <NotesViewer content={content} scrollRef={scrollRef} />}
-        {content.content_type === "summary" && <SummaryViewer content={content} scrollRef={scrollRef} />}
+      {content.content_type === "quiz" && <QuizViewer content={content} onFinish={finishQuiz} />}
+      {content.content_type === "flashcards" && <FlashcardsViewer content={content} />}
+      {content.content_type === "mindmap" && <MindmapViewer content={content} />}
+      {content.content_type === "notes" && <NotesViewer content={content} scrollRef={scrollRef} />}
+      {content.content_type === "summary" && <SummaryViewer content={content} scrollRef={scrollRef} />}
 
-        <div className="mt-6 flex gap-3">
-          {content.content_type !== "quiz" && !done && (
-            <button
-              data-testid="mark-complete"
-              onClick={markComplete}
-              className={
-                paper
-                  ? "rounded-full bg-[#1f6f5c]/10 border border-[#1f6f5c]/40 px-5 py-2 text-sm text-[#1f6f5c] hover:bg-[#1f6f5c]/20 transition-colors"
-                  : "rounded-full bg-[#00f0ff]/10 border border-[#00f0ff]/40 px-5 py-2 text-sm text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-colors"
-              }
-            >
-              Mark as complete
-            </button>
-          )}
-          {done && (
-            <button
-              data-testid="mark-incomplete"
-              onClick={markIncomplete}
-              className={
-                paper
-                  ? "rounded-full border border-[#3b2f1a]/25 px-5 py-2 text-sm text-[#5c5346] hover:border-[#b3261e] hover:text-[#b3261e] transition-colors"
-                  : "rounded-full border border-white/15 px-5 py-2 text-sm text-white/70 hover:border-[#ff0055] hover:text-[#ff0055] transition-colors"
-              }
-            >
-              Mark as incomplete
-            </button>
-          )}
+      <div className="mt-6 flex gap-3">
+        {content.content_type !== "quiz" && !done && (
+          <button
+            data-testid="mark-complete"
+            onClick={markComplete}
+            className={
+              paper
+                ? "rounded-full bg-[#1f6f5c]/10 border border-[#1f6f5c]/40 px-5 py-2 text-sm text-[#1f6f5c] hover:bg-[#1f6f5c]/20 transition-colors"
+                : "rounded-full bg-[#00f0ff]/10 border border-[#00f0ff]/40 px-5 py-2 text-sm text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-colors"
+            }
+          >
+            Mark as complete
+          </button>
+        )}
+        {done && (
+          <button
+            data-testid="mark-incomplete"
+            onClick={markIncomplete}
+            className={
+              paper
+                ? "rounded-full border border-[#3b2f1a]/25 px-5 py-2 text-sm text-[#5c5346] hover:border-[#b3261e] hover:text-[#b3261e] transition-colors"
+                : "rounded-full border border-white/15 px-5 py-2 text-sm text-white/70 hover:border-[#ff0055] hover:text-[#ff0055] transition-colors"
+            }
+          >
+            Mark as incomplete
+          </button>
+        )}
+        {!pane && (
           <button
             data-testid="modal-close"
             onClick={onClose}
@@ -110,8 +136,16 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQui
           >
             Close
           </button>
-        </div>
+        )}
       </div>
+    </div>
+  );
+
+  if (pane) return body;
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-md p-3 sm:p-6" onClick={onClose}>
+      {body}
     </div>
   );
 };
