@@ -4,13 +4,24 @@ import { RotateCcw } from "lucide-react";
 
 const MIN_CARD_HEIGHT = 220;
 const MAX_CARD_HEIGHT = 520;
+const FACE_VERTICAL_PADDING = 48; // p-6 top + bottom on each face -- not part of the measured inner content
 
 // Shared markup for both the visible (flipping) faces and their invisible measurement
-// clones below, so the two can never drift out of sync with each other.
-const FaceContent = ({ label, labelClass, main, mainClass, sub, subClass }) => (
+// clones below, so the two can never drift out of sync with each other. `measuring` swaps
+// out the visible faces' "flex-1 + justify-center" (which vertically centers content within
+// a *fixed* card height) for plain stacked layout -- flex-1 in an auto-height container is
+// ambiguous across browsers and can under-report its natural height, which previously threw
+// the measured card height off and made the centered answer text bleed up over the label.
+const FaceContent = ({ label, labelClass, main, mainClass, sub, subClass, measuring }) => (
   <>
     <div className={`text-[10px] uppercase tracking-widest shrink-0 ${labelClass}`}>{label}</div>
-    <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center px-2 py-2">
+    <div
+      className={
+        measuring
+          ? "flex flex-col items-center text-center px-2 py-2"
+          : "flex-1 min-h-0 flex flex-col items-center justify-center text-center px-2 py-2"
+      }
+    >
       <div className={mainClass}>{main}</div>
       {sub && <div className={`mt-2 text-sm italic ${subClass}`}>{sub}</div>}
     </div>
@@ -49,8 +60,8 @@ const FlashcardsViewer = ({ pair }) => {
     const measure = () => {
       const frontH = frontMeasureRef.current?.offsetHeight || 0;
       const backH = backMeasureRef.current?.offsetHeight || 0;
-      const natural = Math.max(frontH, backH);
-      if (natural > 0) setCardHeight(Math.min(MAX_CARD_HEIGHT, Math.max(MIN_CARD_HEIGHT, natural)));
+      const natural = Math.max(frontH, backH) + FACE_VERTICAL_PADDING;
+      if (natural > FACE_VERTICAL_PADDING) setCardHeight(Math.min(MAX_CARD_HEIGHT, Math.max(MIN_CARD_HEIGHT, natural)));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -114,12 +125,12 @@ const FlashcardsViewer = ({ pair }) => {
             content needs at the card's actual width -- never shown or interactive. */}
         <div className="absolute left-0 right-0 top-0 invisible pointer-events-none p-6 flex flex-col" aria-hidden="true">
           <div ref={frontMeasureRef} className="flex flex-col">
-            <FaceContent label="Question · tap to flip" labelClass="" main={card.front.main} mainClass="text-xl" sub={card.front.sub} subClass="" />
+            <FaceContent measuring label="Question · tap to flip" labelClass="" main={card.front.main} mainClass="text-xl" sub={card.front.sub} subClass="" />
           </div>
         </div>
         <div className="absolute left-0 right-0 top-0 invisible pointer-events-none p-6 flex flex-col" aria-hidden="true">
           <div ref={backMeasureRef} className="flex flex-col">
-            <FaceContent label="Answer" labelClass="" main={card.back.main} mainClass="text-lg" sub={card.back.sub} subClass="" />
+            <FaceContent measuring label="Answer" labelClass="" main={card.back.main} mainClass="text-lg" sub={card.back.sub} subClass="" />
           </div>
         </div>
 
