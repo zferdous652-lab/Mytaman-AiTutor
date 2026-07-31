@@ -10,6 +10,8 @@ import LanguageToggle from "@/components/LanguageToggle";
 import CourseSidebar, { primaryId } from "./CourseSidebar";
 import ContentViewer from "./ContentViewer";
 
+const LANG_FILTERS = ["all", "en", "bm"];
+
 // The right-hand pane shown before a lesson is picked -- an at-a-glance summary of the
 // active pack plus a nudge to start reading, instead of a blank area.
 const WelcomePane = ({ pack, progressPct, itemCount }) => (
@@ -54,6 +56,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   const [completed, setCompleted] = useState(new Set());
   const [quizScores, setQuizScores] = useState({});
   const [selected, setSelected] = useState(null);
+  const [langFilter, setLangFilter] = useState("all");
   const [openCourseId, setOpenCourseId] = useState(null);
   const [openChapterIds, setOpenChapterIds] = useState(new Set());
 
@@ -97,20 +100,33 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
     });
   };
 
-  // Count completed *pairs* (bounded by items.length) rather than raw completed_ids -- a
-  // pair predating this feature may have both its EN and BM ids marked complete from the
-  // old per-language flow, which would otherwise inflate the percentage past 100%.
-  const completedPairCount = items.filter((it) => completed.has(primaryId(it))).length;
-  const progressPct = items.length ? Math.round((completedPairCount / items.length) * 100) : 0;
+  // "All" keeps every pair as-is (BM main, EN subtle, per ContentViewer's own rule). "En"/
+  // "bm" drop back to the original single-language behavior: only pairs that actually have
+  // that language are shown, and the other language is nulled out so nothing downstream
+  // (sidebar badges, ContentViewer's primary/secondary split) needs to know about the filter.
+  const filteredItems = useMemo(() => {
+    if (langFilter === "all") return items;
+    return items.filter((it) => it[langFilter]).map((it) => ({ ...it, [langFilter === "en" ? "bm" : "en"]: null }));
+  }, [items, langFilter]);
+
+  useEffect(() => {
+    setSelected(null);
+  }, [langFilter]);
+
+  // Count completed *pairs* (bounded by filteredItems.length) rather than raw completed_ids
+  // -- a pair predating this feature may have both its EN and BM ids marked complete from
+  // the old per-language flow, which would otherwise inflate the percentage past 100%.
+  const completedPairCount = filteredItems.filter((it) => completed.has(primaryId(it))).length;
+  const progressPct = filteredItems.length ? Math.round((completedPairCount / filteredItems.length) * 100) : 0;
 
   const itemsByChapter = useMemo(() => {
     const map = {};
-    items.forEach((it) => {
+    filteredItems.forEach((it) => {
       const key = it.chapter_id || "other";
       (map[key] = map[key] || []).push(it);
     });
     return map;
-  }, [items]);
+  }, [filteredItems]);
 
   // Reading order for "Go to next item": every course's chapters in order, each chapter's
   // lessons in order -- lets the next-item button walk straight across chapter boundaries.
@@ -167,6 +183,21 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
             ))}
           </div>
         )}
+
+        <div className="px-4 pt-3 flex gap-1" data-testid="lang-filter">
+          {LANG_FILTERS.map((l) => (
+            <button
+              key={l}
+              onClick={() => setLangFilter(l)}
+              data-testid={`lang-filter-${l}`}
+              className={`rounded-full px-3 py-1 text-xs uppercase border transition-colors ${
+                langFilter === l ? "border-[#00f0ff] text-[#00f0ff]" : "border-white/10 text-white/50 hover:border-white/30"
+              }`}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
 
         <div className="flex-1 overflow-y-auto px-3 py-4 mt-1">
           {!loaded ? (
@@ -233,7 +264,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
                 />
               </div>
               <span className="text-xs text-white/50 shrink-0">
-                {completedPairCount}/{items.length} completed
+                {completedPairCount}/{filteredItems.length} completed
               </span>
             </div>
 
@@ -264,7 +295,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
             </div>
           </>
         ) : (
-          <WelcomePane pack={activePack} progressPct={progressPct} itemCount={items.length} />
+          <WelcomePane pack={activePack} progressPct={progressPct} itemCount={filteredItems.length} />
         )}
       </main>
     </div>
