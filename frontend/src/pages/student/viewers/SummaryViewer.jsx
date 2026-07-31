@@ -22,7 +22,7 @@ const SummaryViewer = ({ content, scrollRef }) => {
         initial={reduce ? false : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="relative whitespace-pre-wrap text-lg text-[#2b2620] leading-loose"
+        className="relative whitespace-pre-wrap text-xl text-[#2b2620] leading-loose"
       >
         {text}
       </motion.p>

@@ -98,14 +98,14 @@ const FlashcardsViewer = ({ content }) => {
               style={{ backfaceVisibility: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,240,255,0.05)" }}
             >
               <div className="text-[10px] uppercase tracking-widest text-[#00f0ff]/70">Question · tap to flip</div>
-              <div className="flex-1 grid place-items-center text-center text-lg text-white px-2">{card.front}</div>
+              <div className="flex-1 grid place-items-center text-center text-xl text-white px-2">{card.front}</div>
             </div>
             <div
               className="absolute inset-0 rounded-2xl border border-[#8a2be2]/30 bg-gradient-to-br from-[#1a0f2e] to-[#0a0514] p-6 flex flex-col"
               style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}
             >
               <div className="text-[10px] uppercase tracking-widest text-[#8a2be2]/80">Answer</div>
-              <div className="flex-1 grid place-items-center text-center text-base text-white/90 px-2">{card.back}</div>
+              <div className="flex-1 grid place-items-center text-center text-lg text-white/90 px-2">{card.back}</div>
             </div>
           </motion.button>
         </div>

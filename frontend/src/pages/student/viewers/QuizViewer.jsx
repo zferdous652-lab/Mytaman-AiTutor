@@ -25,7 +25,7 @@ const OptionButton = ({ children, tone, onClick, disabled, testId, reduce }) => 
     whileTap={!disabled && !reduce ? { y: 4, boxShadow: PRESSED } : undefined}
     style={reduce ? undefined : { boxShadow: ELEVATED }}
     transition={{ type: "spring", stiffness: 500, damping: 32 }}
-    className={`w-full text-left rounded-xl border px-4 py-3.5 text-base transition-colors ${TONE_CLASS[tone]}`}
+    className={`w-full text-left rounded-xl border px-4 py-3.5 text-lg transition-colors ${TONE_CLASS[tone]}`}
   >
     {children}
   </motion.button>
@@ -297,7 +297,7 @@ const QuizViewer = ({ content, onFinish }) => {
           exit={reduce ? undefined : { opacity: 0, x: -24 }}
           transition={{ duration: 0.25 }}
         >
-          <div className="text-xl text-[#2b2620] mb-6">{q.question}</div>
+          <div className="text-2xl text-[#2b2620] mb-6">{q.question}</div>
 
           {q.type === "mcq" && (
             <div className="grid sm:grid-cols-2 gap-3.5">
@@ -342,7 +342,7 @@ const QuizViewer = ({ content, onFinish }) => {
                 value={locked ? answers[index] || "" : shortDraft}
                 onChange={(e) => setShortDraft(e.target.value)}
                 placeholder="Your answer"
-                className="w-full rounded-lg border border-[#3b2f1a]/20 bg-white/50 px-4 py-3 text-lg text-[#2b2620] placeholder:text-[#5c5346]/50 focus:border-[#1f6f5c] outline-none disabled:opacity-60"
+                className="w-full rounded-lg border border-[#3b2f1a]/20 bg-white/50 px-4 py-3 text-xl text-[#2b2620] placeholder:text-[#5c5346]/50 focus:border-[#1f6f5c] outline-none disabled:opacity-60"
               />
               {!locked ? (
                 <button

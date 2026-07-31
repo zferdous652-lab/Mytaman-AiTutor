@@ -29,7 +29,7 @@ const NotesViewer = ({ content, scrollRef }) => {
             className="flex gap-3 rounded-xl border border-[#3b2f1a]/12 bg-white/50 px-4 py-3.5"
           >
             <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[#1f6f5c] shrink-0" />
-            <span className="text-lg text-[#2b2620] leading-relaxed">{n}</span>
+            <span className="text-xl text-[#2b2620] leading-relaxed">{n}</span>
           </motion.div>
         ))}
       </motion.div>
