@@ -1,5 +1,5 @@
-import React, { Suspense, lazy, useMemo } from "react";
-import { ImageOff, Move3d } from "lucide-react";
+import React, { Suspense, lazy, useMemo, useState } from "react";
+import { ImageOff, Move3d, Languages } from "lucide-react";
 
 const MindmapCanvas = lazy(() => import("./MindmapCanvas"));
 
@@ -22,14 +22,31 @@ class MindmapErrorBoundary extends React.Component {
   }
 }
 
-// payload shape: { html, caption? } -- or, for legacy content predating AI-generated HTML
-// mind maps, { image_url, caption? }.
-const MindmapViewer = ({ content }) => {
-  const html = content.payload?.html;
-  const url = content.payload?.image_url;
-  const caption = content.payload?.caption;
+// content: the primary-language variant, shape { payload: { html, caption? } } -- or, for
+// legacy content predating AI-generated HTML mind maps, { payload: { image_url, caption? } }.
+// secondary: the other language's variant (same shape), or null when only one exists --
+// diagram structure can't be merged inline, so it's offered as a subtle toggle instead.
+const MindmapViewer = ({ content, secondary, secondaryLabel }) => {
+  const [showSecondary, setShowSecondary] = useState(false);
+  const active = showSecondary && secondary ? secondary : content;
+
+  const html = active.payload?.html;
+  const url = active.payload?.image_url;
+  const caption = active.payload?.caption;
   const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const src = useMemo(() => (url ? (url.startsWith("http") ? url : `${BACKEND_URL}${url}`) : null), [url]);
+
+  const toggle = secondary && (
+    <button
+      type="button"
+      onClick={() => setShowSecondary((s) => !s)}
+      data-testid="mindmap-lang-toggle"
+      className="mt-3 inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-[#00f0ff] transition-colors"
+    >
+      <Languages size={12} />
+      {showSecondary ? "Back to Bahasa Melayu" : `View in ${secondaryLabel}`}
+    </button>
+  );
 
   if (html) {
     return (
@@ -38,6 +55,7 @@ const MindmapViewer = ({ content }) => {
           <div className="mindmap-html" dangerouslySetInnerHTML={{ __html: html }} />
         </div>
         {caption && <p className="mt-3 text-sm text-white/60">{caption}</p>}
+        {toggle}
       </div>
     );
   }
@@ -47,6 +65,7 @@ const MindmapViewer = ({ content }) => {
       <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] p-10 text-center" data-testid="mindmap-empty">
         <ImageOff size={28} className="mx-auto text-white/25" />
         <div className="mt-3 text-sm text-white/40">No mind map yet.</div>
+        {toggle}
       </div>
     );
   }
@@ -74,6 +93,7 @@ const MindmapViewer = ({ content }) => {
         </div>
       </div>
       {caption && <p className="mt-3 text-sm text-white/60">{caption}</p>}
+      {toggle}
     </div>
   );
 };

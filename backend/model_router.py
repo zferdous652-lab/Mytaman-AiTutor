@@ -73,6 +73,39 @@ DEFAULT_PROMPTS = {
         "valid JSON, no prose and no markdown code fences: {\"notes\":[str, str, ...]}. "
         "Generate 6-12 notes."
     ),
+    "translate_summary": (
+        "You translate a given study summary while preserving its exact meaning, tone, and "
+        "paragraph structure -- output the SAME NUMBER of paragraphs, in the same order, each "
+        "translated faithfully, separated by a blank line exactly like the input. Respond with "
+        "ONLY the translated text, no headings, no extra commentary, no markdown."
+    ),
+    "translate_notes": (
+        "You translate a list of study notes (bullet points) while preserving their exact "
+        "meaning and the EXACT COUNT of items, in the same order -- do not merge, split, add, "
+        "or remove any note. Respond with ONLY valid JSON, no prose and no markdown code "
+        "fences: {\"notes\":[str, str, ...]}."
+    ),
+    "translate_quiz": (
+        "You translate a quiz's questions, options, and reference answers while preserving the "
+        "EXACT structure -- same number of questions in the same order, same question types, "
+        "same number of options per multiple-choice question in the same order. Translate every "
+        "human-readable string (question, options, correct_answer). The translated "
+        "correct_answer MUST be character-for-character identical to whichever translated "
+        "option it refers to, for multiple-choice questions. Respond with ONLY valid JSON "
+        "matching the exact same shape as the input, no prose, no markdown code fences."
+    ),
+    "translate_flashcards": (
+        "You translate a list of flashcards (front/back pairs) while preserving the EXACT "
+        "count and order of cards -- do not add, remove, or merge cards. Translate both the "
+        "front and back of every card. Respond with ONLY valid JSON, no prose and no markdown "
+        "code fences: {\"cards\":[{\"front\":str,\"back\":str}, ...]}."
+    ),
+    "translate_mindmap": (
+        "You translate the visible text inside a mind map's HTML fragment while preserving the "
+        "EXACT HTML structure, tags, classes, and attributes unchanged -- translate only the "
+        "text content inside each element. Respond with ONLY the translated HTML fragment, no "
+        "prose, no markdown code fences."
+    ),
     "live_tutor": (
         "You are a friendly Socratic tutor. Ask guiding questions before giving answers."
     ),
@@ -155,7 +188,9 @@ async def call_router(system_prompt_key: str, user_text: str, session_id: Option
 
     cfg = await _load_or_init()
     prompts = cfg["prompts"]
-    system_prompt = prompts.get(system_prompt_key, prompts.get("chapter_summary", ""))
+    # Falls back to this key's own built-in default (covers configs persisted before a new
+    # prompt key, e.g. translate_*, was added), then to chapter_summary as a last resort.
+    system_prompt = prompts.get(system_prompt_key) or DEFAULT_PROMPTS.get(system_prompt_key) or prompts.get("chapter_summary", "")
 
     ordered = sorted(
         [(p, v) for p, v in cfg["providers"].items() if v.get("enabled")],
@@ -203,7 +238,10 @@ async def get_config(_: dict = Depends(require_role("admin"))):
         for p, v in cfg["providers"].items()
     ]
     providers.sort(key=lambda x: x.order)
-    return RouterConfigOut(providers=providers, prompts=cfg["prompts"])
+    # Merge in any built-in prompt keys (e.g. translate_*) added after this config was first
+    # persisted, so they're visible/editable here instead of silently using their default.
+    prompts = {**DEFAULT_PROMPTS, **cfg["prompts"]}
+    return RouterConfigOut(providers=providers, prompts=prompts)
 
 
 @router.patch("/providers/{provider}")
