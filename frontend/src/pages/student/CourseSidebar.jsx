@@ -3,15 +3,10 @@ import { ChevronDown, ChevronRight, Check, FileText, HelpCircle, Layers, Waypoin
 
 const CONTENT_TYPE_ICON = { summary: FileText, quiz: HelpCircle, flashcards: Layers, mindmap: Waypoints, notes: StickyNote };
 const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Flashcards", mindmap: "Mind Map", notes: "Notes" };
-// Each content type gets its own accent so lesson rows are scannable by color, not just icon shape.
-const CONTENT_TYPE_COLOR = { summary: "#00f0ff", quiz: "#8a2be2", flashcards: "#ff0055", notes: "#ffd23f", mindmap: "#00ff66" };
 
-// A single lesson row inside an expanded chapter -- the leaf of the course tree. Dimmest
-// tier visually (smallest text) but the most colorful, since its type-accent icon/badge is
-// what a student actually scans for.
+// A single lesson row inside an expanded chapter -- the leaf of the course tree.
 const LessonRow = ({ content, done, active, onSelect }) => {
   const Icon = CONTENT_TYPE_ICON[content.content_type] || FileText;
-  const accent = CONTENT_TYPE_COLOR[content.content_type] || "#00f0ff";
   return (
     <button
       type="button"
@@ -21,10 +16,10 @@ const LessonRow = ({ content, done, active, onSelect }) => {
         active ? "bg-white/10 border-white/20" : "border-transparent hover:bg-white/5"
       }`}
     >
-      <Icon size={14} className="shrink-0" style={{ color: accent }} />
+      <Icon size={14} className={`shrink-0 ${active ? "text-white" : "text-white/50"}`} />
       <span className="min-w-0 flex-1">
         <span className={`block text-sm truncate ${active ? "text-white font-medium" : "text-white/80"}`}>{content.title}</span>
-        <span className="block text-[10px] font-semibold uppercase tracking-widest" style={{ color: accent, opacity: 0.85 }}>
+        <span className="block text-[10px] uppercase tracking-widest text-white/45">
           {CONTENT_TYPE_LABELS[content.content_type] || content.content_type} · {content.language?.toUpperCase()}
         </span>
       </span>
