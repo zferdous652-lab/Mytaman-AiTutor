@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
+import ParentLinkBanner from "@/components/ParentLinkBanner";
 
 const items = {
   admin: (t) => [
@@ -74,7 +75,8 @@ const DashboardShell = ({ children }) => {
         <div className="pt-4 border-t border-white/8 space-y-3">
           <LanguageToggle testId="dash-lang" />
           <div className="text-xs text-white/60">
-            <div className="font-mono truncate" title={user.email}>{user.email}</div>
+            {/* Students have a student ID instead of an email. */}
+            <div className="font-mono truncate" title={user.email || user.username}>{user.email || user.username}</div>
             <div className="text-white/40">{user.name}</div>
           </div>
           <button
@@ -86,7 +88,16 @@ const DashboardShell = ({ children }) => {
           </button>
         </div>
       </aside>
-      <main className="min-h-screen">{children}</main>
+      <main className="min-h-screen">
+        {/* Sits above every student page so the invite prompt can't be missed, and
+            removes itself once the parent has connected. */}
+        {user.role === "student" && (
+          <div className="px-8 lg:px-12 pt-8 lg:pt-12 [&+*]:pt-0">
+            <ParentLinkBanner />
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 };

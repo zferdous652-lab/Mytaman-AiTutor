@@ -25,6 +25,8 @@ class RosterPackEntry(BaseModel):
 class RosterStudent(BaseModel):
     id: str
     name: str
+    # Students sign in with a username, not an email; older self-registered accounts
+    # may still carry one. Whichever exists is what the admin roster shows.
     email: str
     joined_at: str
     packs: List[RosterPackEntry]
@@ -103,7 +105,7 @@ async def roster(_: dict = Depends(require_role("admin"))):
         result.append(RosterStudent(
             id=s["id"],
             name=s["name"],
-            email=s["email"],
+            email=s.get("username") or s.get("email") or "—",
             joined_at=s["created_at"],
             packs=entries,
             overall_completion_pct=round(overall_completed / overall_total * 100) if overall_total else 0,

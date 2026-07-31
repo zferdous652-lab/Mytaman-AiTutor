@@ -1,59 +1,132 @@
-"""Parent portal endpoints — child linking, per-child progress, parent-initiated enrollment.
+"""Parent portal endpoints — child accounts, per-child progress, parent-initiated enrollment.
 
-Linking model: a single `parent_id` field on the student's user doc (one parent per
-child for now — see PARENT_PORTAL.md). A parent links a child by creating the child's
-account directly from the parent portal; there's no separate child self-signup path
-for a linked child.
+Linking model: a single `parent_id` field on the student's user doc, set by one of two
+routes:
+
+  1. the parent creates the child's account directly here (`POST /parents/children`),
+     in which case it's set at creation, or
+  2. the student registered independently and the parent accepts their invitation
+     (`POST /parents/child-invites/{token}/accept`), which sets it afterwards.
+
+Parent linking is therefore additive, not a gate: a student registers and studies with
+no parent attached, and accepting an invitation grants the parent visibility without
+changing anything about the student's own access. Removing a child deactivates the
+account rather than clearing `parent_id`, so the child's history survives and the
+removal is reversible.
 """
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 from db import db
 from auth import require_role, _hash
+from registrations import (
+    assert_username_available,
+    load_invite_by_token,
+    normalize_username,
+    validate_birth_year,
+)
+from xp import xp_summary_for
 
 router = APIRouter(prefix="/parents", tags=["parents"])
+
+Relationship = Literal["mother", "father", "guardian"]
+ChildLanguage = Literal["en", "bm"]
+MAX_CHILDREN = 6
 
 
 class ChildOut(BaseModel):
     id: str
-    email: str
     name: str
+    username: str
+    grade: Optional[str] = None
+    birth_year: Optional[int] = None
+    relationship: Optional[str] = None
+    language: Optional[str] = None
+    must_change_password: bool = False
+
+
+def _child_out(doc: dict) -> ChildOut:
+    return ChildOut(
+        id=doc["id"],
+        name=doc["name"],
+        # Children seeded/created before usernames existed fall back to their email.
+        username=doc.get("username") or doc.get("email") or "",
+        grade=doc.get("grade"),
+        birth_year=doc.get("birth_year"),
+        relationship=doc.get("relationship"),
+        language=doc.get("language"),
+        must_change_password=bool(doc.get("must_change_password")),
+    )
+
+
+async def _assert_room_for_another_child(parent_id: str) -> None:
+    count = await db.users.count_documents({"role": "student", "parent_id": parent_id, "active": {"$ne": False}})
+    if count >= MAX_CHILDREN:
+        raise HTTPException(status_code=400, detail=f"You can have at most {MAX_CHILDREN} children on one account.")
+
+
+def _new_student_doc(*, name: str, username: str, password: str, parent_id: str, grade: str,
+                     birth_year: int, relationship: str, language: str, must_change_password: bool) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "username": username,
+        "name": name,
+        "role": "student",
+        "parent_id": parent_id,
+        "grade": grade,
+        "birth_year": birth_year,
+        "relationship": relationship,
+        "language": language,
+        "password": _hash(password),
+        "must_change_password": must_change_password,
+        "active": True,
+        "consented_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 class CreateChildIn(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=6)
-    name: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=80)
+    username: str
+    password: str = Field(min_length=8)
+    grade: str = Field(min_length=1, max_length=40)
+    birth_year: int
+    relationship: Relationship = "guardian"
+    language: ChildLanguage = "en"
 
 
 @router.post("/children", response_model=ChildOut)
 async def create_child(payload: CreateChildIn, parent: dict = Depends(require_role("parent"))):
-    exists = await db.users.find_one({"email": payload.email})
-    if exists:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    doc = {
-        "id": str(uuid.uuid4()),
-        "email": payload.email,
-        "name": payload.name,
-        "role": "student",
-        "parent_id": parent["id"],
-        "password": _hash(payload.password),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
+    """Parent-created child. The parent picks the initial password, so the child is
+    forced to replace it on first sign-in."""
+    await _assert_room_for_another_child(parent["id"])
+    username = normalize_username(payload.username)
+    await assert_username_available(username)
+    doc = _new_student_doc(
+        name=payload.name.strip(),
+        username=username,
+        password=payload.password,
+        parent_id=parent["id"],
+        grade=payload.grade.strip(),
+        birth_year=validate_birth_year(payload.birth_year),
+        relationship=payload.relationship,
+        language=payload.language,
+        must_change_password=True,
+    )
     await db.users.insert_one(doc)
-    return ChildOut(id=doc["id"], email=doc["email"], name=doc["name"])
+    return _child_out(doc)
 
 
 @router.get("/children", response_model=List[ChildOut])
 async def list_children(parent: dict = Depends(require_role("parent"))):
     docs = await db.users.find(
-        {"role": "student", "parent_id": parent["id"]}, {"_id": 0, "id": 1, "email": 1, "name": 1}
-    ).to_list(50)
-    return [ChildOut(**d) for d in docs]
+        {"role": "student", "parent_id": parent["id"], "active": {"$ne": False}}, {"_id": 0, "password": 0}
+    ).sort("created_at", 1).to_list(50)
+    return [_child_out(d) for d in docs]
 
 
 async def _require_child(parent_id: str, student_id: str) -> dict:
@@ -64,6 +137,94 @@ async def _require_child(parent_id: str, student_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Child not found")
     return child
 
+
+# ---------- Accepting a student's invitation to connect ----------
+
+async def _require_own_invite(parent: dict, token: str) -> dict:
+    """The token comes from the parent's own inbox, but check the signed-in account's
+    email matches it too -- so a forwarded link can't be used to attach someone else's
+    child to an unrelated account."""
+    doc = await load_invite_by_token(token)
+    if (parent.get("email") or "").lower() != doc["parent_email"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"This invitation was sent to {doc['parent_email']}. Sign in with that account to accept it.",
+        )
+    return doc
+
+
+class ChildInviteDetail(BaseModel):
+    """What the accepting parent sees. Note there is no password here: the student
+    already owns their account, so linking never involves their credential."""
+    student_name: str
+    username: str
+    parent_email: str
+    grade: Optional[str] = None
+    birth_year: Optional[int] = None
+    expires_at: str
+
+
+@router.get("/child-invites/{token}", response_model=ChildInviteDetail)
+async def get_child_invite(token: str, parent: dict = Depends(require_role("parent"))):
+    doc = await _require_own_invite(parent, token)
+    student = await db.users.find_one({"id": doc["student_id"]}, {"_id": 0, "password": 0})
+    if not student:
+        raise HTTPException(status_code=404, detail="This invitation link is not valid")
+    return ChildInviteDetail(
+        student_name=student["name"],
+        username=student.get("username") or "",
+        parent_email=doc["parent_email"],
+        grade=student.get("grade"),
+        birth_year=student.get("birth_year"),
+        expires_at=doc["expires_at"],
+    )
+
+
+class AcceptInviteIn(BaseModel):
+    relationship: Relationship = "guardian"
+
+
+@router.post("/child-invites/{token}/accept", response_model=ChildOut)
+async def accept_child_invite(token: str, payload: AcceptInviteIn, parent: dict = Depends(require_role("parent"))):
+    """Links an existing, already-active student to this parent. Nothing about the
+    student's own access changes -- they could already sign in before this, and this
+    only grants the parent visibility."""
+    doc = await _require_own_invite(parent, token)
+    await _assert_room_for_another_child(parent["id"])
+
+    student = await db.users.find_one({"id": doc["student_id"]}, {"_id": 0})
+    if not student:
+        raise HTTPException(status_code=404, detail="That student account no longer exists")
+    if student.get("parent_id"):
+        raise HTTPException(
+            status_code=409,
+            detail="This student is already connected to a parent account.",
+        )
+
+    await db.users.update_one(
+        {"id": student["id"]},
+        {"$set": {
+            "parent_id": parent["id"],
+            "relationship": payload.relationship,
+            "consented_at": datetime.now(timezone.utc).isoformat(),
+        }, "$unset": {"parent_invite_email": ""}},
+    )
+    await db.parent_invites.update_one({"id": doc["id"]}, {"$set": {"status": "accepted"}})
+
+    linked = await db.users.find_one({"id": student["id"]}, {"_id": 0, "password": 0})
+    return _child_out(linked)
+
+
+@router.post("/child-invites/{token}/decline")
+async def decline_child_invite(token: str, parent: dict = Depends(require_role("parent"))):
+    """Declining only discards the invitation. The student keeps their account and
+    their access either way."""
+    doc = await _require_own_invite(parent, token)
+    await db.parent_invites.update_one({"id": doc["id"]}, {"$set": {"status": "declined"}})
+    return {"ok": True}
+
+
+# ---------- Progress ----------
 
 class ChildPackOut(BaseModel):
     id: str
@@ -129,6 +290,79 @@ async def child_packs(student_id: str, parent: dict = Depends(require_role("pare
     return out
 
 
+class ChildProgressionOut(BaseModel):
+    """The child's gamified progression -- effort and consistency rather than marks,
+    which is the half of the picture the pack percentages don't show."""
+    level: int
+    total_xp: int
+    xp_into_level: int
+    xp_for_next_level: Optional[int] = None
+    xp_to_next_level: Optional[int] = None
+    progress_pct: int
+    current_streak: int
+    today_goal_met: bool
+    today_xp: int
+    daily_goal_xp: int
+
+
+@router.get("/children/{student_id}/progression", response_model=ChildProgressionOut)
+async def child_progression(student_id: str, parent: dict = Depends(require_role("parent"))):
+    """Same level/streak figures the child sees on their own dashboard, scoped to one
+    child and gated on this parent actually being linked to them."""
+    await _require_child(parent["id"], student_id)
+    return ChildProgressionOut(**await xp_summary_for(student_id))
+
+
+# ---------- Lifecycle & enrollment ----------
+
+@router.delete("/children/{student_id}")
+async def deactivate_child(student_id: str, parent: dict = Depends(require_role("parent"))):
+    """Soft-removes a child: the account, its link to this parent, and all enrollments
+    and progress survive, but it stops appearing in the portal and can no longer sign
+    in. Deliberately not an unlink -- clearing parent_id would orphan the account with
+    no way back, since students can only be created by a parent."""
+    await _require_child(parent["id"], student_id)
+    await db.users.update_one({"id": student_id}, {"$set": {"active": False}})
+    return {"ok": True}
+
+
+@router.post("/children/{student_id}/reactivate")
+async def reactivate_child(student_id: str, parent: dict = Depends(require_role("parent"))):
+    await _require_child(parent["id"], student_id)
+    await _assert_room_for_another_child(parent["id"])
+    await db.users.update_one({"id": student_id}, {"$set": {"active": True}})
+    return {"ok": True}
+
+
+class ResetChildPasswordIn(BaseModel):
+    password: str = Field(min_length=8)
+
+
+@router.post("/children/{student_id}/password")
+async def reset_child_password(student_id: str, payload: ResetChildPasswordIn,
+                               parent: dict = Depends(require_role("parent"))):
+    """A forgotten child password has no email to reset through, so the guardian is the
+    recovery path."""
+    await _require_child(parent["id"], student_id)
+    await db.users.update_one(
+        {"id": student_id}, {"$set": {"password": _hash(payload.password), "must_change_password": True}}
+    )
+    return {"ok": True}
+
+
+async def _enroll(student_id: str, pack_id: str) -> bool:
+    if await db.enrollments.find_one({"user_id": student_id, "pack_id": pack_id}):
+        return False
+    await db.enrollments.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": student_id,
+        "pack_id": pack_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "progress": 0,
+    })
+    return True
+
+
 class EnrollChildIn(BaseModel):
     pack_id: str
 
@@ -136,14 +370,5 @@ class EnrollChildIn(BaseModel):
 @router.post("/children/{student_id}/enroll")
 async def enroll_child(student_id: str, payload: EnrollChildIn, parent: dict = Depends(require_role("parent"))):
     await _require_child(parent["id"], student_id)
-    exists = await db.enrollments.find_one({"user_id": student_id, "pack_id": payload.pack_id})
-    if exists:
-        return {"ok": True, "already": True}
-    await db.enrollments.insert_one({
-        "id": str(uuid.uuid4()),
-        "user_id": student_id,
-        "pack_id": payload.pack_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "progress": 0,
-    })
-    return {"ok": True}
+    created = await _enroll(student_id, payload.pack_id)
+    return {"ok": True, "already": not created}
