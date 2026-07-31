@@ -339,7 +339,11 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
             raw_payload["notes"] = [_strip_markdown(n).strip() for n in raw_payload["notes"]]
 
     validated = _validate_payload(payload.content_type, raw_payload)
-    if payload.content_type == "quiz":
+    if payload.content_type == "quiz" and not payload.translate_payload:
+        # Only shuffle on a fresh, independent generation. A translation must keep the
+        # exact option order it was given -- that's what keeps it aligned (by index) with
+        # the other language's already-shuffled options; re-shuffling here would break
+        # that pairing even though the AI itself preserved order faithfully.
         validated = _shuffle_mcq_options(validated)
     return AiDraftItemOut(
         chapter_id=payload.chapter_id,
