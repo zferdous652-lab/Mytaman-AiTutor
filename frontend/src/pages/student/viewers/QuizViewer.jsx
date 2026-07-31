@@ -63,7 +63,9 @@ const normalizeShortAnswer = (s) =>
     .replace(/\s+/g, " ");
 
 // payload shape: { questions: [{ type: mcq|true_false|short_answer, question, options?, correct_answer? }] }
-const QuizViewer = ({ content, onFinish }) => {
+// secondaryQuestions: the other language's question text aligned by index (or []) -- shown
+// as a subtle gloss under the main (BM-priority) question, options stay single-language.
+const QuizViewer = ({ content, secondaryQuestions = [], onFinish }) => {
   const reduce = useReducedMotion();
   const questions = useMemo(() => content.payload?.questions || [], [content.payload?.questions]);
   const total = questions.length;
@@ -297,7 +299,14 @@ const QuizViewer = ({ content, onFinish }) => {
           exit={reduce ? undefined : { opacity: 0, x: -24 }}
           transition={{ duration: 0.25 }}
         >
-          <div className="text-2xl text-[#2b2620] mb-6">{q.question}</div>
+          <div className="mb-6">
+            <div className="text-2xl text-[#2b2620]">{q.question}</div>
+            {secondaryQuestions[index] && (
+              <div className="mt-1.5 text-sm text-[#5c5346] italic" data-testid="quiz-question-secondary">
+                {secondaryQuestions[index]}
+              </div>
+            )}
+          </div>
 
           {q.type === "mcq" && (
             <div className="grid sm:grid-cols-2 gap-3.5">

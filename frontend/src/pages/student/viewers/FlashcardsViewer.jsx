@@ -2,10 +2,18 @@ import React, { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { RotateCcw } from "lucide-react";
 
-// payload shape: { cards: [{ front, back }] }
-const FlashcardsViewer = ({ content }) => {
+// pair shape: { bm: {payload:{cards}}|null, en: {payload:{cards}}|null }. Cards are paired
+// by index; each face shows its BM text as the main line with the matching EN text as a
+// subtle secondary line underneath, when both exist.
+const FlashcardsViewer = ({ pair }) => {
   const reduce = useReducedMotion();
-  const cards = content.payload?.cards || [];
+  const bmCards = pair.bm?.payload?.cards || [];
+  const enCards = pair.en?.payload?.cards || [];
+  const cardCount = Math.max(bmCards.length, enCards.length);
+  const cards = Array.from({ length: cardCount }).map((_, i) => ({
+    front: { main: bmCards[i]?.front || enCards[i]?.front, sub: bmCards[i]?.front && enCards[i]?.front ? enCards[i].front : null },
+    back: { main: bmCards[i]?.back || enCards[i]?.back, sub: bmCards[i]?.back && enCards[i]?.back ? enCards[i].back : null },
+  }));
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [ratings, setRatings] = useState({});
@@ -98,14 +106,20 @@ const FlashcardsViewer = ({ content }) => {
               style={{ backfaceVisibility: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,240,255,0.05)" }}
             >
               <div className="text-[10px] uppercase tracking-widest text-[#00f0ff]/70">Question · tap to flip</div>
-              <div className="flex-1 grid place-items-center text-center text-xl text-white px-2">{card.front}</div>
+              <div className="flex-1 grid place-items-center text-center px-2">
+                <div className="text-xl text-white">{card.front.main}</div>
+                {card.front.sub && <div className="mt-2 text-sm text-white/50 italic">{card.front.sub}</div>}
+              </div>
             </div>
             <div
               className="absolute inset-0 rounded-2xl border border-[#8a2be2]/30 bg-gradient-to-br from-[#1a0f2e] to-[#0a0514] p-6 flex flex-col"
               style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}
             >
               <div className="text-[10px] uppercase tracking-widest text-[#8a2be2]/80">Answer</div>
-              <div className="flex-1 grid place-items-center text-center text-lg text-white/90 px-2">{card.back}</div>
+              <div className="flex-1 grid place-items-center text-center px-2">
+                <div className="text-lg text-white/90">{card.back.main}</div>
+                {card.back.sub && <div className="mt-2 text-sm text-white/40 italic">{card.back.sub}</div>}
+              </div>
             </div>
           </motion.button>
         </div>

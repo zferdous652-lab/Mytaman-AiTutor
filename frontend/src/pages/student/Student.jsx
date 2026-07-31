@@ -7,10 +7,8 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
-import CourseSidebar from "./CourseSidebar";
+import CourseSidebar, { primaryId } from "./CourseSidebar";
 import ContentViewer from "./ContentViewer";
-
-const LANG_FILTERS = ["all", "en", "bm"];
 
 // The right-hand pane shown before a lesson is picked -- an at-a-glance summary of the
 // active pack plus a nudge to start reading, instead of a blank area.
@@ -56,7 +54,6 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   const [completed, setCompleted] = useState(new Set());
   const [quizScores, setQuizScores] = useState({});
   const [selected, setSelected] = useState(null);
-  const [langFilter, setLangFilter] = useState("all");
   const [openCourseId, setOpenCourseId] = useState(null);
   const [openChapterIds, setOpenChapterIds] = useState(new Set());
 
@@ -67,7 +64,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
     setOpenChapterIds(new Set());
     (async () => {
       const [itemsRes, coursesRes, progressRes] = await Promise.all([
-        api.get(`/content/list?pack_id=${activePack.id}&only_published=true`),
+        api.get(`/content/list-paired?pack_id=${activePack.id}&only_published=true`),
         api.get(`/courses/list?pack_id=${activePack.id}`),
         api.get(`/content/progress?pack_id=${activePack.id}`),
       ]);
@@ -100,17 +97,20 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
     });
   };
 
-  const visibleItems = items.filter((it) => langFilter === "all" || it.language === langFilter);
-  const progressPct = items.length ? Math.round((completed.size / items.length) * 100) : 0;
+  // Count completed *pairs* (bounded by items.length) rather than raw completed_ids -- a
+  // pair predating this feature may have both its EN and BM ids marked complete from the
+  // old per-language flow, which would otherwise inflate the percentage past 100%.
+  const completedPairCount = items.filter((it) => completed.has(primaryId(it))).length;
+  const progressPct = items.length ? Math.round((completedPairCount / items.length) * 100) : 0;
 
   const itemsByChapter = useMemo(() => {
     const map = {};
-    visibleItems.forEach((it) => {
+    items.forEach((it) => {
       const key = it.chapter_id || "other";
       (map[key] = map[key] || []).push(it);
     });
     return map;
-  }, [visibleItems]);
+  }, [items]);
 
   // Reading order for "Go to next item": every course's chapters in order, each chapter's
   // lessons in order -- lets the next-item button walk straight across chapter boundaries.
@@ -124,7 +124,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
     return out;
   }, [courses, chaptersByCourse, itemsByChapter]);
 
-  const currentIndex = selected ? flatLessons.findIndex((l) => l.item.id === selected.id) : -1;
+  const currentIndex = selected ? flatLessons.findIndex((l) => l.item.key === selected.key) : -1;
   const nextLesson = currentIndex >= 0 ? flatLessons[currentIndex + 1] : undefined;
 
   const goToNext = () => {
@@ -168,21 +168,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
           </div>
         )}
 
-        <div className="px-4 pt-4 flex gap-1" data-testid="lang-filter">
-          {LANG_FILTERS.map((l) => (
-            <button
-              key={l}
-              onClick={() => setLangFilter(l)}
-              className={`rounded-full px-3 py-1 text-xs uppercase border transition-colors ${
-                langFilter === l ? "border-[#00f0ff] text-[#00f0ff]" : "border-white/10 text-white/50 hover:border-white/30"
-              }`}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-3 py-4">
+        <div className="flex-1 overflow-y-auto px-3 py-4 mt-1">
           {!loaded ? (
             <div className="px-2 text-sm text-white/40">Loading…</div>
           ) : (
@@ -195,7 +181,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
               onToggleCourse={(id) => setOpenCourseId((cur) => (cur === id ? null : id))}
               openChapterIds={openChapterIds}
               onToggleChapter={toggleChapter}
-              selectedId={selected?.id}
+              selectedKey={selected?.key}
               onSelectContent={setSelected}
             />
           )}
@@ -247,16 +233,16 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
                 />
               </div>
               <span className="text-xs text-white/50 shrink-0">
-                {completed.size}/{visibleItems.length} completed
+                {completedPairCount}/{items.length} completed
               </span>
             </div>
 
             <div className="flex-1 min-h-0">
               <ContentViewer
-                key={selected.id}
+                key={selected.key}
                 variant="pane"
-                content={selected}
-                done={completed.has(selected.id)}
+                pair={selected}
+                done={completed.has(primaryId(selected))}
                 onClose={() => setSelected(null)}
                 onComplete={markComplete}
                 onUncomplete={markIncomplete}
@@ -278,7 +264,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
             </div>
           </>
         ) : (
-          <WelcomePane pack={activePack} progressPct={progressPct} itemCount={visibleItems.length} />
+          <WelcomePane pack={activePack} progressPct={progressPct} itemCount={items.length} />
         )}
       </main>
     </div>

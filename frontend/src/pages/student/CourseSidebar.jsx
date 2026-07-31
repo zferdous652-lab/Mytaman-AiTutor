@@ -4,23 +4,30 @@ import { ChevronDown, ChevronRight, Check, FileText, HelpCircle, Layers, Waypoin
 const CONTENT_TYPE_ICON = { summary: FileText, quiz: HelpCircle, flashcards: Layers, mindmap: Waypoints, notes: StickyNote };
 const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Flashcards", mindmap: "Mind Map", notes: "Notes" };
 
-// A single lesson row inside an expanded chapter -- the leaf of the course tree.
-const LessonRow = ({ content, done, active, onSelect }) => {
-  const Icon = CONTENT_TYPE_ICON[content.content_type] || FileText;
+// A pair's progress/selection identity is its BM item when one exists, else its EN item --
+// mirrors ContentViewer's own "BM is primary" rule so sidebar state and the reading pane
+// agree on what "done"/"selected" means for a given lesson.
+export const primaryId = (pair) => pair.bm?.id ?? pair.en?.id;
+const langBadge = (pair) => (pair.bm && pair.en ? "BM · EN" : pair.bm ? "BM" : "EN");
+
+// A single lesson row inside an expanded chapter -- the leaf of the course tree. `pair` is
+// one bilingual lesson: { key, content_type, title, bm, en }.
+const LessonRow = ({ pair, done, active, onSelect }) => {
+  const Icon = CONTENT_TYPE_ICON[pair.content_type] || FileText;
   return (
     <button
       type="button"
       onClick={onSelect}
-      data-testid={`sidebar-content-${content.id}`}
+      data-testid={`sidebar-content-${pair.key}`}
       className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors border ${
         active ? "bg-white/10 border-white/20" : "border-transparent hover:bg-white/5"
       }`}
     >
       <Icon size={14} className={`shrink-0 ${active ? "text-white" : "text-white/50"}`} />
       <span className="min-w-0 flex-1">
-        <span className={`block text-sm truncate ${active ? "text-white font-medium" : "text-white/80"}`}>{content.title}</span>
+        <span className={`block text-sm truncate ${active ? "text-white font-medium" : "text-white/80"}`}>{pair.title}</span>
         <span className="block text-[10px] uppercase tracking-widest text-white/45">
-          {CONTENT_TYPE_LABELS[content.content_type] || content.content_type} · {content.language?.toUpperCase()}
+          {CONTENT_TYPE_LABELS[pair.content_type] || pair.content_type} · {langBadge(pair)}
         </span>
       </span>
       {done ? (
@@ -34,8 +41,8 @@ const LessonRow = ({ content, done, active, onSelect }) => {
 
 // Middle tier -- visually quieter than the course header (no bold display font) but louder
 // than lesson rows (a folder icon + all-caps label), so it reads as its own layer.
-const ChapterNode = ({ chapter, items, completed, isOpen, onToggle, selectedId, onSelectContent }) => {
-  const doneCount = items.filter((it) => completed.has(it.id)).length;
+const ChapterNode = ({ chapter, items, completed, isOpen, onToggle, selectedKey, onSelectContent }) => {
+  const doneCount = items.filter((it) => completed.has(primaryId(it))).length;
   return (
     <div data-testid={`sidebar-chapter-${chapter.id}`}>
       <button
@@ -58,10 +65,10 @@ const ChapterNode = ({ chapter, items, completed, isOpen, onToggle, selectedId, 
         <div className="ml-3 mt-1 mb-2 space-y-1 border-l-2 border-[#8a6dff]/20 pl-3">
           {items.map((it) => (
             <LessonRow
-              key={it.id}
-              content={it}
-              done={completed.has(it.id)}
-              active={selectedId === it.id}
+              key={it.key}
+              pair={it}
+              done={completed.has(primaryId(it))}
+              active={selectedKey === it.key}
               onSelect={() => onSelectContent(it)}
             />
           ))}
@@ -73,7 +80,7 @@ const ChapterNode = ({ chapter, items, completed, isOpen, onToggle, selectedId, 
 
 // Top tier -- the loudest element in the tree: bold display font, full opacity white, and a
 // gradient accent bar down the left edge so it visually anchors everything nested under it.
-const CourseNode = ({ course, chapters, itemsByChapter, completed, isOpen, onToggleCourse, openChapterIds, onToggleChapter, selectedId, onSelectContent }) => (
+const CourseNode = ({ course, chapters, itemsByChapter, completed, isOpen, onToggleCourse, openChapterIds, onToggleChapter, selectedKey, onSelectContent }) => (
   <div className="relative rounded-xl border border-white/10 bg-white/[0.04] overflow-hidden" data-testid={`sidebar-course-${course.id}`}>
     <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[#00f0ff] to-[#8a2be2]" aria-hidden />
     <button
@@ -98,7 +105,7 @@ const CourseNode = ({ course, chapters, itemsByChapter, completed, isOpen, onTog
             completed={completed}
             isOpen={openChapterIds.has(ch.id)}
             onToggle={() => onToggleChapter(ch.id)}
-            selectedId={selectedId}
+            selectedKey={selectedKey}
             onSelectContent={onSelectContent}
           />
         ))}
@@ -109,7 +116,7 @@ const CourseNode = ({ course, chapters, itemsByChapter, completed, isOpen, onTog
 
 // The course-navigator tree: Course (expandable) -> Chapter (expandable) -> lessons.
 // Renders nothing but the tree itself; the caller owns layout/chrome around it.
-const CourseSidebar = ({ courses, chaptersByCourse, itemsByChapter, completed, openCourseId, onToggleCourse, openChapterIds, onToggleChapter, selectedId, onSelectContent }) => (
+const CourseSidebar = ({ courses, chaptersByCourse, itemsByChapter, completed, openCourseId, onToggleCourse, openChapterIds, onToggleChapter, selectedKey, onSelectContent }) => (
   <div className="space-y-2.5" data-testid="course-sidebar-tree">
     {courses.map((course) => {
       const chapters = (chaptersByCourse[course.id] || []).filter((ch) => itemsByChapter[ch.id]?.length);
@@ -125,7 +132,7 @@ const CourseSidebar = ({ courses, chaptersByCourse, itemsByChapter, completed, o
           onToggleCourse={() => onToggleCourse(course.id)}
           openChapterIds={openChapterIds}
           onToggleChapter={onToggleChapter}
-          selectedId={selectedId}
+          selectedKey={selectedKey}
           onSelectContent={onSelectContent}
         />
       );

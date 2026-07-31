@@ -756,6 +756,78 @@ async def list_content(pack_id: Optional[str] = None, only_published: bool = Fal
     return [ContentOut(**{k: d.get(k) for k in ContentOut.model_fields.keys()}) for d in docs]
 
 
+class LangVariant(BaseModel):
+    id: str
+    title: Optional[str] = None
+    body: Optional[str] = None
+    payload: Optional[dict] = None
+
+
+class PairedContentOut(BaseModel):
+    """One EN+BM pair for a (chapter, content_type) slot. The publish pipeline in packs.py
+    already upserts by the exact tuple (pack_id, chapter_id, content_type, language), so at
+    most one EN and one BM item can ever be live for a given chapter/type -- that tuple is
+    already a reliable, collision-free pairing key with no extra schema field needed."""
+    key: str
+    pack_id: str
+    chapter_id: Optional[str] = None
+    content_type: ContentType
+    title: Optional[str] = None
+    bm: Optional[LangVariant] = None
+    en: Optional[LangVariant] = None
+    created_at: str
+
+
+@router.get("/list-paired", response_model=List[PairedContentOut])
+async def list_content_paired(pack_id: Optional[str] = None, only_published: bool = False, user: dict = Depends(get_current_user)):
+    """Same content as /list, but grouped into one bilingual lesson per (chapter,
+    content_type) instead of one row per language -- what the student course player renders
+    so BM and EN show together instead of as separate sidebar entries."""
+    q: dict = {}
+    if pack_id:
+        q["pack_id"] = pack_id
+    if only_published or user["role"] != "admin":
+        q["published"] = True
+    docs = await db.contents.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+    groups: dict = {}
+    order: list = []
+    for d in docs:
+        # Content predating chapters (or any future no-chapter content) has no natural
+        # sibling to pair with, so it gets its own id-scoped group instead of risking an
+        # accidental merge with an unrelated item of the same type.
+        group_key = (d.get("pack_id"), d.get("chapter_id") or d["id"], d.get("content_type"))
+        if group_key not in groups:
+            groups[group_key] = {
+                "bm": None, "en": None,
+                "chapter_id": d.get("chapter_id"),  # None for no-chapter legacy content
+                "created_at": d.get("created_at"),
+            }
+            order.append(group_key)
+        variant = LangVariant(id=d["id"], title=d.get("title"), body=d.get("body"), payload=d.get("payload"))
+        if d.get("language") == "bm":
+            groups[group_key]["bm"] = variant
+        else:
+            groups[group_key]["en"] = variant
+
+    out = []
+    for group_key in order:
+        pack_id_, _, content_type_ = group_key
+        g = groups[group_key]
+        title = (g["bm"].title if g["bm"] else None) or (g["en"].title if g["en"] else None)
+        out.append(PairedContentOut(
+            key=f"{group_key[1]}:{content_type_}",
+            pack_id=pack_id_,
+            chapter_id=g["chapter_id"],
+            content_type=content_type_,
+            title=title,
+            bm=g["bm"],
+            en=g["en"],
+            created_at=g["created_at"],
+        ))
+    return out
+
+
 @router.post("/{content_id}/publish")
 async def publish(content_id: str, _: dict = Depends(require_role("admin"))):
     res = await db.contents.update_one({"id": content_id}, {"$set": {"published": True}})

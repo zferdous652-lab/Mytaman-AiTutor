@@ -12,21 +12,31 @@ import SummaryViewer from "./viewers/SummaryViewer";
 const PAPER_TYPES = ["summary", "notes", "quiz"];
 const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Flashcards", mindmap: "Mind Map", notes: "Notes" };
 
+// pair shape (from GET /content/list-paired): { key, content_type, title,
+// bm: {id,title,body,payload}|null, en: {...}|null }. BM is always the priority/main
+// language when it exists; EN renders as a subtle secondary wherever the content type
+// supports it, and is the sole content when no BM variant exists.
+const langBadge = (pair) => (pair.bm && pair.en ? "BM · EN" : pair.bm ? "BM" : "EN");
+
 // variant="modal" (default) -- the original centered popover, still used anywhere a lesson
 // needs to float above other UI. variant="pane" -- fills its parent container edge-to-edge,
 // used by the course player's right-hand reading pane instead of a popup.
-const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQuizScore, variant = "modal" }) => {
+const ContentViewer = ({ pair, done, onClose, onComplete, onUncomplete, onQuizScore, variant = "modal" }) => {
   const scrollRef = useRef(null);
-  if (!content) return null;
+  if (!pair) return null;
 
-  const paper = PAPER_TYPES.includes(content.content_type);
+  const primary = pair.bm || pair.en;
+  const secondary = pair.bm && pair.en ? pair.en : null;
+  if (!primary) return null;
+
+  const paper = PAPER_TYPES.includes(pair.content_type);
   const pane = variant === "pane";
 
   const markComplete = async () => {
     try {
-      const { data } = await api.post(`/content/${content.id}/complete`);
+      const { data } = await api.post(`/content/${primary.id}/complete`);
       if (data?.xp_awarded > 0) toast.success(`+${data.xp_awarded} XP`);
-      onComplete?.(content.id);
+      onComplete?.(primary.id);
     } catch (e) {
       // best-effort — completion tracking shouldn't block reading content
     }
@@ -34,8 +44,8 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQui
 
   const markIncomplete = async () => {
     try {
-      await api.delete(`/content/${content.id}/complete`);
-      onUncomplete?.(content.id);
+      await api.delete(`/content/${primary.id}/complete`);
+      onUncomplete?.(primary.id);
     } catch (e) {
       // best-effort — completion tracking shouldn't block reading content
     }
@@ -43,13 +53,13 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQui
 
   const finishQuiz = async (score, total) => {
     try {
-      const { data } = await api.post(`/content/${content.id}/quiz-result`, { score, total });
+      const { data } = await api.post(`/content/${primary.id}/quiz-result`, { score, total });
       if (data?.xp_awarded > 0) toast.success(`+${data.xp_awarded} XP`);
     } catch (e) {
       // never block the score screen on a network hiccup — the attempt is still shown locally
     }
-    onComplete?.(content.id);
-    onQuizScore?.(content.id, score, total);
+    onComplete?.(primary.id);
+    onQuizScore?.(primary.id, score, total);
   };
 
   const body = (
@@ -68,10 +78,10 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQui
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className={`overline ${paper ? "text-[#1f6f5c]" : "text-[#00f0ff]"}`}>
-            {CONTENT_TYPE_LABELS[content.content_type] || content.content_type} · {content.language?.toUpperCase()}
+            {CONTENT_TYPE_LABELS[pair.content_type] || pair.content_type} · {langBadge(pair)}
           </div>
           <div className={`font-display text-2xl tracking-tighter mt-2 mb-5 ${paper ? "text-[#2b2620]" : "text-white"}`}>
-            {content.title}
+            {pair.title}
           </div>
         </div>
         {pane && (
@@ -91,14 +101,26 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQui
         )}
       </div>
 
-      {content.content_type === "quiz" && <QuizViewer content={content} onFinish={finishQuiz} />}
-      {content.content_type === "flashcards" && <FlashcardsViewer content={content} />}
-      {content.content_type === "mindmap" && <MindmapViewer content={content} />}
-      {content.content_type === "notes" && <NotesViewer content={content} scrollRef={scrollRef} />}
-      {content.content_type === "summary" && <SummaryViewer content={content} scrollRef={scrollRef} />}
+      {pair.content_type === "quiz" && (
+        <QuizViewer
+          content={{ id: primary.id, content_type: "quiz", payload: primary.payload }}
+          secondaryQuestions={secondary?.payload?.questions?.map((q) => q.question) || []}
+          onFinish={finishQuiz}
+        />
+      )}
+      {pair.content_type === "flashcards" && <FlashcardsViewer pair={pair} />}
+      {pair.content_type === "mindmap" && (
+        <MindmapViewer
+          content={{ payload: primary.payload }}
+          secondary={secondary ? { payload: secondary.payload } : null}
+          secondaryLabel="EN"
+        />
+      )}
+      {pair.content_type === "notes" && <NotesViewer pair={pair} scrollRef={scrollRef} />}
+      {pair.content_type === "summary" && <SummaryViewer pair={pair} scrollRef={scrollRef} />}
 
       <div className="mt-6 flex gap-3">
-        {content.content_type !== "quiz" && !done && (
+        {pair.content_type !== "quiz" && !done && (
           <button
             data-testid="mark-complete"
             onClick={markComplete}
