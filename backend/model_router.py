@@ -1,9 +1,11 @@
 """Model Router — configure providers, keys, order, system prompts. Failover across providers."""
+import asyncio
 import os
 import uuid
 import logging
 from typing import Optional, List, Literal
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -127,6 +129,7 @@ class ProviderConfig(BaseModel):
     provider: Provider
     enabled: bool = True
     has_key: bool = False
+    key_source: Literal["ui", "env", "emergent", "none"] = "none"
     order: int
     model: str
 
@@ -167,19 +170,112 @@ async def _load_or_init():
     return doc
 
 
+ENV_KEY_MAP = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY"}
+
+
+def _key_source(provider: str, cfg_provider: dict) -> Literal["ui", "env", "emergent", "none"]:
+    """Whichever key _resolve_key would actually use, named -- so the admin UI can show
+    which source is active instead of a key saved in the UI silently having no effect."""
+    if cfg_provider.get("encrypted_key"):
+        return "ui"
+    if os.environ.get(ENV_KEY_MAP[provider]):
+        return "env"
+    if os.environ.get("EMERGENT_LLM_KEY"):
+        return "emergent"
+    return "none"
+
+
 def _resolve_key(provider: str, cfg_provider: dict) -> Optional[str]:
-    """Env var overrides UI-entered key. Fallback to EMERGENT_LLM_KEY."""
-    env_map = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY"}
-    env_val = os.environ.get(env_map[provider])
-    if env_val:
-        return env_val
+    """A key saved via the admin UI takes priority -- that's the whole point of the Model
+    Router panel, and a key an admin saves there must actually take effect. The
+    provider-specific env var is a deploy-time fallback for when no UI key has been set
+    yet, and EMERGENT_LLM_KEY is the last-resort generic fallback."""
     enc = cfg_provider.get("encrypted_key")
     if enc:
         try:
             return decrypt(enc)
         except Exception:
             log.exception("Failed to decrypt %s key", provider)
+    env_val = os.environ.get(ENV_KEY_MAP[provider])
+    if env_val:
+        return env_val
     return os.environ.get("EMERGENT_LLM_KEY")
+
+
+# ---------- Live model listing ----------
+class ModelInfo(BaseModel):
+    id: str
+    display_name: str
+    description: Optional[str] = None
+    capabilities: List[str] = Field(default_factory=list)
+    context_window: Optional[int] = None
+    output_limit: Optional[int] = None
+
+
+def _fetch_openai_models(key: str) -> List[ModelInfo]:
+    resp = requests.get(
+        "https://api.openai.com/v1/models",
+        headers={"Authorization": f"Bearer {key}"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    # OpenAI's /models endpoint doesn't report per-model capabilities, and lists every
+    # model family (embeddings, tts, whisper, image, moderation, ...) -- filter down to
+    # ones actually usable for chat/completion generation, which is all this app calls.
+    EXCLUDE = ("embedding", "whisper", "tts", "moderation", "dall-e", "davinci", "babbage")
+    out = [
+        ModelInfo(id=m["id"], display_name=m["id"], capabilities=["chat"])
+        for m in resp.json().get("data", [])
+        if not any(x in m.get("id", "") for x in EXCLUDE)
+    ]
+    out.sort(key=lambda m: m.id)
+    return out
+
+
+def _fetch_anthropic_models(key: str) -> List[ModelInfo]:
+    resp = requests.get(
+        "https://api.anthropic.com/v1/models",
+        headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return [
+        ModelInfo(id=m["id"], display_name=m.get("display_name") or m["id"], capabilities=["chat"])
+        for m in resp.json().get("data", [])
+    ]
+
+
+def _fetch_gemini_models(key: str) -> List[ModelInfo]:
+    resp = requests.get(
+        f"https://generativelanguage.googleapis.com/v1beta/models?key={key}",
+        timeout=15,
+    )
+    resp.raise_for_status()
+    out = []
+    for m in resp.json().get("models", []):
+        methods = m.get("supportedGenerationMethods", [])
+        if "generateContent" not in methods:
+            continue  # embedding-only / non-chat models aren't usable here
+        name = m.get("name", "")
+        if name.startswith("models/"):
+            name = name[len("models/"):]
+        out.append(ModelInfo(
+            id=name,
+            display_name=m.get("displayName") or name,
+            description=m.get("description"),
+            capabilities=methods,
+            context_window=m.get("inputTokenLimit"),
+            output_limit=m.get("outputTokenLimit"),
+        ))
+    out.sort(key=lambda m: m.id)
+    return out
+
+
+MODEL_FETCHERS = {
+    "openai": _fetch_openai_models,
+    "anthropic": _fetch_anthropic_models,
+    "gemini": _fetch_gemini_models,
+}
 
 
 async def call_router(system_prompt_key: str, user_text: str, session_id: Optional[str] = None) -> dict:
@@ -229,9 +325,8 @@ async def get_config(_: dict = Depends(require_role("admin"))):
         ProviderConfig(
             provider=p,
             enabled=v["enabled"],
-            has_key=bool(v.get("encrypted_key")) or bool(os.environ.get(
-                {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY"}[p]
-            )) or bool(os.environ.get("EMERGENT_LLM_KEY")),
+            has_key=_key_source(p, v) != "none",
+            key_source=_key_source(p, v),
             order=v["order"],
             model=v.get("model", DEFAULT_MODELS[p]),
         )
@@ -258,6 +353,33 @@ async def update_provider(provider: Provider, payload: ProviderUpdate, _: dict =
         p["encrypted_key"] = encrypt(payload.api_key) if payload.api_key else None
     await db.model_router.update_one({"id": "config"}, {"$set": {f"providers.{provider}": p}})
     return {"ok": True}
+
+
+class ModelsQuery(BaseModel):
+    # When set, tests this key directly (e.g. one just pasted but not yet saved) instead
+    # of the provider's currently-resolved key -- lets the admin see the real model list
+    # right after typing a key, before committing to Save.
+    api_key: Optional[str] = None
+
+
+@router.post("/providers/{provider}/models", response_model=List[ModelInfo])
+async def list_provider_models(provider: Provider, payload: ModelsQuery, _: dict = Depends(require_role("admin"))):
+    """Fetches the live list of models this key can actually use, with whatever capability
+    info the provider exposes -- so the admin picks a real, working model instead of typing
+    a model id blind."""
+    cfg = await _load_or_init()
+    pcfg = cfg["providers"].get(provider)
+    key = payload.api_key or (_resolve_key(provider, pcfg) if pcfg else None)
+    if not key:
+        raise HTTPException(status_code=400, detail="No API key available -- paste one or save it first.")
+    try:
+        return await asyncio.to_thread(MODEL_FETCHERS[provider], key)
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else 502
+        body = e.response.text[:300] if e.response is not None else str(e)
+        raise HTTPException(status_code=502, detail=f"{provider} rejected the request ({status}): {body}")
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"Could not reach {provider}: {e}")
 
 
 @router.post("/order")

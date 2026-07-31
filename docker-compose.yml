@@ -33,7 +33,8 @@ services:
       SMTP_FROM: ${SMTP_FROM:-MYTAMAN AI Tutor <no-reply@mytaman.ai>}
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
-      # Optional direct provider keys (override router UI keys):
+      # Optional deploy-time fallback keys, used only when no key is saved in the Model
+      # Router UI for that provider -- a UI-saved key always takes priority over these:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
