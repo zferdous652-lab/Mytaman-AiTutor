@@ -23,10 +23,10 @@ const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Fla
 // active view), but marking *incomplete* clears both language ids, and "done" (passed in
 // from the caller) is computed by checking either id, so a lesson finished from "All"
 // still reads as done after switching to "En" or "Bm", and vice versa.
-const langBadge = (pair, focusLang) => {
-  if (focusLang !== "all") return focusLang.toUpperCase();
-  return pair.bm && pair.en ? "BM · EN" : pair.bm ? "BM" : "EN";
-};
+// The badge reflects the active filter mode, not which languages this particular pair
+// actually has -- "All" always reads "BM · EN" (even for a pair that's only BM under the
+// hood), same as "En"/"Bm" always read their own name for whatever's currently shown.
+const langBadge = (focusLang) => (focusLang === "all" ? "BM · EN" : focusLang.toUpperCase());
 
 // variant="modal" (default) -- the original centered popover, still used anywhere a lesson
 // needs to float above other UI. variant="pane" -- fills its parent container edge-to-edge,
@@ -98,7 +98,7 @@ const ContentViewer = ({ pair, done, onClose, onComplete, onUncomplete, onQuizSc
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className={`overline ${paper ? "text-[#1f6f5c]" : "text-[#00f0ff]"}`}>
-            {CONTENT_TYPE_LABELS[pair.content_type] || pair.content_type} · {langBadge(pair, focusLang)}
+            {CONTENT_TYPE_LABELS[pair.content_type] || pair.content_type} · {langBadge(focusLang)}
           </div>
           <div className={`font-display text-2xl tracking-tighter mt-2 mb-5 ${paper ? "text-[#2b2620]" : "text-white"}`}>
             {pair.title}

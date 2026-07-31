@@ -11,10 +11,10 @@ const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Fla
 export const isPairDone = (pair, completedIds) =>
   (!!pair.bm && completedIds.has(pair.bm.id)) || (!!pair.en && completedIds.has(pair.en.id));
 
-const langBadge = (pair, langFilter) => {
-  if (langFilter !== "all") return langFilter.toUpperCase();
-  return pair.bm && pair.en ? "BM · EN" : pair.bm ? "BM" : "EN";
-};
+// The badge reflects the active filter mode, not which languages this particular pair
+// actually has -- "All" always reads "BM · EN" (even for a pair that's only BM under the
+// hood), same as "En"/"Bm" always read their own name for whatever's currently shown.
+const langBadge = (langFilter) => (langFilter === "all" ? "BM · EN" : langFilter.toUpperCase());
 
 // A single lesson row inside an expanded chapter -- the leaf of the course tree. `pair` is
 // one bilingual lesson: { key, content_type, title, bm, en }.
@@ -33,7 +33,7 @@ const LessonRow = ({ pair, done, active, langFilter, onSelect }) => {
       <span className="min-w-0 flex-1">
         <span className={`block text-sm truncate ${active ? "text-white font-medium" : "text-white/80"}`}>{pair.title}</span>
         <span className="block text-[10px] uppercase tracking-widest text-white/45">
-          {CONTENT_TYPE_LABELS[pair.content_type] || pair.content_type} · {langBadge(pair, langFilter)}
+          {CONTENT_TYPE_LABELS[pair.content_type] || pair.content_type} · {langBadge(langFilter)}
         </span>
       </span>
       {done ? (
