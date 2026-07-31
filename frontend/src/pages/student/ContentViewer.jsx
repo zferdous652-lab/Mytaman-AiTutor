@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import QuizViewer from "./viewers/QuizViewer";
 import FlashcardsViewer from "./viewers/FlashcardsViewer";
@@ -8,8 +9,9 @@ import SummaryViewer from "./viewers/SummaryViewer";
 
 // Reading-heavy content types get the paper theme; flashcards/mindmap keep the neon glass look.
 const PAPER_TYPES = ["summary", "notes", "quiz"];
+const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Flashcards", mindmap: "Mind Map", notes: "Notes" };
 
-const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete }) => {
+const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete, onQuizScore }) => {
   const scrollRef = useRef(null);
   if (!content) return null;
 
@@ -17,7 +19,8 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete }) => 
 
   const markComplete = async () => {
     try {
-      await api.post(`/content/${content.id}/complete`);
+      const { data } = await api.post(`/content/${content.id}/complete`);
+      if (data?.xp_awarded > 0) toast.success(`+${data.xp_awarded} XP`);
       onComplete?.(content.id);
     } catch (e) {
       // best-effort — completion tracking shouldn't block reading content
@@ -35,11 +38,13 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete }) => 
 
   const finishQuiz = async (score, total) => {
     try {
-      await api.post(`/content/${content.id}/quiz-result`, { score, total });
+      const { data } = await api.post(`/content/${content.id}/quiz-result`, { score, total });
+      if (data?.xp_awarded > 0) toast.success(`+${data.xp_awarded} XP`);
     } catch (e) {
       // never block the score screen on a network hiccup — the attempt is still shown locally
     }
     onComplete?.(content.id);
+    onQuizScore?.(content.id, score, total);
   };
 
   return (
@@ -55,7 +60,7 @@ const ContentViewer = ({ content, done, onClose, onComplete, onUncomplete }) => 
         data-testid="content-modal"
       >
         <div className={`overline ${paper ? "text-[#1f6f5c]" : "text-[#00f0ff]"}`}>
-          {content.content_type} · {content.language?.toUpperCase()}
+          {CONTENT_TYPE_LABELS[content.content_type] || content.content_type} · {content.language?.toUpperCase()}
         </div>
         <div className={`font-display text-2xl tracking-tighter mt-2 mb-5 ${paper ? "text-[#2b2620]" : "text-white"}`}>
           {content.title}

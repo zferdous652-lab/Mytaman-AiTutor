@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle, Pencil, EyeOff } from "lucide-react";
+import { Trash2, Send, CheckCircle2, FileEdit, X, ClipboardCheck, AlertTriangle, Pencil, EyeOff, Archive, ChevronDown } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -21,6 +21,8 @@ const Packs = () => {
   const [deleting, setDeleting] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [confirmState, setConfirmState] = useState(null);
+  const [archivedPacks, setArchivedPacks] = useState([]);
+  const [showArchived, setShowArchived] = useState(false);
 
   const askConfirm = (title, message, onConfirm, confirmLabel = "Delete") => setConfirmState({ title, message, onConfirm, confirmLabel });
   const closeConfirm = () => setConfirmState(null);
@@ -35,6 +37,35 @@ const Packs = () => {
     setPacks(data);
   };
   useEffect(() => { load(); }, []);
+
+  const loadArchived = async () => {
+    const { data } = await api.get("/packs/archived");
+    setArchivedPacks(data);
+  };
+  const toggleArchived = () => {
+    if (!showArchived) loadArchived();
+    setShowArchived((s) => !s);
+  };
+
+  // Archived packs are invisible to /packs/list by design (that's what makes archiving
+  // useful) so the only remaining action on one is a real, unrecoverable delete -- there's
+  // no "keep for students" choice left to make since it's already hidden from new enrollment.
+  const deleteArchivedPack = (pack) => {
+    askConfirm(
+      `Permanently delete "${pack.title}"?`,
+      "This is already hidden from Tutor Packs and Browse Packs. Deleting it now also removes it from every student who's still enrolled, including their progress. This cannot be undone.",
+      async () => {
+        try {
+          await api.delete(`/packs/${pack.id}`);
+          toast.success(`"${pack.title}" permanently deleted`);
+          setArchivedPacks((prev) => prev.filter((p) => p.id !== pack.id));
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || "Delete failed");
+        }
+      },
+      "Delete"
+    );
+  };
 
   const openReview = async (pack) => {
     setReviewPack(pack);
@@ -103,6 +134,38 @@ const Packs = () => {
           toast.error(err?.response?.data?.detail || "Failed");
         }
         setBulkDeleting(false);
+      },
+      "Remove"
+    );
+  };
+
+  const isItemHidden = (draft, item) =>
+    (draft.hidden_review_items || []).some(
+      (h) => h.chapter_id === item.chapter_id && h.content_type === item.content_type && h.language === item.language
+    );
+
+  // Per-item remove: the (x) on a single content-type tag inside a draft row. Removes just
+  // that one (chapter, content type, language) slot from the student portal, and records it
+  // on this draft's own hidden_review_items so the tag stays gone from this list across
+  // reloads -- never touches the draft's actual items, which Manual Content / Generate with
+  // AI keep showing exactly as authored. Re-confirming the draft there brings it back.
+  const removeItemFromStudents = (draft, item) => {
+    const label = `${item.chapter_title} · ${CONTENT_TYPE_LABELS[item.content_type] || item.content_type} · ${item.language.toUpperCase()}`;
+    askConfirm(
+      `Remove ${label} from students?`,
+      "This removes this item from the student portal and clears its tag here — the draft stays fully untouched in Manual Content / Generate with AI. Re-confirm it there to bring the tag back.",
+      async () => {
+        try {
+          const { data: updatedDraft } = await api.post(`/content/drafts/${draft.id}/items/unpublish`, {
+            chapter_id: item.chapter_id,
+            content_type: item.content_type,
+            language: item.language,
+          });
+          toast.success(`${label} removed from the student portal`);
+          setConfirmedDrafts((prev) => prev.map((d) => (d.id === draft.id ? updatedDraft : d)));
+        } catch (err) {
+          toast.error(err?.response?.data?.detail || "Failed");
+        }
       },
       "Remove"
     );
@@ -265,6 +328,44 @@ const Packs = () => {
         </div>
       </div>
 
+      <div className="mt-6">
+        <button
+          type="button"
+          onClick={toggleArchived}
+          className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 transition-colors"
+          data-testid="toggle-archived"
+        >
+          <Archive size={12} /> Archived packs
+          <ChevronDown size={12} className={`transition-transform ${showArchived ? "rotate-180" : ""}`} />
+        </button>
+
+        {showArchived && (
+          <div className="mt-3 space-y-2" data-testid="archived-list">
+            {archivedPacks.length === 0 && <div className="text-xs text-white/40">No archived packs.</div>}
+            {archivedPacks.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0a0514]/40 px-4 py-3"
+                data-testid={`archived-pack-${p.id}`}
+              >
+                <div>
+                  <div className="text-sm text-white">{p.title}</div>
+                  <div className="text-xs text-white/40">{p.grade}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => deleteArchivedPack(p)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-red-400/30 px-3 py-1.5 text-xs text-red-400 hover:bg-red-400/10 transition-colors"
+                  data-testid={`archived-pack-${p.id}-delete`}
+                >
+                  <Trash2 size={12} /> Delete permanently
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {reviewPack && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
@@ -323,12 +424,21 @@ const Packs = () => {
                           <span className="ml-2 text-[10px] uppercase tracking-wide text-white/30">{d.source === "ai" ? "AI generated" : "Manual"}</span>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
-                          {d.items.map((it, i) => (
+                          {d.items.filter((it) => !isItemHidden(d, it)).map((it, i) => (
                             <span
                               key={i}
-                              className="text-[10px] uppercase tracking-wide text-white/60 bg-white/5 border border-white/10 rounded-full px-2 py-0.5"
+                              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-white/60 bg-white/5 border border-white/10 rounded-full pl-2 pr-1 py-0.5"
                             >
                               {it.chapter_title} · {CONTENT_TYPE_LABELS[it.content_type] || it.content_type} · {it.language.toUpperCase()}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); removeItemFromStudents(d, it); }}
+                                className="text-white/30 hover:text-red-400 transition-colors"
+                                title="Remove this item from students"
+                                data-testid={`review-draft-${d.id}-item-${i}-remove`}
+                              >
+                                <X size={10} />
+                              </button>
                             </span>
                           ))}
                         </div>

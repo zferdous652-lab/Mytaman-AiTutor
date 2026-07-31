@@ -11,6 +11,8 @@ import DashboardShell from "@/components/DashboardShell";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
+import RegisterStudent from "@/pages/RegisterStudent";
+import ConnectChild from "@/pages/ConnectChild";
 
 import AdminOverview from "@/pages/admin/Overview";
 import AdminGenerate from "@/pages/admin/Generate";
@@ -20,6 +22,7 @@ import AdminPacks from "@/pages/admin/Packs";
 import AdminStudents from "@/pages/admin/Students";
 
 import { StudentHome, StudentBrowse } from "@/pages/student/Student";
+import StudentDashboard from "@/pages/student/Dashboard";
 import { ParentHome, ParentPacks } from "@/pages/parent/Parent";
 
 const AdminLayout = ({ children }) => (
@@ -49,6 +52,10 @@ function App() {
               <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/register-student" element={<RegisterStudent />} />
+              <Route path="/connect-child" element={<ConnectChild />} />
+              {/* Older invitation emails may still point at the previous path. */}
+              <Route path="/approve-child" element={<ConnectChild />} />
 
               <Route path="/admin" element={<AdminLayout><AdminOverview /></AdminLayout>} />
               <Route path="/admin/generate" element={<AdminLayout><AdminGenerate /></AdminLayout>} />
@@ -59,6 +66,7 @@ function App() {
 
               <Route path="/student" element={<StudentLayout><StudentHome /></StudentLayout>} />
               <Route path="/student/browse" element={<StudentLayout><StudentBrowse /></StudentLayout>} />
+              <Route path="/student/dashboard" element={<StudentLayout><StudentDashboard /></StudentLayout>} />
 
               <Route path="/parent" element={<ParentLayout><ParentHome /></ParentLayout>} />
               <Route path="/parent/packs" element={<ParentLayout><ParentPacks /></ParentLayout>} />

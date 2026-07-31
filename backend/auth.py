@@ -20,23 +20,48 @@ Role = Literal["admin", "parent", "student"]
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+# Public self-registration creates a PARENT and nothing else. Students are minors and
+# only ever come into existence through a guardian -- either created directly in the
+# parent portal, or self-requested and then approved by a parent (see registrations.py).
+# Admins are seeded, never registered. Note this is also what stops a caller from
+# POSTing {"role": "admin"} to mint themselves an admin account.
 class RegisterIn(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=8)
     name: str = Field(min_length=1)
-    role: Role = "student"
 
 
 class LoginIn(BaseModel):
-    email: EmailStr
     password: str
+    # Parents sign in with an email, students with a username -- one form, either value.
+    identifier: Optional[str] = None
+    email: Optional[str] = None  # legacy alias: older clients post {email, password}
+
+    def login_id(self) -> str:
+        return (self.identifier or self.email or "").strip()
 
 
 class UserOut(BaseModel):
     id: str
-    email: str
     name: str
     role: Role
+    # Students have a username and no email; parents/admins the reverse.
+    email: Optional[str] = None
+    username: Optional[str] = None
+    grade: Optional[str] = None
+    must_change_password: bool = False
+
+
+def user_out(doc: dict) -> UserOut:
+    return UserOut(
+        id=doc["id"],
+        name=doc["name"],
+        role=doc["role"],
+        email=doc.get("email"),
+        username=doc.get("username"),
+        grade=doc.get("grade"),
+        must_change_password=bool(doc.get("must_change_password")),
+    )
 
 
 class AuthOut(BaseModel):
@@ -72,6 +97,10 @@ async def get_current_user(authorization: Optional[str] = Header(default=None)) 
     user = await db.users.find_one({"id": payload.get("sub")}, {"_id": 0, "password": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # A deactivated child keeps its account and history but can't be used to sign in --
+    # accounts created before this field existed are active by default.
+    if user.get("active") is False:
+        raise HTTPException(status_code=403, detail="This account has been deactivated")
     return user
 
 
@@ -85,46 +114,80 @@ def require_role(*roles: Role):
 
 @router.post("/register", response_model=AuthOut)
 async def register(payload: RegisterIn):
-    exists = await db.users.find_one({"email": payload.email})
+    """Creates a parent account. This is the only public registration path -- a student
+    account is never created here (see the RegisterIn note above)."""
+    email = payload.email.lower()
+    exists = await db.users.find_one({"email": email})
     if exists:
         raise HTTPException(status_code=400, detail="Email already registered")
     doc = {
         "id": str(uuid.uuid4()),
-        "email": payload.email,
+        "email": email,
         "name": payload.name,
-        "role": payload.role,
+        "role": "parent",
         "password": _hash(payload.password),
+        "active": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(doc)
     token = _sign({"sub": doc["id"], "role": doc["role"]})
-    return AuthOut(token=token, user=UserOut(id=doc["id"], email=doc["email"], name=doc["name"], role=doc["role"]))
+    return AuthOut(token=token, user=user_out(doc))
 
 
 @router.post("/login", response_model=AuthOut)
 async def login(payload: LoginIn):
-    doc = await db.users.find_one({"email": payload.email})
+    ident = payload.login_id()
+    if not ident:
+        raise HTTPException(status_code=422, detail="Enter your email or student ID")
+    # Emails are stored lowercased going forward, but accounts predating that may carry
+    # mixed case, so try the raw value too. Usernames are always stored lowercased.
+    doc = await db.users.find_one({
+        "$or": [{"email": ident}, {"email": ident.lower()}, {"username": ident.lower()}]
+    })
     if not doc or not _verify(payload.password, doc["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if doc.get("active") is False:
+        raise HTTPException(status_code=403, detail="This account has been deactivated")
     token = _sign({"sub": doc["id"], "role": doc["role"]})
-    return AuthOut(token=token, user=UserOut(id=doc["id"], email=doc["email"], name=doc["name"], role=doc["role"]))
+    return AuthOut(token=token, user=user_out(doc))
 
 
 @router.get("/me", response_model=UserOut)
 async def me(user: dict = Depends(get_current_user)):
-    return UserOut(**{k: user[k] for k in ("id", "email", "name", "role")})
+    return user_out(user)
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
+@router.post("/change-password")
+async def change_password(payload: ChangePasswordIn, user: dict = Depends(get_current_user)):
+    """Lets a student replace the password their parent set for them -- clearing the
+    must_change_password flag the parent-approval flow sets. Also available to parents."""
+    doc = await db.users.find_one({"id": user["id"]})
+    if not doc or not _verify(payload.current_password, doc["password"]):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"password": _hash(payload.new_password), "must_change_password": False}},
+    )
+    return {"ok": True}
 
 
 async def seed_admin(target_db):
-    """Seed a default admin + demo student/parent."""
-    seeds = [
+    """Seed a default admin + a demo parent with one linked demo child.
+
+    The demo student is seeded the way the app now requires every student to exist:
+    a username instead of an email, and a parent_id linking it to the demo parent.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    for s in [
         {"email": "admin@mytaman.ai", "password": "Admin@12345", "name": "MYTAMAN Admin", "role": "admin"},
         {"email": "parent@mytaman.ai", "password": "Parent@12345", "name": "Demo Parent", "role": "parent"},
-        {"email": "student@mytaman.ai", "password": "Student@12345", "name": "Demo Student", "role": "student"},
-    ]
-    for s in seeds:
-        existing = await target_db.users.find_one({"email": s["email"]})
-        if existing:
+    ]:
+        if await target_db.users.find_one({"email": s["email"]}):
             continue
         await target_db.users.insert_one({
             "id": str(uuid.uuid4()),
@@ -132,5 +195,22 @@ async def seed_admin(target_db):
             "name": s["name"],
             "role": s["role"],
             "password": _hash(s["password"]),
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "active": True,
+            "created_at": now,
+        })
+
+    parent = await target_db.users.find_one({"email": "parent@mytaman.ai"}, {"_id": 0, "id": 1})
+    if parent and not await target_db.users.find_one({"username": "demostudent"}):
+        await target_db.users.insert_one({
+            "id": str(uuid.uuid4()),
+            "username": "demostudent",
+            "name": "Demo Student",
+            "role": "student",
+            "parent_id": parent["id"],
+            "grade": "Form 1",
+            "birth_year": 2012,
+            "password": _hash("Student@12345"),
+            "must_change_password": False,
+            "active": True,
+            "created_at": now,
         })

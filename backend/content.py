@@ -1,6 +1,7 @@
 """Content generation & storage endpoints."""
 import io
 import json
+import random
 import re
 import uuid
 from collections import Counter
@@ -14,6 +15,8 @@ from pydantic import BaseModel, Field, ValidationError
 from db import db
 from auth import require_role, get_current_user
 from model_router import call_router
+from xp import award_lesson_xp, award_quiz_xp
+from rewards import on_xp_earned
 
 router = APIRouter(prefix="/content", tags=["content"])
 
@@ -244,11 +247,41 @@ def _normalize_quiz_payload(raw: dict) -> dict:
     return {"questions": normalized}
 
 
+def _shuffle_mcq_options(payload: dict) -> dict:
+    """Models writing quiz JSON have a strong stylistic bias toward listing the correct
+    option first -- asking nicely in the prompt doesn't reliably fix this across many
+    generations, so shuffle the options for real here. correct_answer is matched by
+    string value elsewhere, not position, so reordering options is safe."""
+    for q in payload.get("questions", []):
+        if q.get("type") == "mcq" and q.get("options"):
+            random.shuffle(q["options"])
+    return payload
+
+
 def _notes_from_plain_text(text: str) -> dict:
     """Falls back to splitting plain-text lines into notes when the AI didn't return JSON
     -- covers a not-yet-updated Model Router prompt that still asks for free-form notes."""
     lines = [ln.strip().lstrip("-*• ").strip() for ln in text.splitlines()]
     return {"notes": [ln for ln in lines if ln]}
+
+
+_MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_MD_BOLD_UNDERSCORE_RE = re.compile(r"__(.+?)__")
+_MD_HEADER_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_MD_BULLET_RE = re.compile(r"^[*+]\s+", re.MULTILINE)
+
+
+def _strip_markdown(text: str) -> str:
+    """Best-effort cleanup of Markdown syntax the model may still emit despite being told
+    not to -- either because it didn't fully comply, or because a not-yet-updated Model
+    Router prompt is still in play. Summaries/notes are shown as plain text to students, so
+    stray **/##/etc. would otherwise render as literal characters instead of formatting."""
+    text = _MD_BOLD_RE.sub(r"\1", text)
+    text = _MD_BOLD_UNDERSCORE_RE.sub(r"\1", text)
+    text = _MD_HEADER_RE.sub("", text)
+    text = _MD_BULLET_RE.sub("- ", text)
+    # Catches any leftover unpaired ** / __ the regexes above didn't match a partner for.
+    return text.replace("**", "").replace("__", "")
 
 
 @router.post("/ai-draft", response_model=AiDraftItemOut)
@@ -265,7 +298,7 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
     result = await call_router(PROMPT_KEY[payload.content_type], user_text)
 
     if payload.content_type == "summary":
-        raw_payload = {"body": result["text"].strip()}
+        raw_payload = {"body": _strip_markdown(result["text"]).strip()}
     elif payload.content_type == "mindmap":
         raw_payload = {"html": _extract_html(result["text"])}
     else:
@@ -281,8 +314,12 @@ async def ai_generate_draft_item(payload: AiDraftItemIn, _: dict = Depends(requi
                 )
         if payload.content_type == "quiz":
             raw_payload = _normalize_quiz_payload(raw_payload)
+        if payload.content_type == "notes" and "notes" in raw_payload:
+            raw_payload["notes"] = [_strip_markdown(n).strip() for n in raw_payload["notes"]]
 
     validated = _validate_payload(payload.content_type, raw_payload)
+    if payload.content_type == "quiz":
+        validated = _shuffle_mcq_options(validated)
     return AiDraftItemOut(
         chapter_id=payload.chapter_id,
         content_type=payload.content_type,
@@ -327,6 +364,12 @@ class DraftItemOut(BaseModel):
     source_pdf: Optional[SourcePdfIn] = None
 
 
+class HiddenReviewItem(BaseModel):
+    chapter_id: str
+    content_type: str
+    language: str
+
+
 class PackDraftOut(BaseModel):
     id: str
     pack_id: str
@@ -337,6 +380,7 @@ class PackDraftOut(BaseModel):
     items: List[DraftItemOut]
     created_at: str
     hidden_from_review: bool = False
+    hidden_review_items: List[HiddenReviewItem] = Field(default_factory=list)
 
 
 def _draft_out(doc: dict) -> PackDraftOut:
@@ -347,6 +391,7 @@ def _draft_out(doc: dict) -> PackDraftOut:
     d = {k: doc.get(k) for k in PackDraftOut.model_fields.keys()}
     d["source"] = doc.get("source") or "manual"
     d["hidden_from_review"] = bool(doc.get("hidden_from_review"))
+    d["hidden_review_items"] = doc.get("hidden_review_items") or []
     return PackDraftOut(**d)
 
 
@@ -444,7 +489,7 @@ async def confirm_pack_draft(draft_id: str, _: dict = Depends(require_role("admi
     # explicitly signals "this is ready to be reviewed for publishing again."
     res = await db.pack_drafts.find_one_and_update(
         {"id": draft_id},
-        {"$set": {"status": "confirmed", "hidden_from_review": False}},
+        {"$set": {"status": "confirmed", "hidden_from_review": False, "hidden_review_items": []}},
         return_document=True,
         projection={"_id": 0},
     )
@@ -504,21 +549,27 @@ async def rename_pack_draft(draft_id: str, payload: RenameDraftIn, _: dict = Dep
     return _draft_out(res)
 
 
+async def _unpublish_item(pack_id: str, chapter_id: str, content_type: str, language: str) -> bool:
+    """Removes one published (chapter, content type, language) slot -- plus any student
+    progress/quiz_results referencing it -- from the contents collection. Never touches
+    pack_drafts. Returns whether anything was actually live to remove."""
+    existing = await db.contents.find_one({
+        "pack_id": pack_id, "chapter_id": chapter_id, "content_type": content_type, "language": language,
+    })
+    if not existing:
+        return False
+    await db.contents.delete_one({"id": existing["id"]})
+    await db.progress.delete_many({"content_id": existing["id"]})
+    await db.quiz_results.delete_many({"content_id": existing["id"]})
+    return True
+
+
 async def _unpublish_draft_items(draft: dict) -> int:
-    """Removes a draft's items from the published contents collection (plus any student
-    progress/quiz_results referencing them), without touching the draft itself."""
+    """Removes every item of a draft from the published contents collection, without
+    touching the draft itself."""
     removed = 0
     for item in draft["items"]:
-        existing = await db.contents.find_one({
-            "pack_id": draft["pack_id"],
-            "chapter_id": item["chapter_id"],
-            "content_type": item["content_type"],
-            "language": item["language"],
-        })
-        if existing:
-            await db.contents.delete_one({"id": existing["id"]})
-            await db.progress.delete_many({"content_id": existing["id"]})
-            await db.quiz_results.delete_many({"content_id": existing["id"]})
+        if await _unpublish_item(draft["pack_id"], item["chapter_id"], item["content_type"], item["language"]):
             removed += 1
     return removed
 
@@ -575,6 +626,35 @@ async def bulk_unpublish_pack_drafts(payload: BulkUnpublishDraftsIn, _: dict = D
         removed_from_students += await _unpublish_draft_items(draft)
     await _hide_drafts_from_review(payload.ids)
     return {"ok": True, "removed_from_students": removed_from_students}
+
+
+class UnpublishDraftItemIn(BaseModel):
+    chapter_id: str
+    content_type: str
+    language: str
+
+
+@router.post("/drafts/{draft_id}/items/unpublish", response_model=PackDraftOut)
+async def unpublish_pack_draft_item(draft_id: str, payload: UnpublishDraftItemIn, _: dict = Depends(require_role("admin"))):
+    """The (x) on a single content-type tag in the Tutor Pack Publish review pop-up.
+    Removes that one item from the published contents collection (like _unpublish_item
+    elsewhere) AND records it in this draft's own hidden_review_items, so the tag stays
+    gone from the review pop-up across reloads -- without ever touching the draft's actual
+    items, which Manual Content / Generate with AI keep showing exactly as authored.
+    (Re)confirming the draft there clears hidden_review_items, bringing every tag back."""
+    draft = await db.pack_drafts.find_one({"id": draft_id}, {"_id": 0})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    await _unpublish_item(draft["pack_id"], payload.chapter_id, payload.content_type, payload.language)
+
+    key = {"chapter_id": payload.chapter_id, "content_type": payload.content_type, "language": payload.language}
+    hidden = draft.get("hidden_review_items") or []
+    if key not in hidden:
+        hidden = hidden + [key]
+    res = await db.pack_drafts.find_one_and_update(
+        {"id": draft_id}, {"$set": {"hidden_review_items": hidden}}, return_document=True, projection={"_id": 0}
+    )
+    return _draft_out(res)
 
 
 UPLOAD_DIR = Path(__file__).parent / "uploads" / "mindmaps"
@@ -708,13 +788,74 @@ async def mark_complete(content_id: str, user: dict = Depends(get_current_user))
         }},
         upsert=True,
     )
-    return {"ok": True}
+    xp_result = await award_lesson_xp(user["id"], content["pack_id"], content_id, content.get("title") or "Lesson")
+    bonus_result = await on_xp_earned(user["id"], content["pack_id"])
+    return {"ok": True, "xp_awarded": xp_result["xp_awarded"] + bonus_result["xp_awarded"]}
 
 
 @router.delete("/{content_id}/complete")
 async def mark_incomplete(content_id: str, user: dict = Depends(get_current_user)):
     await db.progress.delete_one({"user_id": user["id"], "content_id": content_id})
     return {"ok": True}
+
+
+def _normalize_short_answer(s: str) -> str:
+    """Mirrors the frontend's exact-match fallback comparator: lowercase, strip
+    punctuation, collapse whitespace."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", (s or "").lower(), flags=re.UNICODE)).strip()
+
+
+class GradeShortAnswerIn(BaseModel):
+    question_index: int = Field(ge=0)
+    given_answer: str
+
+
+class GradeShortAnswerOut(BaseModel):
+    correct: bool
+    graded_by: Literal["ai", "fallback"]
+    provider: Optional[str] = None
+    model: Optional[str] = None
+
+
+@router.post("/{content_id}/grade-short-answer", response_model=GradeShortAnswerOut)
+async def grade_short_answer(content_id: str, payload: GradeShortAnswerIn, user: dict = Depends(get_current_user)):
+    """AI-graded short-answer scoring: a student's free-text answer rarely matches the
+    reference answer's exact wording, so this asks the model whether it's substantively
+    correct rather than doing a literal string comparison. Falls back to a normalized
+    exact-match if every provider fails (no key configured, outage, etc.), rather than
+    blocking the student's quiz on an AI call that can't currently succeed.
+
+    Looks the question up server-side from the published content by index, rather than
+    trusting question/correct_answer text from the client, so this can't be used to grade
+    arbitrary text unrelated to an actual assigned quiz."""
+    content = await db.contents.find_one({"id": content_id, "published": True}, {"_id": 0})
+    if not content:
+        raise HTTPException(status_code=404, detail="Not found")
+    if content["content_type"] != "quiz":
+        raise HTTPException(status_code=400, detail="Not a quiz")
+    questions = (content.get("payload") or {}).get("questions", [])
+    if payload.question_index >= len(questions):
+        raise HTTPException(status_code=400, detail="Invalid question index")
+    q = questions[payload.question_index]
+    if q.get("type") != "short_answer":
+        raise HTTPException(status_code=400, detail="Not a short-answer question")
+    correct_answer = (q.get("correct_answer") or "").strip()
+    if not correct_answer:
+        raise HTTPException(status_code=422, detail="This question has no reference answer to grade against")
+
+    given = (payload.given_answer or "").strip()
+    if not given:
+        return GradeShortAnswerOut(correct=False, graded_by="fallback")
+
+    lang_hint = "The question and answers are in Bahasa Melayu." if content.get("language") == "bm" else "The question and answers are in English."
+    user_text = f"{lang_hint}\n\nQuestion: {q['question']}\n\nReference answer: {correct_answer}\n\nStudent's answer: {given}"
+    try:
+        result = await call_router("short_answer_grading", user_text)
+        correct = result["text"].strip().lower().startswith("true")
+        return GradeShortAnswerOut(correct=correct, graded_by="ai", provider=result["provider"], model=result["model"])
+    except HTTPException:
+        correct = _normalize_short_answer(given) == _normalize_short_answer(correct_answer)
+        return GradeShortAnswerOut(correct=correct, graded_by="fallback")
 
 
 class QuizResultIn(BaseModel):
@@ -729,6 +870,8 @@ async def submit_quiz_result(content_id: str, payload: QuizResultIn, user: dict 
         raise HTTPException(status_code=404, detail="Not found")
     if content["content_type"] != "quiz":
         raise HTTPException(status_code=400, detail="Not a quiz")
+    existing = await db.quiz_results.find_one({"user_id": user["id"], "content_id": content_id}, {"_id": 0, "attempts": 1})
+    is_first_attempt = existing is None
     now = datetime.now(timezone.utc).isoformat()
     await db.quiz_results.update_one(
         {"user_id": user["id"], "content_id": content_id},
@@ -756,7 +899,11 @@ async def submit_quiz_result(content_id: str, payload: QuizResultIn, user: dict 
         }},
         upsert=True,
     )
-    return {"ok": True}
+    xp_result = await award_quiz_xp(
+        user["id"], content["pack_id"], content_id, content.get("title") or "Quiz", payload.score, payload.total, is_first_attempt
+    )
+    bonus_result = await on_xp_earned(user["id"], content["pack_id"])
+    return {"ok": True, "xp_awarded": xp_result["xp_awarded"] + bonus_result["xp_awarded"]}
 
 
 @router.get("/progress")

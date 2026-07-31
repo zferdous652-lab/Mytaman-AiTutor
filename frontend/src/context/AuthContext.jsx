@@ -24,8 +24,9 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => { load(); }, [load]);
 
-  const login = async (email, password) => {
-    const { data } = await api.post("/auth/login", { email, password });
+  // `identifier` is an email for parents/admins and a student ID for children.
+  const login = async (identifier, password) => {
+    const { data } = await api.post("/auth/login", { identifier, password });
     sessionStorage.setItem("mytaman_token", data.token);
     setUser(data.user);
     return data.user;
@@ -36,13 +37,19 @@ export const AuthProvider = ({ children }) => {
     setUser(data.user);
     return data.user;
   };
+  // For flows that get a token back from an endpoint other than login/register --
+  // e.g. student self-registration, which signs the student straight in.
+  const setSession = useCallback((token, u) => {
+    sessionStorage.setItem("mytaman_token", token);
+    setUser(u);
+  }, []);
   const logout = () => {
     sessionStorage.removeItem("mytaman_token");
     setUser(null);
   };
 
   return (
-    <AuthCtx.Provider value={{ user, loading, login, register, logout }}>
+    <AuthCtx.Provider value={{ user, loading, login, register, logout, setSession, refresh: load }}>
       {children}
     </AuthCtx.Provider>
   );

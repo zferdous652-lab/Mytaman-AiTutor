@@ -76,6 +76,16 @@ DEFAULT_PROMPTS = {
     "live_tutor": (
         "You are a friendly Socratic tutor. Ask guiding questions before giving answers."
     ),
+    "short_answer_grading": (
+        "You are a strict but fair grader for a secondary-school quiz. You will be given a "
+        "question, a reference answer, and a student's answer. Decide whether the student's "
+        "answer is substantively correct -- it does not need to match the reference answer's "
+        "exact wording, but it must convey the same correct meaning and key facts. Minor "
+        "phrasing differences, synonyms, extra detail, or a different language (as long as "
+        "the meaning is right) are fine; missing or wrong key facts are not. "
+        "Respond with ONLY the single word \"true\" or \"false\", nothing else -- no "
+        "punctuation, no explanation."
+    ),
 }
 
 
