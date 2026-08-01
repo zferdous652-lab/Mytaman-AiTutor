@@ -1,19 +1,95 @@
-import React, { useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { RotateCcw } from "lucide-react";
 
-// payload shape: { cards: [{ front, back }] }
-const FlashcardsViewer = ({ content }) => {
+const MIN_CARD_HEIGHT = 220;
+const MAX_CARD_HEIGHT = 520;
+const FACE_VERTICAL_PADDING = 48; // p-6 top + bottom on each face -- not part of the measured inner content
+
+// Cards with more text get a wider frame, not just a taller one -- more text per line
+// means fewer wrapped lines, which keeps longer bilingual cards from turning into a tall,
+// cramped column. Tiered on character count rather than measured, since (unlike height)
+// the "right" width is a design choice, not something with one correct answer to measure.
+const CARD_WIDTH_MIN = 420;
+const CARD_WIDTH_MAX = 720;
+const widthForLength = (len) => {
+  if (len > 220) return CARD_WIDTH_MAX;
+  if (len > 130) return 620;
+  if (len > 70) return 520;
+  return CARD_WIDTH_MIN;
+};
+
+// Shared markup for both the visible (flipping) faces and their invisible measurement
+// clones below, so the two can never drift out of sync with each other. `measuring` swaps
+// out the visible faces' "flex-1 + justify-center" (which vertically centers content within
+// a *fixed* card height) for plain stacked layout -- flex-1 in an auto-height container is
+// ambiguous across browsers and can under-report its natural height, which previously threw
+// the measured card height off and made the centered answer text bleed up over the label.
+const FaceContent = ({ label, labelClass, main, mainClass, sub, subClass, measuring }) => (
+  <>
+    <div className={`text-[10px] uppercase tracking-widest shrink-0 ${labelClass}`}>{label}</div>
+    <div
+      className={
+        measuring
+          ? "flex flex-col items-center text-center px-2 py-2"
+          : "flex-1 min-h-0 flex flex-col items-center justify-center text-center px-2 py-2"
+      }
+    >
+      <div className={mainClass}>{main}</div>
+      {sub && <div className={`mt-2 text-base italic leading-relaxed ${subClass}`}>{sub}</div>}
+    </div>
+  </>
+);
+
+// pair shape: { bm: {payload:{cards}}|null, en: {payload:{cards}}|null }. Cards are paired
+// by index; each face shows its BM text as the main line with the matching EN text as a
+// subtle secondary line underneath, when both exist.
+const FlashcardsViewer = ({ pair }) => {
   const reduce = useReducedMotion();
-  const cards = content.payload?.cards || [];
+  const bmCards = pair.bm?.payload?.cards || [];
+  const enCards = pair.en?.payload?.cards || [];
+  const cardCount = Math.max(bmCards.length, enCards.length);
+  const cards = Array.from({ length: cardCount }).map((_, i) => ({
+    front: { main: bmCards[i]?.front || enCards[i]?.front, sub: bmCards[i]?.front && enCards[i]?.front ? enCards[i].front : null },
+    back: { main: bmCards[i]?.back || enCards[i]?.back, sub: bmCards[i]?.back && enCards[i]?.back ? enCards[i].back : null },
+  }));
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [ratings, setRatings] = useState({});
   const [done, setDone] = useState(false);
 
-  if (cards.length === 0) return <div className="text-sm text-white/40">No flashcards.</div>;
+  const containerRef = useRef(null);
+  const frontMeasureRef = useRef(null);
+  const backMeasureRef = useRef(null);
+  const [cardHeight, setCardHeight] = useState(MIN_CARD_HEIGHT);
 
   const card = cards[index];
+  const cardWidth = widthForLength(
+    Math.max(
+      (card.front.main || "").length,
+      (card.front.sub || "").length,
+      (card.back.main || "").length,
+      (card.back.sub || "").length
+    )
+  );
+
+  // The card frame grows/shrinks per card to fit whichever face (front or back) needs more
+  // room -- measured off invisible clones so the visible, absolutely-positioned flip faces
+  // never have to guess a height up front. Re-measures on card change and on resize, since
+  // the clones' width (and therefore their text wrapping) tracks the real card's width.
+  useLayoutEffect(() => {
+    const measure = () => {
+      const frontH = frontMeasureRef.current?.offsetHeight || 0;
+      const backH = backMeasureRef.current?.offsetHeight || 0;
+      const natural = Math.max(frontH, backH) + FACE_VERTICAL_PADDING;
+      if (natural > FACE_VERTICAL_PADDING) setCardHeight(Math.min(MAX_CARD_HEIGHT, Math.max(MIN_CARD_HEIGHT, natural)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [card]);
+
+  if (cards.length === 0) return <div className="text-sm text-white/40">No flashcards.</div>;
 
   const advance = (rating) => {
     setRatings((r) => ({ ...r, [index]: rating }));
@@ -65,7 +141,24 @@ const FlashcardsViewer = ({ content }) => {
         </div>
       </div>
 
-      <div className="relative mx-auto" style={{ height: 220, maxWidth: 420 }}>
+      <div
+        ref={containerRef}
+        className="relative mx-auto"
+        style={{ height: cardHeight, maxWidth: cardWidth, transition: "height 200ms ease, max-width 200ms ease" }}
+      >
+        {/* Invisible clones, one per face, used only to measure the height each face's real
+            content needs at the card's actual width -- never shown or interactive. */}
+        <div className="absolute left-0 right-0 top-0 invisible pointer-events-none p-6 flex flex-col" aria-hidden="true">
+          <div ref={frontMeasureRef} className="flex flex-col">
+            <FaceContent measuring label="Question · tap to flip" labelClass="" main={card.front.main} mainClass="text-xl leading-relaxed" sub={card.front.sub} subClass="" />
+          </div>
+        </div>
+        <div className="absolute left-0 right-0 top-0 invisible pointer-events-none p-6 flex flex-col" aria-hidden="true">
+          <div ref={backMeasureRef} className="flex flex-col">
+            <FaceContent measuring label="Answer" labelClass="" main={card.back.main} mainClass="text-lg leading-relaxed" sub={card.back.sub} subClass="" />
+          </div>
+        </div>
+
         {[2, 1].map((depth) => {
           const stackIdx = index + depth;
           if (stackIdx >= cards.length) return null;
@@ -94,18 +187,30 @@ const FlashcardsViewer = ({ content }) => {
             transition={{ duration: reduce ? 0 : 0.55, ease: [0.22, 1, 0.36, 1] }}
           >
             <div
-              className="absolute inset-0 rounded-2xl border border-[#00f0ff]/25 bg-gradient-to-br from-[#120a1f] to-[#0a0514] p-6 flex flex-col"
+              className="absolute inset-0 rounded-2xl border border-[#00f0ff]/25 bg-gradient-to-br from-[#120a1f] to-[#0a0514] p-6 flex flex-col overflow-hidden"
               style={{ backfaceVisibility: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,240,255,0.05)" }}
             >
-              <div className="text-[10px] uppercase tracking-widest text-[#00f0ff]/70">Question · tap to flip</div>
-              <div className="flex-1 grid place-items-center text-center text-lg text-white px-2">{card.front}</div>
+              <FaceContent
+                label="Question · tap to flip"
+                labelClass="text-[#00f0ff]/70"
+                main={card.front.main}
+                mainClass="text-xl leading-relaxed text-white"
+                sub={card.front.sub}
+                subClass="text-white/50"
+              />
             </div>
             <div
-              className="absolute inset-0 rounded-2xl border border-[#8a2be2]/30 bg-gradient-to-br from-[#1a0f2e] to-[#0a0514] p-6 flex flex-col"
+              className="absolute inset-0 rounded-2xl border border-[#8a2be2]/30 bg-gradient-to-br from-[#1a0f2e] to-[#0a0514] p-6 flex flex-col overflow-hidden"
               style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}
             >
-              <div className="text-[10px] uppercase tracking-widest text-[#8a2be2]/80">Answer</div>
-              <div className="flex-1 grid place-items-center text-center text-base text-white/90 px-2">{card.back}</div>
+              <FaceContent
+                label="Answer"
+                labelClass="text-[#8a2be2]/80"
+                main={card.back.main}
+                mainClass="text-lg leading-relaxed text-white/90"
+                sub={card.back.sub}
+                subClass="text-white/40"
+              />
             </div>
           </motion.button>
         </div>

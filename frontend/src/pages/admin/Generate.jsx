@@ -699,11 +699,18 @@ const Generate = () => {
     }
     setGenerating(true);
     try {
+      // If the OTHER language already has content for this exact chapter+type (in the
+      // current working set), translate it directly instead of generating independently
+      // from the source PDF -- keeps BM/EN aligned line-for-line (same paragraph/note/
+      // question/card count) instead of two separate AI runs drifting apart.
+      const otherLang = language === "en" ? "bm" : "en";
+      const otherEntry = workingSet[keyFor(chapterId, contentType, otherLang)];
       const { data } = await api.post("/content/ai-draft", {
         chapter_id: chapterId,
         content_type: contentType,
         language,
         source_text: sourceText,
+        translate_payload: otherEntry?.payload || undefined,
       });
       if (contentType === "summary") setBody(data.payload.body || "");
       if (contentType === "notes") setNotes(data.payload.notes?.length ? data.payload.notes : [""]);
@@ -716,7 +723,11 @@ const Generate = () => {
       }
       if (contentType === "flashcards") setCards(data.payload.cards?.length ? data.payload.cards : [{ front: "", back: "" }]);
       if (contentType === "mindmap") setMindmap((m) => ({ ...m, html: data.payload.html || "" }));
-      toast.success(`Generated via ${data.provider} (${data.model}) — review, then Save content`);
+      toast.success(
+        otherEntry
+          ? `Translated from ${otherLang.toUpperCase()} via ${data.provider} (${data.model}) — review, then Save content`
+          : `Generated via ${data.provider} (${data.model}) — review, then Save content`
+      );
     } catch (err) {
       toast.error(err?.response?.data?.detail?.message || err?.response?.data?.detail || "AI generation failed");
     }
