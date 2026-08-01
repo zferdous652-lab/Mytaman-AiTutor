@@ -244,7 +244,16 @@ const ConnectChild = () => {
 
         <BenefitList />
 
-        {preview.parent_has_account ? (
+        {preview.email_taken_by_other_role ? (
+          <div
+            className="mt-8 rounded-xl border border-amber-400/30 bg-amber-400/5 p-4 text-sm text-white/70 leading-relaxed"
+            data-testid="connect-email-conflict"
+          >
+            <span className="text-white">{preview.parent_email}</span> is already registered on MYTAMAN,
+            but not as a parent account — so it can't be used to connect. Ask {preview.student_name} to
+            resend the invitation to a different email address from their portal.
+          </div>
+        ) : preview.parent_has_account ? (
           <InlineLogin email={preview.parent_email} onDone={loadPreview} />
         ) : (
           <div className="mt-8 text-center">
