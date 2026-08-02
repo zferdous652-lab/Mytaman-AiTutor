@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
-import SidebarToggle from "@/components/SidebarToggle";
+import SidebarToggle, { RailTooltip } from "@/components/SidebarToggle";
 import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 import CourseSidebar, { isPairDone, CourseSidebarRail } from "./CourseSidebar";
 import ContentViewer from "./ContentViewer";
@@ -202,6 +202,33 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
           </div>
         )}
 
+        {/* Cross-portal navigation sits with the other navigation controls at the top,
+            above the language filter -- the footer is for account/session actions. */}
+        <div className={`${collapsed ? "px-2 pt-3 flex-col items-center gap-1.5" : "px-4 pt-3 gap-1.5"} flex`}>
+          <button
+            onClick={() => navigate("/student/browse")}
+            data-testid="side-browse"
+            title={collapsed ? t("browse_packs") : undefined}
+            className={`group relative inline-flex items-center justify-center rounded-xl border border-white/10 text-xs text-white/70 hover:border-[#00f0ff]/40 hover:text-[#00f0ff] transition-colors ${
+              collapsed ? "h-9 w-9" : "flex-1 gap-1.5 px-2 py-2"
+            }`}
+          >
+            <Package size={13} /> {!collapsed && t("browse_packs")}
+            {collapsed && <RailTooltip>{t("browse_packs")}</RailTooltip>}
+          </button>
+          <button
+            onClick={() => navigate("/student/dashboard")}
+            data-testid="side-dashboard"
+            title={collapsed ? t("dashboard") || "Dashboard" : undefined}
+            className={`group relative inline-flex items-center justify-center rounded-xl border border-white/10 text-xs text-white/70 hover:border-[#00f0ff]/40 hover:text-[#00f0ff] transition-colors ${
+              collapsed ? "h-9 w-9" : "flex-1 gap-1.5 px-2 py-2"
+            }`}
+          >
+            <Trophy size={13} /> {!collapsed && (t("dashboard") || "Dashboard")}
+            {collapsed && <RailTooltip>{t("dashboard") || "Dashboard"}</RailTooltip>}
+          </button>
+        </div>
+
         <div className={`px-4 pt-3 gap-1 ${collapsed ? "hidden" : "flex"}`} data-testid="lang-filter">
           {LANG_FILTERS.map((l) => (
             <button
@@ -245,28 +272,6 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
         </div>
 
         <div className={`border-t border-white/8 ${collapsed ? "p-2 flex flex-col items-center gap-1.5" : "p-4 space-y-3"}`}>
-          <div className={collapsed ? "contents" : "flex gap-1.5"}>
-            <button
-              onClick={() => navigate("/student/browse")}
-              data-testid="side-browse"
-              title={collapsed ? t("browse_packs") : undefined}
-              className={`inline-flex items-center justify-center rounded-xl border border-white/10 text-xs text-white/70 hover:border-[#00f0ff]/40 hover:text-[#00f0ff] transition-colors ${
-                collapsed ? "h-9 w-9" : "flex-1 gap-1.5 px-2 py-2"
-              }`}
-            >
-              <Package size={13} /> {!collapsed && t("browse_packs")}
-            </button>
-            <button
-              onClick={() => navigate("/student/dashboard")}
-              data-testid="side-dashboard"
-              title={collapsed ? t("dashboard") || "Dashboard" : undefined}
-              className={`inline-flex items-center justify-center rounded-xl border border-white/10 text-xs text-white/70 hover:border-[#00f0ff]/40 hover:text-[#00f0ff] transition-colors ${
-                collapsed ? "h-9 w-9" : "flex-1 gap-1.5 px-2 py-2"
-              }`}
-            >
-              <Trophy size={13} /> {!collapsed && (t("dashboard") || "Dashboard")}
-            </button>
-          </div>
           {!collapsed && (
             <>
               <LanguageToggle testId="course-lang" />
