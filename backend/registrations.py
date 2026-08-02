@@ -257,6 +257,10 @@ class ParentInvitePreview(BaseModel):
     expires_at: str
     parent_has_account: bool
     already_linked: bool
+    # True when the address exists but belongs to an admin or student account. Such an
+    # account can never accept the invitation, and registering with the address would
+    # fail as already-taken, so the landing page has to say so rather than offer either.
+    email_taken_by_other_role: bool = False
 
 
 async def load_invite_by_token(token: str) -> dict:
@@ -279,12 +283,16 @@ async def preview_parent_invite(token: str):
     student = await db.users.find_one({"id": doc["student_id"]}, {"_id": 0, "grade": 1, "parent_id": 1})
     if not student:
         raise HTTPException(status_code=404, detail="This invitation link is not valid")
-    parent = await db.users.find_one({"email": doc["parent_email"]}, {"_id": 0, "id": 1})
+    # Only a parent account can accept an invitation -- matching on email alone would
+    # offer a sign-in form for an admin or student account that can never complete it.
+    existing = await db.users.find_one({"email": doc["parent_email"]}, {"_id": 0, "id": 1, "role": 1})
+    is_parent = bool(existing) and existing.get("role") == "parent"
     return ParentInvitePreview(
+        email_taken_by_other_role=bool(existing) and not is_parent,
         student_name=doc["student_name"],
         parent_email=doc["parent_email"],
         grade=student.get("grade"),
         expires_at=doc["expires_at"],
-        parent_has_account=bool(parent),
+        parent_has_account=is_parent,
         already_linked=bool(student.get("parent_id")),
     )
