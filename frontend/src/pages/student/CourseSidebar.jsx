@@ -1,8 +1,43 @@
 import React from "react";
-import { ChevronDown, ChevronRight, Check, FileText, HelpCircle, Layers, Waypoints, StickyNote, Folder } from "lucide-react";
+import { ChevronDown, Check, FileText, HelpCircle, Layers, Share2, ClipboardList, Folder } from "lucide-react";
 
-const CONTENT_TYPE_ICON = { summary: FileText, quiz: HelpCircle, flashcards: Layers, mindmap: Waypoints, notes: StickyNote };
-const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Flashcards", mindmap: "Mind Map", notes: "Notes" };
+// Each content type gets its own icon + gradient tile so a lesson is identifiable at a
+// glance from the icon alone, before reading the label. `blurb` is the one-line "what is
+// this" subtitle shown under the type name.
+const CONTENT_TYPES = {
+  notes: {
+    label: "Notes",
+    icon: FileText,
+    gradient: "from-[#a78bfa] to-[#7c3aed]",
+    blurb: "Ringkasan nota dan poin penting",
+  },
+  mindmap: {
+    label: "Mind Map",
+    icon: Share2,
+    gradient: "from-[#38bdf8] to-[#2563eb]",
+    blurb: "Peta minda visual untuk pemahaman lebih mudah",
+  },
+  flashcards: {
+    label: "Flashcards",
+    icon: Layers,
+    gradient: "from-[#2dd4bf] to-[#0d9488]",
+    blurb: "Kad imbasan untuk ulang kaji berkesan",
+  },
+  summary: {
+    label: "Summary",
+    icon: ClipboardList,
+    gradient: "from-[#fbbf24] to-[#d97706]",
+    blurb: "Ringkasan bab dalam bentuk padat dan jelas",
+  },
+  quiz: {
+    label: "Quiz",
+    icon: HelpCircle,
+    gradient: "from-[#f472b6] to-[#db2777]",
+    blurb: "Uji pemahaman anda dengan kuiz interaktif",
+  },
+};
+
+const FALLBACK_TYPE = { label: "Lesson", icon: FileText, gradient: "from-white/30 to-white/10", blurb: "" };
 
 // A pair counts as done if EITHER of its language ids has been marked complete -- so
 // completing a lesson from "All" (which completes the BM id) still reads as done when the
@@ -17,31 +52,58 @@ export const isPairDone = (pair, completedIds) =>
 const langBadge = (langFilter) => (langFilter === "all" ? "BM · EN" : langFilter.toUpperCase());
 
 // A single lesson row inside an expanded chapter -- the leaf of the course tree. `pair` is
-// one bilingual lesson: { key, content_type, title, bm, en }.
-const LessonRow = ({ pair, done, active, langFilter, onSelect }) => {
-  const Icon = CONTENT_TYPE_ICON[pair.content_type] || FileText;
+// one bilingual lesson: { key, content_type, title, bm, en }. `step` is its 1-based position
+// in the chapter, shown as the timeline node to the left of the card.
+const LessonRow = ({ pair, step, isLast, done, active, langFilter, onSelect }) => {
+  const type = CONTENT_TYPES[pair.content_type] || FALLBACK_TYPE;
+  const Icon = type.icon;
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      data-testid={`sidebar-content-${pair.key}`}
-      className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors border ${
-        active ? "bg-white/10 border-white/20" : "border-transparent hover:bg-white/5"
-      }`}
-    >
-      <Icon size={14} className={`shrink-0 ${active ? "text-white" : "text-white/50"}`} />
-      <span className="min-w-0 flex-1">
-        <span className={`block text-sm truncate ${active ? "text-white font-medium" : "text-white/80"}`}>{pair.title}</span>
-        <span className="block text-[10px] uppercase tracking-widest text-white/45">
-          {CONTENT_TYPE_LABELS[pair.content_type] || pair.content_type} · {langBadge(langFilter)}
+    <div className="flex items-stretch gap-3">
+      {/* Timeline rail: a numbered bead per lesson, joined by a connector that runs down
+          into the next row. The segment carries a negative bottom margin matching the
+          list's row gap so the line stays unbroken across that gap. */}
+      <div className="flex w-7 shrink-0 flex-col items-center" aria-hidden>
+        <div
+          className={`mt-5 h-7 w-7 shrink-0 grid place-items-center rounded-full border text-[11px] font-semibold transition-colors ${
+            done
+              ? "border-emerald-400/50 bg-[#0f1b17] text-emerald-400"
+              : active
+              ? "border-[#00f0ff]/60 bg-[#0b1620] text-[#00f0ff]"
+              : "border-white/15 bg-[#100c1c] text-white/45"
+          }`}
+        >
+          {step}
+        </div>
+        {!isLast && <span className="w-px flex-1 -mb-2 bg-white/10" />}
+      </div>
+
+      <button
+        type="button"
+        onClick={onSelect}
+        data-testid={`sidebar-content-${pair.key}`}
+        className={`min-w-0 flex-1 flex items-start gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${
+          active ? "border-[#00f0ff]/50 bg-[#00f0ff]/[0.07]" : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/20"
+        }`}
+      >
+        <span className={`shrink-0 h-11 w-11 rounded-xl bg-gradient-to-br ${type.gradient} grid place-items-center shadow-lg`}>
+          <Icon size={20} className="text-white" strokeWidth={2.2} />
         </span>
-      </span>
-      {done ? (
-        <Check size={13} className="shrink-0 text-emerald-400" />
-      ) : (
-        <span className="shrink-0 h-1.5 w-1.5 rounded-full border border-white/25" />
-      )}
-    </button>
+
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-semibold uppercase tracking-wide text-white">{type.label}</span>
+          {type.blurb && <span className="mt-0.5 block text-[11px] leading-snug text-white/45">{type.blurb}</span>}
+          <span className="mt-1.5 block text-[10px] font-medium uppercase tracking-[0.15em] text-white/35">
+            {langBadge(langFilter)}
+          </span>
+        </span>
+
+        {done ? (
+          <Check size={15} className="mt-0.5 shrink-0 text-emerald-400" />
+        ) : (
+          <span className="mt-1 shrink-0 h-3 w-3 rounded-full border border-white/20" />
+        )}
+      </button>
+    </div>
   );
 };
 
@@ -64,15 +126,17 @@ const ChapterNode = ({ chapter, items, completed, isOpen, onToggle, selectedKey,
         <span className="flex items-center gap-1.5 text-[11px] text-white/35 shrink-0">
           {doneCount > 0 && <span className="text-emerald-400/80">{doneCount}/{items.length}</span>}
           {doneCount === 0 && <span>{items.length} item{items.length === 1 ? "" : "s"}</span>}
-          <ChevronRight size={13} className={`transition-transform ${isOpen ? "rotate-90" : ""}`} />
+          <ChevronDown size={13} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} />
         </span>
       </button>
       {isOpen && (
-        <div className="ml-3 mt-1 mb-2 space-y-1 border-l-2 border-[#8a6dff]/20 pl-3">
-          {items.map((it) => (
+        <div className="mt-1.5 mb-2 space-y-2">
+          {items.map((it, i) => (
             <LessonRow
               key={it.key}
               pair={it}
+              step={i + 1}
+              isLast={i === items.length - 1}
               done={isPairDone(it, completed)}
               active={selectedKey === it.key}
               langFilter={langFilter}
@@ -85,25 +149,24 @@ const ChapterNode = ({ chapter, items, completed, isOpen, onToggle, selectedKey,
   );
 };
 
-// Top tier -- the loudest element in the tree: bold display font, full opacity white, and a
-// gradient accent bar down the left edge so it visually anchors everything nested under it.
+// Top tier -- the loudest element in the tree: bold display font at full opacity white,
+// wrapped in a card that visually contains everything nested under it.
 const CourseNode = ({ course, chapters, itemsByChapter, completed, isOpen, onToggleCourse, openChapterIds, onToggleChapter, selectedKey, langFilter, onSelectContent }) => (
-  <div className="relative rounded-xl border border-white/10 bg-white/[0.04] overflow-hidden" data-testid={`sidebar-course-${course.id}`}>
-    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[#00f0ff] to-[#8a2be2]" aria-hidden />
+  <div className="relative rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden" data-testid={`sidebar-course-${course.id}`}>
     <button
       type="button"
       onClick={onToggleCourse}
       data-testid={`sidebar-course-toggle-${course.id}`}
-      className="w-full flex items-center justify-between gap-2 pl-4 pr-3.5 py-3 text-left hover:bg-white/[0.04] transition-colors"
+      className="w-full flex items-center justify-between gap-2 px-4 py-3.5 text-left hover:bg-white/[0.04] transition-colors"
     >
-      <span className="font-display text-base tracking-tight text-white truncate">{course.title}</span>
+      <span className="font-display text-lg tracking-tight text-white truncate">{course.title}</span>
       <span className="flex items-center gap-1.5 text-xs text-white/45 shrink-0">
         {chapters.length} chapter{chapters.length === 1 ? "" : "s"}
         <ChevronDown size={14} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} />
       </span>
     </button>
     {isOpen && (
-      <div className="pl-3.5 pr-2.5 pb-2.5 space-y-1">
+      <div className="px-3 pb-3 space-y-1">
         {chapters.map((ch) => (
           <ChapterNode
             key={ch.id}
