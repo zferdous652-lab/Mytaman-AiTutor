@@ -15,6 +15,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
 import ParentLinkBanner from "@/components/ParentLinkBanner";
+import SidebarToggle, { RailTooltip } from "@/components/SidebarToggle";
+import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 
 const items = {
   admin: (t) => [
@@ -41,50 +43,71 @@ const DashboardShell = ({ children }) => {
   const { t } = useLang();
   const nav = useNavigate();
   const list = items[user.role](t);
+  const [collapsed, toggleCollapsed] = useSidebarCollapsed("mytaman:sidebar:shell");
 
   return (
-    <div className="min-h-screen grid grid-cols-[260px_1fr]">
-      <aside className="border-r border-white/8 bg-[#0a0514]/70 backdrop-blur-xl p-5 flex flex-col">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2]" />
-          <div>
-            <div className="font-display font-semibold text-white leading-tight">MYTAMAN</div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">{user.role}</div>
-          </div>
+    <div className={`min-h-screen grid ${collapsed ? "grid-cols-[72px_1fr]" : "grid-cols-[260px_1fr]"} transition-[grid-template-columns] duration-200`}>
+      <aside
+        className={`border-r border-white/8 bg-[#0a0514]/70 backdrop-blur-xl flex flex-col ${collapsed ? "p-3 items-center" : "p-5"}`}
+        data-testid="dash-sidebar"
+        data-collapsed={collapsed}
+      >
+        <div className={`flex items-center mb-8 ${collapsed ? "flex-col gap-3" : "gap-2"}`}>
+          <div className="h-9 w-9 shrink-0 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2]" />
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <div className="font-display font-semibold text-white leading-tight">MYTAMAN</div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">{user.role}</div>
+            </div>
+          )}
+          <SidebarToggle collapsed={collapsed} onToggle={toggleCollapsed} testId="dash-sidebar-toggle" align={collapsed ? "center" : "left"} />
         </div>
-        <nav className="space-y-1 flex-1">
+
+        <nav className={`flex-1 space-y-1 ${collapsed ? "w-full" : ""}`}>
           {list.map((it) => (
             <NavLink
               key={it.to}
               to={it.to}
               end={it.end}
               data-testid={`side-${it.id}`}
+              title={collapsed ? it.label : undefined}
               className={({ isActive }) =>
-                `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
+                `group relative flex items-center rounded-xl text-sm transition-colors ${
+                  collapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5"
+                } ${
                   isActive
                     ? "bg-[#00f0ff]/10 text-[#00f0ff] border border-[#00f0ff]/25"
                     : "text-white/70 hover:bg-white/5 hover:text-white border border-transparent"
                 }`
               }
             >
-              <it.icon size={16} />
-              {it.label}
+              <it.icon size={16} className="shrink-0" />
+              {collapsed ? <RailTooltip>{it.label}</RailTooltip> : it.label}
             </NavLink>
           ))}
         </nav>
-        <div className="pt-4 border-t border-white/8 space-y-3">
-          <LanguageToggle testId="dash-lang" />
-          <div className="text-xs text-white/60">
-            {/* Students have a student ID instead of an email. */}
-            <div className="font-mono truncate" title={user.email || user.username}>{user.email || user.username}</div>
-            <div className="text-white/40">{user.name}</div>
-          </div>
+
+        <div className={`pt-4 border-t border-white/8 ${collapsed ? "w-full flex justify-center" : "space-y-3"}`}>
+          {!collapsed && (
+            <>
+              <LanguageToggle testId="dash-lang" />
+              <div className="text-xs text-white/60">
+                {/* Students have a student ID instead of an email. */}
+                <div className="font-mono truncate" title={user.email || user.username}>{user.email || user.username}</div>
+                <div className="text-white/40">{user.name}</div>
+              </div>
+            </>
+          )}
           <button
             data-testid="logout-btn"
             onClick={() => { logout(); nav("/"); }}
-            className="w-full inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-white/80 hover:border-[#ff0055] hover:text-[#ff0055] transition-colors"
+            title={collapsed ? t("logout") : undefined}
+            className={`group relative inline-flex items-center rounded-xl border border-white/10 text-sm text-white/80 hover:border-[#ff0055] hover:text-[#ff0055] transition-colors ${
+              collapsed ? "justify-center p-2.5" : "w-full gap-2 px-3 py-2"
+            }`}
           >
-            <LogOut size={14} /> {t("logout")}
+            <LogOut size={14} className="shrink-0" />
+            {collapsed ? <RailTooltip>{t("logout")}</RailTooltip> : t("logout")}
           </button>
         </div>
       </aside>

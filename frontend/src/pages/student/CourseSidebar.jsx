@@ -1,5 +1,6 @@
 import React from "react";
 import { ChevronDown, Check, FileText, HelpCircle, Layers, Share2, ClipboardList, Folder } from "lucide-react";
+import { RailTooltip } from "@/components/SidebarToggle";
 
 // Each content type gets its own icon + gradient tile so a lesson is identifiable at a
 // glance from the icon alone, before reading the label.
@@ -12,6 +13,8 @@ const CONTENT_TYPES = {
 };
 
 const FALLBACK_TYPE = { label: "Lesson", icon: FileText, gradient: "from-white/30 to-white/10" };
+
+const contentTypeStyle = (contentType) => CONTENT_TYPES[contentType] || FALLBACK_TYPE;
 
 // A pair counts as done if EITHER of its language ids has been marked complete -- so
 // completing a lesson from "All" (which completes the BM id) still reads as done when the
@@ -29,7 +32,7 @@ const langBadge = (langFilter) => (langFilter === "all" ? "BM · EN" : langFilte
 // one bilingual lesson: { key, content_type, title, bm, en }. `step` is its 1-based position
 // in the chapter, shown as the timeline node to the left of the card.
 const LessonRow = ({ pair, step, isLast, done, active, langFilter, onSelect }) => {
-  const type = CONTENT_TYPES[pair.content_type] || FALLBACK_TYPE;
+  const type = contentTypeStyle(pair.content_type);
   const Icon = type.icon;
   return (
     <div className="flex items-stretch gap-3">
@@ -155,6 +158,40 @@ const CourseNode = ({ course, chapters, itemsByChapter, completed, isOpen, onTog
         ))}
       </div>
     )}
+  </div>
+);
+
+// The collapsed form of the navigator: just the lesson icon tiles in reading order, so a
+// student can still jump between lessons without giving up the reading pane's width.
+// `lessons` is the flattened, already language-filtered list of pairs.
+export const CourseSidebarRail = ({ lessons, completed, selectedKey, onSelectContent }) => (
+  <div className="flex flex-col items-center gap-2" data-testid="course-sidebar-rail">
+    {lessons.map((pair) => {
+      const type = contentTypeStyle(pair.content_type);
+      const Icon = type.icon;
+      const done = isPairDone(pair, completed);
+      const active = selectedKey === pair.key;
+      return (
+        <button
+          key={pair.key}
+          type="button"
+          onClick={() => onSelectContent(pair)}
+          data-testid={`rail-content-${pair.key}`}
+          title={`${type.label} — ${pair.title}`}
+          className={`group relative h-11 w-11 shrink-0 rounded-xl bg-gradient-to-br ${type.gradient} grid place-items-center transition-all hover:scale-105 ${
+            active ? "ring-2 ring-[#00f0ff] ring-offset-2 ring-offset-[#0a0514]" : "opacity-75 hover:opacity-100"
+          }`}
+        >
+          <Icon size={19} className="text-white" strokeWidth={2.2} />
+          {done && (
+            <span className="absolute -right-0.5 -top-0.5 h-4 w-4 rounded-full border-2 border-[#0a0514] bg-emerald-400 grid place-items-center">
+              <Check size={9} className="text-[#0a0514]" strokeWidth={3.5} />
+            </span>
+          )}
+          <RailTooltip>{type.label}</RailTooltip>
+        </button>
+      );
+    })}
   </div>
 );
 
