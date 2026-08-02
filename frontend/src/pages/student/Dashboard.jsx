@@ -66,7 +66,7 @@ const StudentDashboard = () => {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-4 gap-6">
+      <div className="grid lg:grid-cols-4 gap-6 items-start">
         <div className="lg:col-span-1 rounded-2xl border border-[#00f0ff]/20 bg-gradient-to-br from-[#120a1f] to-[#0a0514] p-6" data-testid="xp-summary-card">
           <div className="flex items-center gap-3">
             <div className="h-14 w-14 rounded-2xl bg-[#00f0ff]/10 border border-[#00f0ff]/30 grid place-items-center">
@@ -133,7 +133,7 @@ const StudentDashboard = () => {
             <Sparkles size={16} className="text-[#00f0ff]" />
             <div className="text-sm text-white font-medium">Recent activity</div>
           </div>
-          <div className="space-y-2" data-testid="xp-history">
+          <div className="space-y-2 max-h-[26rem] overflow-y-auto pr-1" data-testid="xp-history">
             {history.length === 0 && (
               <div className="text-sm text-white/40">Complete a lesson or quiz to start earning XP.</div>
             )}
