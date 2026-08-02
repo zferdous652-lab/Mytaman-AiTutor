@@ -2,42 +2,16 @@ import React from "react";
 import { ChevronDown, Check, FileText, HelpCircle, Layers, Share2, ClipboardList, Folder } from "lucide-react";
 
 // Each content type gets its own icon + gradient tile so a lesson is identifiable at a
-// glance from the icon alone, before reading the label. `blurb` is the one-line "what is
-// this" subtitle shown under the type name.
+// glance from the icon alone, before reading the label.
 const CONTENT_TYPES = {
-  notes: {
-    label: "Notes",
-    icon: FileText,
-    gradient: "from-[#a78bfa] to-[#7c3aed]",
-    blurb: "Ringkasan nota dan poin penting",
-  },
-  mindmap: {
-    label: "Mind Map",
-    icon: Share2,
-    gradient: "from-[#38bdf8] to-[#2563eb]",
-    blurb: "Peta minda visual untuk pemahaman lebih mudah",
-  },
-  flashcards: {
-    label: "Flashcards",
-    icon: Layers,
-    gradient: "from-[#2dd4bf] to-[#0d9488]",
-    blurb: "Kad imbasan untuk ulang kaji berkesan",
-  },
-  summary: {
-    label: "Summary",
-    icon: ClipboardList,
-    gradient: "from-[#fbbf24] to-[#d97706]",
-    blurb: "Ringkasan bab dalam bentuk padat dan jelas",
-  },
-  quiz: {
-    label: "Quiz",
-    icon: HelpCircle,
-    gradient: "from-[#f472b6] to-[#db2777]",
-    blurb: "Uji pemahaman anda dengan kuiz interaktif",
-  },
+  notes: { label: "Notes", icon: FileText, gradient: "from-[#a78bfa] to-[#7c3aed]" },
+  mindmap: { label: "Mind Map", icon: Share2, gradient: "from-[#38bdf8] to-[#2563eb]" },
+  flashcards: { label: "Flashcards", icon: Layers, gradient: "from-[#2dd4bf] to-[#0d9488]" },
+  summary: { label: "Summary", icon: ClipboardList, gradient: "from-[#fbbf24] to-[#d97706]" },
+  quiz: { label: "Quiz", icon: HelpCircle, gradient: "from-[#f472b6] to-[#db2777]" },
 };
 
-const FALLBACK_TYPE = { label: "Lesson", icon: FileText, gradient: "from-white/30 to-white/10", blurb: "" };
+const FALLBACK_TYPE = { label: "Lesson", icon: FileText, gradient: "from-white/30 to-white/10" };
 
 // A pair counts as done if EITHER of its language ids has been marked complete -- so
 // completing a lesson from "All" (which completes the BM id) still reads as done when the
@@ -81,7 +55,7 @@ const LessonRow = ({ pair, step, isLast, done, active, langFilter, onSelect }) =
         type="button"
         onClick={onSelect}
         data-testid={`sidebar-content-${pair.key}`}
-        className={`min-w-0 flex-1 flex items-start gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${
+        className={`min-w-0 flex-1 flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${
           active ? "border-[#00f0ff]/50 bg-[#00f0ff]/[0.07]" : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/20"
         }`}
       >
@@ -91,16 +65,15 @@ const LessonRow = ({ pair, step, isLast, done, active, langFilter, onSelect }) =
 
         <span className="min-w-0 flex-1">
           <span className="block text-[13px] font-semibold uppercase tracking-wide text-white">{type.label}</span>
-          {type.blurb && <span className="mt-0.5 block text-[11px] leading-snug text-white/45">{type.blurb}</span>}
-          <span className="mt-1.5 block text-[10px] font-medium uppercase tracking-[0.15em] text-white/35">
+          <span className="mt-1 block text-[10px] font-medium uppercase tracking-[0.15em] text-white/35">
             {langBadge(langFilter)}
           </span>
         </span>
 
         {done ? (
-          <Check size={15} className="mt-0.5 shrink-0 text-emerald-400" />
+          <Check size={15} className="shrink-0 text-emerald-400" />
         ) : (
-          <span className="mt-1 shrink-0 h-3 w-3 rounded-full border border-white/20" />
+          <span className="shrink-0 h-3 w-3 rounded-full border border-white/20" />
         )}
       </button>
     </div>

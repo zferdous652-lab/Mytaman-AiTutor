@@ -156,7 +156,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
         initial={reduce ? false : { x: -24, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-        className="w-[344px] shrink-0 border-r border-white/8 bg-[#0a0514]/80 backdrop-blur-xl flex flex-col"
+        className="w-[320px] shrink-0 border-r border-white/8 bg-[#0a0514]/80 backdrop-blur-xl flex flex-col"
         data-testid="course-sidebar"
       >
         <div className="p-5 pb-3 flex items-center gap-2 border-b border-white/8">
