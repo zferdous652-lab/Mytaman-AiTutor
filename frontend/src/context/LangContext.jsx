@@ -81,6 +81,11 @@ const dict = {
     // socratic
     socratic: "Socratic Learning",
     socratic_tutor: "Socratic Tutor",
+    socratic_tutor_suffix: "Tutor",
+    socratic_intro:
+      "Hello! I'm {name}, your friendly AI tutor. I'm here to help you work through {lesson}. I won't just hand you answers — I'll ask questions until you get there yourself. What shall we start with?",
+    socratic_this_lesson: "this lesson",
+    socratic_collapse: "Click to collapse",
     socratic_admin_title: "Socratic Learning",
     socratic_admin_sub:
       "The per-lesson AI tutor that guides students to answers instead of giving them. Available on Premium Tutor Packs. Every conversation is recorded and readable here.",
@@ -170,6 +175,11 @@ const dict = {
     enrolled: "Didaftarkan",
     socratic: "Pembelajaran Socratic",
     socratic_tutor: "Tutor Socratic",
+    socratic_tutor_suffix: "Tutor",
+    socratic_intro:
+      "Hai! Saya {name}, tutor AI mesra anda. Saya di sini untuk membantu anda memahami {lesson}. Saya tidak akan terus memberi jawapan — saya akan bertanya sehingga anda menemuinya sendiri. Apa yang hendak kita mulakan?",
+    socratic_this_lesson: "pelajaran ini",
+    socratic_collapse: "Klik untuk lipat",
     socratic_admin_title: "Pembelajaran Socratic",
     socratic_admin_sub:
       "Tutor AI setiap pelajaran yang membimbing pelajar mencari jawapan sendiri, bukan memberi jawapan. Tersedia untuk Pek Tutor Premium. Setiap perbualan direkod dan boleh dibaca di sini.",

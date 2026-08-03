@@ -18,6 +18,7 @@ session counts as complete. That is also what gives progress, XP and the admin
 oversight views something real to read instead of an opaque chat log.
 """
 import json
+import random
 import re
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -52,6 +53,14 @@ MAX_HINT_LEVEL = 3
 
 # A session counts as "mastered" (and pays XP, once) at or above this signal.
 MASTERY_THRESHOLD = 0.7
+
+# The tutor introduces itself by name so it reads as a person helping rather than a
+# feature. One name is drawn per session and stored, so it stays stable for the whole
+# conversation and only changes when the student starts a new chat.
+TUTOR_NAMES = [
+    "Zan", "Aina", "Rafi", "Mei", "Arif", "Nadia",
+    "Hana", "Iqbal", "Sofia", "Danish", "Lina", "Adam",
+]
 
 DEFAULT_SETTINGS = {
     "enabled": True,
@@ -232,6 +241,7 @@ class SessionOut(BaseModel):
     content_id: str
     content_type: str
     content_title: Optional[str] = None
+    tutor_name: str = "Zan"
     language: str
     status: str
     turn_count: int
@@ -252,6 +262,9 @@ def _session_out(doc: dict, turns: List[dict], settings: dict, used_today: int) 
         content_id=doc["content_id"],
         content_type=doc["content_type"],
         content_title=doc.get("content_title"),
+        # Sessions created before the tutor had a name fall back to the first one rather
+        # than showing an empty header.
+        tutor_name=doc.get("tutor_name") or TUTOR_NAMES[0],
         language=doc.get("language", "en"),
         status=doc.get("status", "active"),
         turn_count=doc.get("turn_count", 0),
@@ -303,10 +316,16 @@ async def start_or_resume_session(payload: StartSessionIn, user: dict = Depends(
         raise HTTPException(status_code=403, detail="Socratic Learning is currently turned off.")
     content, _pack = await _load_content_for_student(payload.content_id, user)
 
+    # Newest-first, so that if more than one active session somehow exists for this
+    # lesson (two tabs open on the same lesson can both create one before either
+    # finishes), resuming always lands on the same, most recent one -- rather than
+    # picking arbitrarily and appearing to resurrect a conversation the student just
+    # cleared.
     existing = await db.socratic_sessions.find_one(
         {"user_id": user["id"], "content_id": payload.content_id,
          "language": payload.language, "status": "active"},
         {"_id": 0},
+        sort=[("created_at", -1)],
     )
     if not existing:
         existing = {
@@ -317,6 +336,7 @@ async def start_or_resume_session(payload: StartSessionIn, user: dict = Depends(
             "content_id": payload.content_id,
             "content_type": content["content_type"],
             "content_title": content.get("title"),
+            "tutor_name": random.choice(TUTOR_NAMES),
             "language": payload.language,
             "status": "active",
             "turn_count": 0,
@@ -346,14 +366,21 @@ async def _require_own_session(session_id: str, user: dict) -> dict:
 async def reset_session(session_id: str, user: dict = Depends(get_current_user)):
     """The panel's "new chat" button. Ends the current thread and opens a fresh one for
     the same lesson -- the old transcript is kept, not deleted, since admin/parent
-    oversight of a minor's conversations is the point."""
+    oversight of a minor's conversations is the point.
+
+    Ends *every* active session this student has for the lesson, not just the id passed
+    in. Ending only that one leaves any sibling active session (two tabs on the same
+    lesson can produce one) for the resume below to find, which would hand the student
+    back a populated conversation immediately after they asked for an empty one."""
     doc = await _require_own_session(session_id, user)
-    await db.socratic_sessions.update_one(
-        {"id": session_id},
+    language = doc.get("language", "en")
+    await db.socratic_sessions.update_many(
+        {"user_id": user["id"], "content_id": doc["content_id"],
+         "language": language, "status": "active"},
         {"$set": {"status": "ended", "updated_at": datetime.now(timezone.utc).isoformat()}},
     )
     return await start_or_resume_session(
-        StartSessionIn(content_id=doc["content_id"], language=doc.get("language", "en")), user
+        StartSessionIn(content_id=doc["content_id"], language=language), user
     )
 
 
@@ -653,6 +680,46 @@ async def admin_transcript(session_id: str, _: dict = Depends(require_role("admi
             for t in turns
         ],
     )
+
+
+@router.post("/admin/sessions/{session_id}/reset")
+async def admin_reset_session(session_id: str, _: dict = Depends(require_role("admin"))):
+    """Ends a session without destroying it: the student gets a clean slate next time
+    they open that lesson, while the transcript stays readable here. This is the safe
+    option -- oversight of a minor's conversations shouldn't be discarded just to give
+    them a fresh start."""
+    res = await db.socratic_sessions.update_one(
+        {"id": session_id},
+        {"$set": {"status": "ended", "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"ok": True}
+
+
+@router.delete("/admin/sessions/{session_id}")
+async def admin_delete_session(session_id: str, _: dict = Depends(require_role("admin"))):
+    """Destroys a session and its transcript outright. Unlike reset this is not
+    recoverable, and it removes evidence -- prefer reset unless the record genuinely
+    needs to be gone (a test run, or content the student asked to have removed)."""
+    session = await db.socratic_sessions.find_one({"id": session_id}, {"_id": 0, "id": 1})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    turns = await db.socratic_turns.delete_many({"session_id": session_id})
+    await db.socratic_sessions.delete_one({"id": session_id})
+    return {"ok": True, "deleted_turns": turns.deleted_count}
+
+
+@router.delete("/admin/students/{student_id}/sessions")
+async def admin_clear_student_sessions(student_id: str, _: dict = Depends(require_role("admin"))):
+    """Clears every Socratic session and transcript for one student -- the bulk form of
+    the above, for wiping a test account rather than trimming a real one."""
+    sessions = await db.socratic_sessions.find({"user_id": student_id}, {"_id": 0, "id": 1}).to_list(2000)
+    ids = [s["id"] for s in sessions]
+    if ids:
+        await db.socratic_turns.delete_many({"session_id": {"$in": ids}})
+        await db.socratic_sessions.delete_many({"user_id": student_id})
+    return {"ok": True, "deleted_sessions": len(ids)}
 
 
 class AdminStatsOut(BaseModel):

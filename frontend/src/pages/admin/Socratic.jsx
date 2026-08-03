@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, X, MessageSquare, Users, CheckCircle2, Activity } from "lucide-react";
+import { AlertTriangle, X, MessageSquare, Users, CheckCircle2, Activity, Trash2, RotateCcw } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -134,6 +134,42 @@ const Socratic = () => {
   const toggleFlagged = async (next) => {
     setFlaggedOnly(next);
     await loadSessions(next);
+  };
+
+  // Reset ends the conversation so the student starts clean next time, but keeps the
+  // transcript readable here. Delete destroys the transcript too, which is why it asks
+  // first and says so plainly -- these are records of a child's conversations.
+  const resetSession = async (s) => {
+    if (!window.confirm(`End ${s.student_name}'s conversation on "${s.content_title}"?\n\nThey'll start a fresh chat next time they open this lesson. The transcript stays readable here.`)) return;
+    try {
+      await api.post(`/socratic/admin/sessions/${s.id}/reset`);
+      toast.success("Session reset");
+      await load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Couldn't reset that session.");
+    }
+  };
+
+  const deleteSession = async (s) => {
+    if (!window.confirm(`Permanently delete ${s.student_name}'s conversation on "${s.content_title}"?\n\nThe full transcript will be destroyed. This cannot be undone — use Reset instead if you only want to give them a fresh start.`)) return;
+    try {
+      await api.delete(`/socratic/admin/sessions/${s.id}`);
+      toast.success("Session deleted");
+      await load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Couldn't delete that session.");
+    }
+  };
+
+  const clearStudent = async (s) => {
+    if (!window.confirm(`Delete ALL Socratic sessions and transcripts for ${s.student_name}?\n\nThis cannot be undone.`)) return;
+    try {
+      const { data } = await api.delete(`/socratic/admin/students/${s.student_id}/sessions`);
+      toast.success(`Cleared ${data.deleted_sessions} session(s) for ${s.student_name}`);
+      await load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Couldn't clear that student's sessions.");
+    }
   };
 
   if (!settings || !stats) return <div className="p-12 text-white/60">Loading Socratic Learning…</div>;
@@ -289,37 +325,74 @@ const Socratic = () => {
             ) : (
               <div className="space-y-2" data-testid="socratic-sessions">
                 {sessions.map((s) => (
-                  <button
+                  <div
                     key={s.id}
-                    type="button"
-                    onClick={() => setOpenSessionId(s.id)}
-                    className="w-full text-left rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 hover:border-[#8a2be2]/50 transition-colors"
+                    className="group flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] pr-2 hover:border-[#8a2be2]/50 transition-colors"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm text-white truncate">
-                          {s.student_name}
-                          <span className="text-white/35"> · {s.content_title || "Lesson"}</span>
+                    <button
+                      type="button"
+                      onClick={() => setOpenSessionId(s.id)}
+                      data-testid={`session-open-${s.id}`}
+                      className="flex-1 min-w-0 text-left px-4 py-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm text-white truncate">
+                            {s.student_name}
+                            <span className="text-white/35"> · {s.content_title || "Lesson"}</span>
+                          </div>
+                          <div className="text-[11px] text-white/40 mt-0.5 truncate">
+                            {s.pack_title} · {s.content_type} · {s.turn_count} turns ·{" "}
+                            {s.status === "ended" ? "ended" : "active"} ·{" "}
+                            {new Date(s.created_at).toLocaleDateString()}
+                          </div>
                         </div>
-                        <div className="text-[11px] text-white/40 mt-0.5 truncate">
-                          {s.pack_title} · {s.content_type} · {s.turn_count} turns ·{" "}
-                          {new Date(s.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                      <div className="shrink-0 flex items-center gap-2">
-                        {s.flagged_count > 0 && (
-                          <span className="rounded-full bg-[#ff0055]/15 border border-[#ff0055]/40 px-2 py-0.5 text-[10px] text-[#ff0055]">
-                            <AlertTriangle size={9} className="inline mr-0.5" />
-                            {s.flagged_count}
+                        <div className="shrink-0 flex items-center gap-2">
+                          {s.flagged_count > 0 && (
+                            <span className="rounded-full bg-[#ff0055]/15 border border-[#ff0055]/40 px-2 py-0.5 text-[10px] text-[#ff0055]">
+                              <AlertTriangle size={9} className="inline mr-0.5" />
+                              {s.flagged_count}
+                            </span>
+                          )}
+                          {s.mastered && <CheckCircle2 size={14} className="text-[#00f0ff]" />}
+                          <span className="text-[10px] font-mono text-white/35">
+                            {Math.round((s.mastery_signal || 0) * 100)}%
                           </span>
-                        )}
-                        {s.mastered && <CheckCircle2 size={14} className="text-[#00f0ff]" />}
-                        <span className="text-[10px] font-mono text-white/35">
-                          {Math.round((s.mastery_signal || 0) * 100)}%
-                        </span>
+                        </div>
                       </div>
+                    </button>
+
+                    <div className="shrink-0 flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => resetSession(s)}
+                        disabled={s.status === "ended"}
+                        data-testid={`session-reset-${s.id}`}
+                        title={s.status === "ended" ? "Already ended" : "Reset — student starts fresh, transcript kept"}
+                        className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-[#ffd23f] transition-colors disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-white/40"
+                      >
+                        <RotateCcw size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteSession(s)}
+                        data-testid={`session-delete-${s.id}`}
+                        title="Delete — destroys the transcript"
+                        className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-[#ff0055] transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => clearStudent(s)}
+                        data-testid={`session-clear-student-${s.id}`}
+                        title={`Delete every session for ${s.student_name}`}
+                        className="rounded-lg px-2 py-2 text-[10px] font-mono text-white/25 hover:text-[#ff0055] transition-colors"
+                      >
+                        ALL
+                      </button>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
