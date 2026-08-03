@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { GripVertical, ChevronUp, ChevronDown, KeyRound, RefreshCw, Info, ChevronRight, Brain } from "lucide-react";
+import { ChevronDown, KeyRound, RefreshCw, Info, ChevronRight, Brain } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -98,11 +98,10 @@ const providerMeta = {
 const KEY_SOURCE_LABEL = {
   ui: { text: "from this panel", tone: "text-[#00ff66]" },
   env: { text: "from server env var (overrides this panel if also set here)", tone: "text-[#ffd23f]" },
-  emergent: { text: "from EMERGENT_LLM_KEY fallback", tone: "text-[#ffd23f]" },
   none: { text: "no key configured", tone: "text-white/40" },
 };
 
-const ProviderCard = ({ p, onToggle, onSaveKey, onSaveModel, onUp, onDown, isFirst, isLast }) => {
+const ProviderCard = ({ p, onToggle, onSaveKey, onSaveModel }) => {
   const [key, setKey] = useState("");
   const [model, setModel] = useState(p.model);
   const [models, setModels] = useState(null); // ModelInfo[] once fetched, else null
@@ -140,40 +139,49 @@ const ProviderCard = ({ p, onToggle, onSaveKey, onSaveModel, onUp, onDown, isFir
   const selectedModelInfo = models?.find((m) => m.id === model);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5" data-testid={`provider-${p.provider}`}>
+    <div
+      className={`rounded-2xl border bg-[#0a0514]/60 p-5 transition-opacity ${
+        p.enabled ? "border-white/10" : "border-white/5 opacity-55"
+      }`}
+      data-testid={`provider-${p.provider}`}
+    >
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <GripVertical size={16} className="text-white/30" />
-          <div>
-            <div className="font-display text-lg text-white tracking-tight" style={{ color: providerMeta[p.provider].accent }}>
-              {providerMeta[p.provider].label}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-white/40">
-              order #{p.order + 1} · {p.has_key ? "key ready" : "no key"}
-            </div>
-            <div className={`text-[10px] mt-0.5 ${source.tone}`} data-testid={`key-source-${p.provider}`}>
-              Active key {source.text}
-            </div>
+        <div>
+          <div className="font-display text-lg tracking-tight" style={{ color: providerMeta[p.provider].accent }}>
+            {providerMeta[p.provider].label}
+          </div>
+          <div className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+            {p.has_key ? "key ready" : "no key"}
+          </div>
+          <div className={`text-[10px] mt-0.5 ${source.tone}`} data-testid={`key-source-${p.provider}`}>
+            Active key {source.text}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button data-testid={`up-${p.provider}`} disabled={isFirst} onClick={onUp} className="rounded-lg border border-white/10 p-1.5 text-white/70 hover:text-[#00f0ff] disabled:opacity-30">
-            <ChevronUp size={14} />
-          </button>
-          <button data-testid={`down-${p.provider}`} disabled={isLast} onClick={onDown} className="rounded-lg border border-white/10 p-1.5 text-white/70 hover:text-[#00f0ff] disabled:opacity-30">
-            <ChevronDown size={14} />
-          </button>
-          <label className="inline-flex items-center gap-2 text-xs text-white/60 cursor-pointer">
-            <input
-              type="checkbox"
-              data-testid={`enable-${p.provider}`}
-              checked={p.enabled}
-              onChange={(e) => onToggle(e.target.checked)}
-              className="accent-[#00f0ff]"
+
+        {/* One control per provider: on or off. Disabled providers are skipped entirely,
+            so turning the others off is how an admin picks which one actually serves. */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={p.enabled}
+          aria-label={`${providerMeta[p.provider].label} ${p.enabled ? "enabled" : "disabled"}`}
+          data-testid={`enable-${p.provider}`}
+          onClick={() => onToggle(!p.enabled)}
+          className={`shrink-0 inline-flex items-center gap-2.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+            p.enabled
+              ? "border-[#00ff66]/40 bg-[#00ff66]/10 text-[#00ff66]"
+              : "border-white/15 text-white/45 hover:border-white/30"
+          }`}
+        >
+          <span className={`relative h-4 w-8 rounded-full transition-colors ${p.enabled ? "bg-[#00ff66]" : "bg-white/20"}`}>
+            <span
+              className={`absolute top-0.5 h-3 w-3 rounded-full bg-black transition-all ${
+                p.enabled ? "left-[18px]" : "left-0.5"
+              }`}
             />
-            <span>{p.enabled ? "Enabled" : "Disabled"}</span>
-          </label>
-        </div>
+          </span>
+          {p.enabled ? "Enabled" : "Disabled"}
+        </button>
       </div>
 
       <div className="mt-4 grid sm:grid-cols-3 gap-3">
@@ -308,16 +316,11 @@ const Router = () => {
 
   if (!cfg) return <div className="p-12 text-white/60">Loading router…</div>;
 
-  const move = async (provider, dir) => {
-    const order = cfg.providers.map((p) => p.provider);
-    const idx = order.indexOf(provider);
-    const swap = idx + dir;
-    if (swap < 0 || swap >= order.length) return;
-    [order[idx], order[swap]] = [order[swap], order[idx]];
-    await api.post("/router/order", { order });
-    toast.success("Order updated");
-    load();
-  };
+  // Mirrors the backend's call_router loop: enabled, in order, and actually holding a key.
+  const activeChain = cfg.providers
+    .filter((p) => p.enabled && p.has_key)
+    .map((p) => providerMeta[p.provider].label);
+
   const toggle = async (provider, enabled) => {
     await api.patch(`/router/providers/${provider}`, { enabled });
     toast.success(`${provider} ${enabled ? "enabled" : "disabled"}`);
@@ -345,19 +348,41 @@ const Router = () => {
       <p className="text-white/60 max-w-2xl mb-8">{t("router_sub")}</p>
 
       <div className="space-y-4" data-testid="providers-list">
-        {cfg.providers.map((p, i) => (
+        {cfg.providers.map((p) => (
           <ProviderCard
             key={p.provider}
             p={p}
-            isFirst={i === 0}
-            isLast={i === cfg.providers.length - 1}
-            onUp={() => move(p.provider, -1)}
-            onDown={() => move(p.provider, 1)}
             onToggle={(v) => toggle(p.provider, v)}
             onSaveKey={(k) => saveKey(p.provider, k)}
             onSaveModel={(m) => saveModel(p.provider, m)}
           />
         ))}
+      </div>
+
+      {/* Providers are tried top to bottom, so what is actually in play is only ever the
+          enabled ones with a key -- which is the whole point of the switches above. */}
+      <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3" data-testid="failover-summary">
+        <div className="flex items-start gap-2">
+          <Info size={13} className="mt-0.5 shrink-0 text-white/40" />
+          <div className="text-xs text-white/60">
+            {activeChain.length === 0 ? (
+              <span className="text-[#ff8fb0]">
+                No provider is both enabled and holding a key — AI generation and the Socratic tutor will fail.
+              </span>
+            ) : (
+              <>
+                Failover order:{" "}
+                {activeChain.map((name, i) => (
+                  <span key={name}>
+                    {i > 0 && <span className="text-white/25"> → </span>}
+                    <span className={i === 0 ? "text-[#00ff66] font-semibold" : "text-white/60"}>{name}</span>
+                  </span>
+                ))}
+                . <span className="text-white/40">{activeChain[0]} serves every request unless it fails.</span>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="mt-10">

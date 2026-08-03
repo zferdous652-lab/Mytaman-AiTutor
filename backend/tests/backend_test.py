@@ -272,9 +272,13 @@ class TestRouter:
         j = r.json()
         provs = {p["provider"]: p for p in j["providers"]}
         assert set(provs.keys()) == {"openai", "anthropic", "gemini"}
-        # has_key should be True because EMERGENT_LLM_KEY is set
+        # has_key is now per-provider: a provider is "ready" only with a key of its own,
+        # saved in the panel or set as its own env var. There is no shared fallback key
+        # making every provider look configured, so this asserts the source is honest
+        # rather than asserting every provider is ready.
         for p in j["providers"]:
-            assert p["has_key"] is True
+            assert p["key_source"] in {"ui", "env", "none"}
+            assert p["has_key"] is (p["key_source"] != "none")
 
     def test_patch_provider_toggle(self, admin_token):
         # disable then re-enable openai

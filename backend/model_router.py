@@ -154,7 +154,7 @@ class ProviderConfig(BaseModel):
     provider: Provider
     enabled: bool = True
     has_key: bool = False
-    key_source: Literal["ui", "env", "emergent", "none"] = "none"
+    key_source: Literal["ui", "env", "none"] = "none"
     order: int
     model: str
 
@@ -198,15 +198,13 @@ async def _load_or_init():
 ENV_KEY_MAP = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY"}
 
 
-def _key_source(provider: str, cfg_provider: dict) -> Literal["ui", "env", "emergent", "none"]:
+def _key_source(provider: str, cfg_provider: dict) -> Literal["ui", "env", "none"]:
     """Whichever key _resolve_key would actually use, named -- so the admin UI can show
     which source is active instead of a key saved in the UI silently having no effect."""
     if cfg_provider.get("encrypted_key"):
         return "ui"
     if os.environ.get(ENV_KEY_MAP[provider]):
         return "env"
-    if os.environ.get("EMERGENT_LLM_KEY"):
-        return "emergent"
     return "none"
 
 
@@ -214,17 +212,19 @@ def _resolve_key(provider: str, cfg_provider: dict) -> Optional[str]:
     """A key saved via the admin UI takes priority -- that's the whole point of the Model
     Router panel, and a key an admin saves there must actually take effect. The
     provider-specific env var is a deploy-time fallback for when no UI key has been set
-    yet, and EMERGENT_LLM_KEY is the last-resort generic fallback."""
+    yet.
+
+    A provider with no key of its own resolves to nothing and is skipped by call_router.
+    There is deliberately no shared cross-provider fallback key: one made every provider
+    look configured whether or not an admin had given it a key, so the first provider in
+    the failover order always won and a key saved for a later one was never reached."""
     enc = cfg_provider.get("encrypted_key")
     if enc:
         try:
             return decrypt(enc)
         except Exception:
             log.exception("Failed to decrypt %s key", provider)
-    env_val = os.environ.get(ENV_KEY_MAP[provider])
-    if env_val:
-        return env_val
-    return os.environ.get("EMERGENT_LLM_KEY")
+    return os.environ.get(ENV_KEY_MAP[provider])
 
 
 # ---------- Live model listing ----------
