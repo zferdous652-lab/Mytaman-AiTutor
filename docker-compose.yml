@@ -21,9 +21,6 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       JWT_SECRET: ${JWT_SECRET}
       FERNET_KEY: ${FERNET_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Outbound email for parent-approval links. With SMTP_HOST unset, nothing is
       # sent and the approval link is written to the backend log instead, so the
       # flow still works for testing. APP_BASE_URL must be the address a parent's
