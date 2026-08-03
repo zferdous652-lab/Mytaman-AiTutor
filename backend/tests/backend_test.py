@@ -326,7 +326,8 @@ class TestRouter:
         assert "TEST PROMPT" in cfg["prompts"]["chapter_summary"]
 
     def test_save_provider_api_key(self, admin_token):
-        # set a fake key (won't be used because env EMERGENT_LLM_KEY overrides logic; UI key just stored)
+        # A UI-saved key now takes priority over env vars (see _resolve_key), so this fake
+        # key WOULD be used for real calls -- this test only checks has_key, not usage.
         r = requests.patch(
             f"{API}/router/providers/gemini",
             headers=_h(admin_token),

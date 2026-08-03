@@ -21,6 +21,13 @@ from rewards import on_xp_earned
 router = APIRouter(prefix="/content", tags=["content"])
 
 ContentType = Literal["summary", "quiz", "flashcards", "mindmap", "notes"]
+
+# The order a student works through a chapter's lessons: read the notes, see the shape of
+# the topic, read the summary, drill with flashcards, then test with the quiz. Only affects
+# the student course player (via /list-paired) -- the admin content-type pickers keep their
+# own ordering.
+STUDENT_CONTENT_TYPE_ORDER = ["notes", "mindmap", "summary", "flashcards", "quiz"]
+_STUDENT_TYPE_RANK = {t: i for i, t in enumerate(STUDENT_CONTENT_TYPE_ORDER)}
 PROMPT_KEY = {
     "summary": "chapter_summary",
     "quiz": "quiz_generation",
@@ -850,6 +857,11 @@ async def list_content_paired(pack_id: Optional[str] = None, only_published: boo
             en=g["en"],
             created_at=g["created_at"],
         ))
+    # Sorted by content type so every chapter presents its lessons in the same learning
+    # order rather than in whatever order an admin happened to generate them. Python's sort
+    # is stable, so items sharing a type keep their created_at ordering, and the caller's
+    # per-chapter grouping preserves this order within each chapter.
+    out.sort(key=lambda p: _STUDENT_TYPE_RANK.get(p.content_type, len(_STUDENT_TYPE_RANK)))
     return out
 
 

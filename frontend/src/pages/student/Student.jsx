@@ -7,7 +7,9 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
-import CourseSidebar, { isPairDone } from "./CourseSidebar";
+import SidebarToggle, { RailTooltip } from "@/components/SidebarToggle";
+import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
+import CourseSidebar, { isPairDone, CourseSidebarRail } from "./CourseSidebar";
 import ContentViewer from "./ContentViewer";
 
 const LANG_FILTERS = ["all", "en", "bm"];
@@ -59,6 +61,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   const [langFilter, setLangFilter] = useState("all");
   const [openCourseId, setOpenCourseId] = useState(null);
   const [openChapterIds, setOpenChapterIds] = useState(new Set());
+  const [collapsed, toggleCollapsed] = useSidebarCollapsed("mytaman:sidebar:course");
 
   useEffect(() => {
     setLoaded(false);
@@ -150,24 +153,39 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
     setSelected(nextLesson.item);
   };
 
+  // Picking a lesson from the collapsed rail also expands its course/chapter, so the tree
+  // is already showing that lesson in context whenever the sidebar is opened back up.
+  const selectFromRail = (pair) => {
+    const entry = flatLessons.find((l) => l.item.key === pair.key);
+    if (entry) {
+      setOpenCourseId(entry.courseId);
+      setOpenChapterIds((prev) => new Set(prev).add(entry.chapterId));
+    }
+    setSelected(pair);
+  };
+
   return (
     <div className="fixed inset-0 z-30 flex bg-[var(--bg)]">
       <motion.aside
         initial={reduce ? false : { x: -24, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-        className="w-[300px] shrink-0 border-r border-white/8 bg-[#0a0514]/80 backdrop-blur-xl flex flex-col"
+        className={`${collapsed ? "w-[76px]" : "w-[320px]"} shrink-0 border-r border-white/8 bg-[#0a0514]/80 backdrop-blur-xl flex flex-col transition-[width] duration-200`}
         data-testid="course-sidebar"
+        data-collapsed={collapsed}
       >
-        <div className="p-5 pb-3 flex items-center gap-2 border-b border-white/8">
+        <div className={`border-b border-white/8 ${collapsed ? "p-3 flex flex-col items-center gap-3" : "p-5 pb-3 flex items-center gap-2"}`}>
           <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2] shrink-0" />
-          <div className="min-w-0">
-            <div className="font-display font-semibold text-white leading-tight truncate">MYTAMAN</div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">Course navigator</div>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <div className="font-display font-semibold text-white leading-tight truncate">MYTAMAN</div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">Course navigator</div>
+            </div>
+          )}
+          <SidebarToggle collapsed={collapsed} onToggle={toggleCollapsed} testId="course-sidebar-toggle" align={collapsed ? "center" : "left"} />
         </div>
 
-        {mine.length > 1 && (
+        {!collapsed && mine.length > 1 && (
           <div className="px-4 pt-3 flex gap-1.5 overflow-x-auto">
             {mine.map((p) => (
               <button
@@ -184,7 +202,34 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
           </div>
         )}
 
-        <div className="px-4 pt-3 flex gap-1" data-testid="lang-filter">
+        {/* Cross-portal navigation sits with the other navigation controls at the top,
+            above the language filter -- the footer is for account/session actions. */}
+        <div className={`${collapsed ? "px-2 pt-3 flex-col items-center gap-1.5" : "px-4 pt-3 gap-1.5"} flex`}>
+          <button
+            onClick={() => navigate("/student/browse")}
+            data-testid="side-browse"
+            title={collapsed ? t("browse_packs") : undefined}
+            className={`group relative inline-flex items-center justify-center rounded-xl border border-white/10 text-xs text-white/70 hover:border-[#00f0ff]/40 hover:text-[#00f0ff] transition-colors ${
+              collapsed ? "h-9 w-9" : "flex-1 gap-1.5 px-2 py-2"
+            }`}
+          >
+            <Package size={13} /> {!collapsed && t("browse_packs")}
+            {collapsed && <RailTooltip>{t("browse_packs")}</RailTooltip>}
+          </button>
+          <button
+            onClick={() => navigate("/student/dashboard")}
+            data-testid="side-dashboard"
+            title={collapsed ? t("dashboard") || "Dashboard" : undefined}
+            className={`group relative inline-flex items-center justify-center rounded-xl border border-white/10 text-xs text-white/70 hover:border-[#00f0ff]/40 hover:text-[#00f0ff] transition-colors ${
+              collapsed ? "h-9 w-9" : "flex-1 gap-1.5 px-2 py-2"
+            }`}
+          >
+            <Trophy size={13} /> {!collapsed && (t("dashboard") || "Dashboard")}
+            {collapsed && <RailTooltip>{t("dashboard") || "Dashboard"}</RailTooltip>}
+          </button>
+        </div>
+
+        <div className={`px-4 pt-3 gap-1 ${collapsed ? "hidden" : "flex"}`} data-testid="lang-filter">
           {LANG_FILTERS.map((l) => (
             <button
               key={l}
@@ -199,9 +244,16 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-4 mt-1">
+        <div className={`flex-1 overflow-y-auto py-4 mt-1 ${collapsed ? "px-2" : "px-3"}`}>
           {!loaded ? (
-            <div className="px-2 text-sm text-white/40">Loading…</div>
+            <div className={collapsed ? "text-center text-xs text-white/40" : "px-2 text-sm text-white/40"}>{collapsed ? "…" : "Loading…"}</div>
+          ) : collapsed ? (
+            <CourseSidebarRail
+              lessons={flatLessons.map((l) => l.item)}
+              completed={completed}
+              selectedKey={selected?.key}
+              onSelectContent={selectFromRail}
+            />
           ) : (
             <CourseSidebar
               courses={courses}
@@ -219,34 +271,25 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
           )}
         </div>
 
-        <div className="p-4 border-t border-white/8 space-y-3">
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => navigate("/student/browse")}
-              data-testid="side-browse"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 px-2 py-2 text-xs text-white/70 hover:border-[#00f0ff]/40 hover:text-[#00f0ff] transition-colors"
-            >
-              <Package size={13} /> {t("browse_packs")}
-            </button>
-            <button
-              onClick={() => navigate("/student/dashboard")}
-              data-testid="side-dashboard"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 px-2 py-2 text-xs text-white/70 hover:border-[#00f0ff]/40 hover:text-[#00f0ff] transition-colors"
-            >
-              <Trophy size={13} /> {t("dashboard") || "Dashboard"}
-            </button>
-          </div>
-          <LanguageToggle testId="course-lang" />
-          <div className="text-xs text-white/60">
-            <div className="font-mono truncate" title={user.email || user.username}>{user.email || user.username}</div>
-            <div className="text-white/40">{user.name}</div>
-          </div>
+        <div className={`border-t border-white/8 ${collapsed ? "p-2 flex flex-col items-center gap-1.5" : "p-4 space-y-3"}`}>
+          {!collapsed && (
+            <>
+              <LanguageToggle testId="course-lang" />
+              <div className="text-xs text-white/60">
+                <div className="font-mono truncate" title={user.email || user.username}>{user.email || user.username}</div>
+                <div className="text-white/40">{user.name}</div>
+              </div>
+            </>
+          )}
           <button
             data-testid="logout-btn"
             onClick={() => { logout(); navigate("/"); }}
-            className="w-full inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-white/80 hover:border-[#ff0055] hover:text-[#ff0055] transition-colors"
+            title={collapsed ? t("logout") : undefined}
+            className={`inline-flex items-center rounded-xl border border-white/10 text-sm text-white/80 hover:border-[#ff0055] hover:text-[#ff0055] transition-colors ${
+              collapsed ? "h-9 w-9 justify-center" : "w-full gap-2 px-3 py-2"
+            }`}
           >
-            <LogOut size={14} /> {t("logout")}
+            <LogOut size={14} /> {!collapsed && t("logout")}
           </button>
         </div>
       </motion.aside>

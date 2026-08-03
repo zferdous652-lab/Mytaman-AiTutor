@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { GripVertical, ChevronUp, ChevronDown, KeyRound } from "lucide-react";
+import { GripVertical, ChevronUp, ChevronDown, KeyRound, RefreshCw, Info } from "lucide-react";
 import { api } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 
@@ -10,9 +10,52 @@ const providerMeta = {
   gemini: { label: "Google Gemini", accent: "#00f0ff" },
 };
 
+// Explains where the ACTIVE key for a provider actually came from -- a key saved in this
+// UI can otherwise appear to silently "not work" when a deploy-time env var was resolved
+// instead (see backend _resolve_key), with nothing in the old UI to tell the admin why.
+const KEY_SOURCE_LABEL = {
+  ui: { text: "from this panel", tone: "text-[#00ff66]" },
+  env: { text: "from server env var (overrides this panel if also set here)", tone: "text-[#ffd23f]" },
+  emergent: { text: "from EMERGENT_LLM_KEY fallback", tone: "text-[#ffd23f]" },
+  none: { text: "no key configured", tone: "text-white/40" },
+};
+
 const ProviderCard = ({ p, onToggle, onSaveKey, onSaveModel, onUp, onDown, isFirst, isLast }) => {
   const [key, setKey] = useState("");
   const [model, setModel] = useState(p.model);
+  const [models, setModels] = useState(null); // ModelInfo[] once fetched, else null
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState("");
+  const [manualModel, setManualModel] = useState(false);
+
+  useEffect(() => { setModel(p.model); }, [p.model]);
+
+  // Fetches the live model list for whichever key is relevant right now: the one just
+  // typed (not yet saved) takes priority so the admin can see real model names before
+  // committing to Save, otherwise falls back to whatever key is currently active.
+  const fetchModels = async (unsavedKey) => {
+    setModelsLoading(true);
+    setModelsError("");
+    try {
+      const { data } = await api.post(`/router/providers/${p.provider}/models`, unsavedKey ? { api_key: unsavedKey } : {});
+      setModels(data);
+      if (data.length === 0) setModelsError("Key works, but no usable models were returned.");
+    } catch (err) {
+      setModelsError(err?.response?.data?.detail || "Could not fetch models with this key.");
+      setModels(null);
+    }
+    setModelsLoading(false);
+  };
+
+  const saveKeyAndFetch = async () => {
+    const typedKey = key;
+    await onSaveKey(typedKey);
+    setKey("");
+    if (typedKey) fetchModels(typedKey);
+  };
+
+  const source = KEY_SOURCE_LABEL[p.key_source] || KEY_SOURCE_LABEL.none;
+  const selectedModelInfo = models?.find((m) => m.id === model);
 
   return (
     <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5" data-testid={`provider-${p.provider}`}>
@@ -25,6 +68,9 @@ const ProviderCard = ({ p, onToggle, onSaveKey, onSaveModel, onUp, onDown, isFir
             </div>
             <div className="text-[10px] uppercase tracking-[0.2em] text-white/40">
               order #{p.order + 1} · {p.has_key ? "key ready" : "no key"}
+            </div>
+            <div className={`text-[10px] mt-0.5 ${source.tone}`} data-testid={`key-source-${p.provider}`}>
+              Active key {source.text}
             </div>
           </div>
         </div>
@@ -62,14 +108,15 @@ const ProviderCard = ({ p, onToggle, onSaveKey, onSaveModel, onUp, onDown, isFir
             />
             <button
               data-testid={`save-key-${p.provider}`}
-              onClick={() => { onSaveKey(key); setKey(""); }}
+              onClick={saveKeyAndFetch}
+              title="Save key and fetch its available models"
               className="rounded-xl border border-[#00f0ff] px-4 text-sm text-[#00f0ff] hover:bg-[#00f0ff] hover:text-black transition-colors"
             >
               <KeyRound size={14} />
             </button>
             <button
               data-testid={`remove-key-${p.provider}`}
-              onClick={() => onSaveKey("")}
+              onClick={() => { onSaveKey(""); setModels(null); setModelsError(""); }}
               className="rounded-xl border border-white/10 px-3 text-sm text-white/60 hover:border-[#ff0055] hover:text-[#ff0055] transition-colors"
             >
               Remove
@@ -77,14 +124,40 @@ const ProviderCard = ({ p, onToggle, onSaveKey, onSaveModel, onUp, onDown, isFir
           </div>
         </div>
         <div>
-          <label className="text-xs text-white/60">Model</label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs text-white/60">Model</label>
+            <button
+              type="button"
+              data-testid={`fetch-models-${p.provider}`}
+              onClick={() => fetchModels(key || undefined)}
+              disabled={modelsLoading || (!p.has_key && !key)}
+              title="Fetch this provider's available models for the active key"
+              className="text-white/40 hover:text-[#00f0ff] disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <RefreshCw size={12} className={modelsLoading ? "animate-spin" : ""} />
+            </button>
+          </div>
           <div className="mt-1 flex gap-2">
-            <input
-              data-testid={`model-${p.provider}`}
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white font-mono text-xs focus:border-[#00f0ff]"
-            />
+            {models && models.length > 0 && !manualModel ? (
+              <select
+                data-testid={`model-select-${p.provider}`}
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white font-mono text-xs focus:border-[#00f0ff]"
+              >
+                {!models.some((m) => m.id === model) && <option value={model}>{model} (current)</option>}
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>{m.display_name}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                data-testid={`model-${p.provider}`}
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white font-mono text-xs focus:border-[#00f0ff]"
+              />
+            )}
             <button
               data-testid={`save-model-${p.provider}`}
               onClick={() => onSaveModel(model)}
@@ -93,8 +166,48 @@ const ProviderCard = ({ p, onToggle, onSaveKey, onSaveModel, onUp, onDown, isFir
               Save
             </button>
           </div>
+          {models && models.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setManualModel((v) => !v)}
+              className="mt-1 text-[10px] text-white/40 hover:text-white/70 underline"
+            >
+              {manualModel ? "Pick from fetched models" : "Enter model ID manually"}
+            </button>
+          )}
+          {modelsError && <div className="mt-1 text-[10px] text-[#ff0055]">{modelsError}</div>}
         </div>
       </div>
+
+      {selectedModelInfo && (
+        <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3" data-testid={`model-info-${p.provider}`}>
+          <div className="flex items-start gap-2">
+            <Info size={13} className="mt-0.5 shrink-0 text-white/40" />
+            <div className="min-w-0">
+              {selectedModelInfo.description && (
+                <div className="text-xs text-white/60">{selectedModelInfo.description}</div>
+              )}
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                {selectedModelInfo.capabilities.map((c) => (
+                  <span key={c} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-mono text-white/70">
+                    {c}
+                  </span>
+                ))}
+                {selectedModelInfo.context_window && (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-mono text-white/70">
+                    {selectedModelInfo.context_window.toLocaleString()} in
+                  </span>
+                )}
+                {selectedModelInfo.output_limit && (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-mono text-white/70">
+                    {selectedModelInfo.output_limit.toLocaleString()} out
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
