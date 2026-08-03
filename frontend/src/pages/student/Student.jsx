@@ -10,9 +10,15 @@ import LanguageToggle from "@/components/LanguageToggle";
 import SidebarToggle, { RailTooltip } from "@/components/SidebarToggle";
 import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 import CourseSidebar, { isPairDone, CourseSidebarRail } from "./CourseSidebar";
-import ContentViewer from "./ContentViewer";
+import ContentViewer, { primaryVariant } from "./ContentViewer";
+import SocraticPanel from "./SocraticPanel";
 
 const LANG_FILTERS = ["all", "en", "bm"];
+
+// Socratic Learning is a Premium Tutor Pack feature. This only decides whether the dock
+// is rendered -- every Socratic endpoint re-checks the pack's tier server-side, so
+// nothing here is load-bearing for access control.
+const SOCRATIC_TIERS = ["premium"];
 
 // The right-hand pane shown before a lesson is picked -- an at-a-glance summary of the
 // active pack plus a nudge to start reading, instead of a blank area.
@@ -62,6 +68,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   const [openCourseId, setOpenCourseId] = useState(null);
   const [openChapterIds, setOpenChapterIds] = useState(new Set());
   const [collapsed, toggleCollapsed] = useSidebarCollapsed("mytaman:sidebar:course");
+  const [tutorCollapsed, toggleTutorCollapsed] = useSidebarCollapsed("mytaman:sidebar:socratic");
 
   useEffect(() => {
     setLoaded(false);
@@ -145,6 +152,13 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
 
   const currentIndex = selected ? flatLessons.findIndex((l) => l.item.key === selected.key) : -1;
   const nextLesson = currentIndex >= 0 ? flatLessons[currentIndex + 1] : undefined;
+
+  // The tutor docks beside an open lesson, never on the welcome pane -- it exists to
+  // discuss the thing on screen, so with nothing on screen there is nothing to discuss.
+  // It talks about the exact language variant being read, not the pair.
+  const tutorVariant = selected ? primaryVariant(selected, langFilter) : null;
+  const tutorLang = tutorVariant && selected?.bm && tutorVariant.id === selected.bm.id ? "bm" : "en";
+  const showTutor = SOCRATIC_TIERS.includes(activePack.tier) && !!tutorVariant;
 
   const goToNext = () => {
     if (!nextLesson) return;
@@ -343,6 +357,17 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
           <WelcomePane pack={activePack} progressPct={progressPct} itemCount={filteredItems.length} />
         )}
       </main>
+
+      {showTutor && (
+        <SocraticPanel
+          key={`${tutorVariant.id}:${tutorLang}`}
+          contentId={tutorVariant.id}
+          contentType={selected.content_type}
+          language={tutorLang}
+          collapsed={tutorCollapsed}
+          onToggle={toggleTutorCollapsed}
+        />
+      )}
     </div>
   );
 };

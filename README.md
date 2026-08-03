@@ -33,10 +33,11 @@ AI-generated content (via the Model Router) can also be created and published th
 ## Model Router
 
 Admin-configurable multi-provider AI setup (OpenAI / Anthropic / Gemini) with:
-- Enable/disable and reorder providers, with automatic failover
-- Encrypted API key storage (Fernet)
-- Editable per-provider system prompts
-- Emergent Universal Key as a shared fallback
+- An enable/disable switch per provider, with automatic failover across the enabled ones
+- Per-provider API keys, encrypted at rest (Fernet). A provider with no key of its own is
+  skipped, so enabling only the provider you have a key for is how you pick who serves.
+- Live model listing per provider, so a model is chosen from what the key can actually use
+- Editable system prompts, grouped into collapsible panels by purpose
 
 ## Tech stack
 

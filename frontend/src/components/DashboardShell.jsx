@@ -10,6 +10,7 @@ import {
   LogOut,
   BookOpen,
   Trophy,
+  Brain,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
@@ -26,6 +27,7 @@ const items = {
     { to: "/admin/router", label: t("router"), icon: Cpu, id: "router" },
     { to: "/admin/packs", label: t("packs"), icon: Package, id: "packs" },
     { to: "/admin/students", label: t("students_label"), icon: Users, id: "students" },
+    { to: "/admin/socratic", label: t("socratic"), icon: Brain, id: "socratic" },
   ],
   student: (t) => [
     { to: "/student", label: t("my_packs"), icon: BookOpen, end: true, id: "my-packs" },

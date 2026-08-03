@@ -61,7 +61,10 @@ Edit `.env` and fill in:
   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
   ```
 - `APP_PORT` → the public port you'll expose (default `3000`)
-- `EMERGENT_LLM_KEY` is pre-filled with the shared universal key
+- AI provider keys are optional here — an admin can paste them into the Model
+  Router page instead, which takes priority over these. At least one provider
+  needs a key from one source or the other, or AI generation and the Socratic
+  tutor have nothing to call.
 - `APP_BASE_URL` → `http://<your-vm-public-ip>:<APP_PORT>` (see §3a — this is what
   parent-approval emails link to, so it must be reachable from a parent's browser)
 

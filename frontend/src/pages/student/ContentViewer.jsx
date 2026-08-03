@@ -28,6 +28,17 @@ const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Fla
 // hood), same as "En"/"Bm" always read their own name for whatever's currently shown.
 const langBadge = (focusLang) => (focusLang === "all" ? "BM · EN" : focusLang.toUpperCase());
 
+// Which language variant is the one actually being read. Exported because the Socratic
+// tutor dock has to open its session against the exact same content id the student is
+// looking at -- if these two ever disagreed, the tutor would be discussing a different
+// language's copy of the lesson than the one on screen.
+export const primaryVariant = (pair, focusLang) => {
+  if (!pair) return null;
+  if (focusLang === "en") return pair.en || pair.bm;
+  if (focusLang === "bm") return pair.bm || pair.en;
+  return pair.bm || pair.en;
+};
+
 // variant="modal" (default) -- the original centered popover, still used anywhere a lesson
 // needs to float above other UI. variant="pane" -- fills its parent container edge-to-edge,
 // used by the course player's right-hand reading pane instead of a popup.
@@ -35,7 +46,7 @@ const ContentViewer = ({ pair, done, onClose, onComplete, onUncomplete, onQuizSc
   const scrollRef = useRef(null);
   if (!pair) return null;
 
-  const primary = focusLang === "en" ? pair.en || pair.bm : focusLang === "bm" ? pair.bm || pair.en : pair.bm || pair.en;
+  const primary = primaryVariant(pair, focusLang);
   const secondary = focusLang === "all" && pair.bm && pair.en ? pair.en : null;
   if (!primary) return null;
 
