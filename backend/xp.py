@@ -26,6 +26,9 @@ QUIZ_XP = 30
 FIRST_LESSON_OF_DAY_BONUS = 8
 PERFECT_QUIZ_BONUS = 15
 QUIZ_PASS_THRESHOLD = 0.8  # quiz XP only pays out at >=80%
+# Reaching mastery in a lesson's Socratic tutor session. Sits between a passive lesson
+# completion and a quiz: harder to reach than reading, easier than a perfect quiz.
+SOCRATIC_XP = 25
 
 # Daily goal / streak: a day "counts" once the student has earned this much XP that day --
 # roughly one completed lesson. Streak is derived from xp_events on read, not stored, so
@@ -194,6 +197,14 @@ async def award_quiz_xp(user_id: str, pack_id: str, content_id: str, title: str,
             bonus = await _award_xp(user_id, pack_id, content_id, "quiz_perfect", PERFECT_QUIZ_BONUS, f"Perfect quiz bonus: {title}")
         weekly_bonus = await _maybe_award_weekly_consistency_bonus(user_id, pack_id)
     return {"xp_awarded": awarded + bonus + weekly_bonus}
+
+
+async def award_socratic_xp(user_id: str, pack_id: str, content_id: str, title: str) -> dict:
+    """Paid once per lesson, when the tutor session reaches mastery -- keyed on content_id
+    like lesson/quiz XP, so revisiting a lesson's tutor can't re-earn it."""
+    awarded = await _award_xp(user_id, pack_id, content_id, "socratic", SOCRATIC_XP, f"Socratic session: {title}")
+    weekly_bonus = await _maybe_award_weekly_consistency_bonus(user_id, pack_id) if awarded else 0
+    return {"xp_awarded": awarded + weekly_bonus}
 
 
 async def total_xp_for(user_id: str) -> int:

@@ -345,3 +345,109 @@ class TestRouter:
             json={"api_key": ""},
             timeout=10,
         )
+
+
+# ---------- Socratic Learning ----------
+class TestSocratic:
+    """Socratic Learning is gated two ways: role (admin-only settings/oversight) and
+    Tutor Pack tier (students only get a tutor on a Premium pack). Both are enforced
+    server-side, so both are tested here rather than trusted to the UI.
+
+    The conversation endpoints themselves are not exercised -- every turn is a live,
+    billable model call through the Model Router, which this suite deliberately avoids.
+    """
+
+    def test_settings_admin_only(self, student_token, parent_token):
+        for tok in (student_token, parent_token):
+            r = requests.get(f"{API}/socratic/settings", headers=_h(tok), timeout=10)
+            assert r.status_code == 403
+
+    def test_admin_oversight_is_admin_only(self, student_token):
+        for path in ("/socratic/admin/sessions", "/socratic/admin/stats"):
+            r = requests.get(f"{API}{path}", headers=_h(student_token), timeout=10)
+            assert r.status_code == 403
+
+    def test_get_settings_defaults(self, admin_token):
+        r = requests.get(f"{API}/socratic/settings", headers=_h(admin_token), timeout=10)
+        assert r.status_code == 200, r.text
+        s = r.json()
+        assert set(s) >= {"enabled", "max_turns_per_session", "daily_message_cap", "allow_quiz_answers", "tiers"}
+        assert s["tiers"] == ["premium"]
+        # The tutor must never hand over a quiz answer unless an admin deliberately opts in.
+        assert s["allow_quiz_answers"] is False
+
+    def test_update_settings_roundtrip(self, admin_token):
+        original = requests.get(f"{API}/socratic/settings", headers=_h(admin_token), timeout=10).json()
+        r = requests.put(
+            f"{API}/socratic/settings",
+            headers=_h(admin_token),
+            json={"max_turns_per_session": 12, "daily_message_cap": 34},
+            timeout=10,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["max_turns_per_session"] == 12
+        assert r.json()["daily_message_cap"] == 34
+        # unspecified fields are left alone
+        assert r.json()["enabled"] == original["enabled"]
+        requests.put(
+            f"{API}/socratic/settings",
+            headers=_h(admin_token),
+            json={
+                "max_turns_per_session": original["max_turns_per_session"],
+                "daily_message_cap": original["daily_message_cap"],
+            },
+            timeout=10,
+        )
+
+    def test_update_settings_rejects_out_of_range(self, admin_token):
+        r = requests.put(
+            f"{API}/socratic/settings", headers=_h(admin_token),
+            json={"daily_message_cap": 0}, timeout=10,
+        )
+        assert r.status_code == 422
+
+    def test_session_requires_auth(self):
+        r = requests.post(f"{API}/socratic/session", json={"content_id": "whatever"}, timeout=10)
+        assert r.status_code == 401
+
+    def test_session_on_unknown_content(self, student_token):
+        r = requests.post(
+            f"{API}/socratic/session",
+            headers=_h(student_token),
+            json={"content_id": f"missing-{uuid.uuid4().hex}"},
+            timeout=10,
+        )
+        assert r.status_code == 404
+
+    def test_non_premium_pack_is_refused(self, admin_token, student_token):
+        """The tier gate is the whole commercial premise of the feature -- a student on a
+        Basic pack must be refused by the API, not merely not shown the panel."""
+        packs = requests.get(f"{API}/packs/list", headers=_h(admin_token), timeout=10).json()
+        contents = requests.get(f"{API}/content/list", headers=_h(admin_token), timeout=15).json()
+        non_premium = {p["id"] for p in packs if p.get("tier") != "premium"}
+        target = next((c for c in contents if c.get("pack_id") in non_premium and c.get("published")), None)
+        if target is None:
+            pytest.skip("no published content on a non-Premium pack to test the tier gate against")
+
+        r = requests.post(
+            f"{API}/socratic/session",
+            headers=_h(student_token),
+            json={"content_id": target["id"]},
+            timeout=10,
+        )
+        assert r.status_code == 403
+        assert "Premium" in r.json()["detail"]
+
+        e = requests.get(
+            f"{API}/socratic/eligibility?content_id={target['id']}",
+            headers=_h(student_token), timeout=10,
+        )
+        assert e.status_code == 200
+        assert e.json()["available"] is False
+
+    def test_socratic_prompt_is_editable_in_router(self, admin_token):
+        """The tutor prompt has to show up in the Model Router editor -- that panel is the
+        only place an admin can tune the tutor's behaviour."""
+        cfg = requests.get(f"{API}/router/config", headers=_h(admin_token), timeout=10).json()
+        assert "socratic_tutor" in cfg["prompts"]
+        assert "JSON" in cfg["prompts"]["socratic_tutor"]

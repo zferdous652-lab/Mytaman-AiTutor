@@ -78,6 +78,26 @@ const dict = {
     dashboard: "Dashboard",
     enroll: "Enroll",
     enrolled: "Enrolled",
+    // socratic
+    socratic: "Socratic Learning",
+    socratic_tutor: "Socratic Tutor",
+    socratic_admin_title: "Socratic Learning",
+    socratic_admin_sub:
+      "The per-lesson AI tutor that guides students to answers instead of giving them. Available on Premium Tutor Packs. Every conversation is recorded and readable here.",
+    premium_label: "Premium",
+    socratic_hi: "Hi,",
+    socratic_how_help: "How can I help?",
+    socratic_placeholder: "Ask about this lesson",
+    socratic_thinking: "Thinking…",
+    socratic_new_chat: "New chat",
+    socratic_hide: "Hide tutor",
+    socratic_stuck: "I'm stuck",
+    socratic_stuck_msg: "I'm stuck — can you give me a hint?",
+    socratic_mastered: "You've worked this one out. Nice.",
+    socratic_daily_limit: "You've reached today's tutor message limit. Come back tomorrow.",
+    socratic_turn_limit: "This conversation has reached its limit. Start a new chat to keep going.",
+    socratic_disclaimer:
+      "This tutor is AI — it can make mistakes, so check anything important. It only discusses this lesson, and your parent and teacher can read these conversations. Don't share personal details.",
   },
   bm: {
     tagline: "Pembelajaran dijayakan AI",
@@ -148,6 +168,25 @@ const dict = {
     dashboard: "Papan Pemuka",
     enroll: "Daftar",
     enrolled: "Didaftarkan",
+    socratic: "Pembelajaran Socratic",
+    socratic_tutor: "Tutor Socratic",
+    socratic_admin_title: "Pembelajaran Socratic",
+    socratic_admin_sub:
+      "Tutor AI setiap pelajaran yang membimbing pelajar mencari jawapan sendiri, bukan memberi jawapan. Tersedia untuk Pek Tutor Premium. Setiap perbualan direkod dan boleh dibaca di sini.",
+    premium_label: "Premium",
+    socratic_hi: "Hai,",
+    socratic_how_help: "Apa yang boleh saya bantu?",
+    socratic_placeholder: "Tanya tentang pelajaran ini",
+    socratic_thinking: "Sedang berfikir…",
+    socratic_new_chat: "Perbualan baharu",
+    socratic_hide: "Sembunyikan tutor",
+    socratic_stuck: "Saya buntu",
+    socratic_stuck_msg: "Saya buntu — boleh beri saya petunjuk?",
+    socratic_mastered: "Anda berjaya menyelesaikannya. Syabas.",
+    socratic_daily_limit: "Anda telah mencapai had mesej tutor hari ini. Kembali esok.",
+    socratic_turn_limit: "Perbualan ini telah mencapai hadnya. Mulakan perbualan baharu untuk teruskan.",
+    socratic_disclaimer:
+      "Tutor ini ialah AI — ia boleh melakukan kesilapan, jadi semak perkara penting. Ia hanya membincangkan pelajaran ini, dan ibu bapa serta guru anda boleh membaca perbualan ini. Jangan kongsi maklumat peribadi.",
   },
 };
 
