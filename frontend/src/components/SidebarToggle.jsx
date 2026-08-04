@@ -1,12 +1,21 @@
 import React from "react";
 import { PanelLeft } from "lucide-react";
 
-// The hover label for an icon-only control in a collapsed rail. Expects an ancestor with
-// `group relative` -- it positions itself just outside that element's right edge.
-export const RailTooltip = ({ children }) => (
+// The hover label for an icon-only control. Expects an ancestor with `group relative`.
+//
+// `placement="right"` (default) sits just outside that element's right edge, which is what
+// a left-hand collapsed rail wants. `placement="bottom-end"` drops below and aligns to the
+// control's right edge instead -- needed for controls in a right-docked panel's header,
+// where a right-hand tooltip would render off the edge of the screen.
+//
+// Stays dark on purpose: a dark tooltip reads correctly over both the app's dark shell and
+// the tutor dock's off-white surface.
+export const RailTooltip = ({ children, placement = "right" }) => (
   <span
     role="tooltip"
-    className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-[#1a1526] px-2.5 py-1.5 text-xs text-white/90 opacity-0 shadow-xl transition-opacity group-hover:opacity-100"
+    className={`pointer-events-none absolute z-50 whitespace-nowrap rounded-lg border border-white/10 bg-[#1a1526] px-2.5 py-1.5 text-xs text-white/90 opacity-0 shadow-xl transition-opacity group-hover:opacity-100 ${
+      placement === "bottom-end" ? "top-full right-0 mt-1.5" : "left-full top-1/2 ml-2 -translate-y-1/2"
+    }`}
   >
     {children}
   </span>

@@ -75,23 +75,32 @@ const STARTERS = {
 
 const PHASE_LABEL = { probe: "Probing", hint: "Hint", challenge: "Challenge", consolidate: "Consolidating" };
 
+// Small caps label above each tutor reply. Deliberately not the global `.overline`
+// class: that is declared after Tailwind's utilities and hard-codes its own size and
+// colour, so it can't be tuned for this surface.
+const MetaLabel = ({ children }) => (
+  <div className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-[color:var(--soc-accent)]">
+    {children}
+  </div>
+);
+
 const Bubble = ({ turn, tutorName }) => {
   const mine = turn.role === "student";
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`} data-testid={`socratic-turn-${turn.role}`}>
       <div
-        className={`max-w-[88%] rounded-2xl px-4 py-3 text-base leading-relaxed whitespace-pre-wrap break-words ${
+        className={`max-w-[88%] rounded-2xl px-4 py-3 text-[17px] leading-[1.6] whitespace-pre-wrap break-words ${
           mine
-            ? "bg-[#00f0ff]/12 border border-[#00f0ff]/25 text-white"
-            : "bg-white/[0.04] border border-white/10 text-white/85"
+            ? "bg-[color:var(--soc-accent-soft)] border border-[color:var(--soc-accent)]/25 text-[color:var(--soc-ink)]"
+            : "bg-[color:var(--soc-raised)] border border-[color:var(--soc-line)] text-[color:var(--soc-ink)] shadow-[0_1px_2px_rgba(59,47,26,0.05)]"
         }`}
       >
         {!mine && (
-          <div className="overline text-[#8a2be2] mb-1.5">
+          <MetaLabel>
             {tutorName}
             {turn.phase && ` · ${PHASE_LABEL[turn.phase] || turn.phase}`}
             {turn.hint_level > 0 && ` · hint ${turn.hint_level}`}
-          </div>
+          </MetaLabel>
         )}
         {turn.text}
       </div>
@@ -103,7 +112,7 @@ const Bubble = ({ turn, tutorName }) => {
 // side of the player collapses -- the tutor stays one click away instead of disappearing.
 const CollapsedRail = ({ onExpand, unavailable }) => (
   <aside
-    className="w-[56px] shrink-0 border-l border-white/8 bg-[#0a0514]/80 backdrop-blur-xl flex flex-col items-center py-4 gap-3"
+    className="socratic-surface w-[56px] shrink-0 border-l border-[color:var(--soc-line)] flex flex-col items-center py-4 gap-3"
     data-testid="socratic-rail"
   >
     <button
@@ -112,13 +121,13 @@ const CollapsedRail = ({ onExpand, unavailable }) => (
       disabled={unavailable}
       data-testid="socratic-expand"
       title="Socratic tutor"
-      className="group relative h-10 w-10 grid place-items-center rounded-xl border border-[#8a2be2]/40 bg-[#8a2be2]/10 text-[#c9a3ff] hover:border-[#8a2be2] hover:text-white transition-colors disabled:opacity-30"
+      className="group relative h-10 w-10 grid place-items-center rounded-xl border border-[color:var(--soc-accent)]/35 bg-[color:var(--soc-accent-soft)] text-[color:var(--soc-accent)] hover:border-[color:var(--soc-accent)] transition-colors disabled:opacity-30"
     >
-      <Sparkles size={17} />
+      <Sparkles size={18} />
       <RailTooltip>Socratic tutor</RailTooltip>
     </button>
     <div className="flex-1" />
-    <ChevronLeft size={14} className="text-white/25" />
+    <ChevronLeft size={14} className="text-[color:var(--soc-ink-faint)]" />
   </aside>
 );
 
@@ -222,8 +231,8 @@ const SocraticPanel = ({ contentId, contentType, language, collapsed, onToggle, 
     // From lg up it becomes a real third column, as in the course-player layout.
     <aside
       style={{ width }}
-      className={`absolute inset-y-0 right-0 z-40 shadow-2xl lg:static lg:z-auto lg:shadow-none shrink-0 border-l bg-[#0a0514]/95 lg:bg-[#0a0514]/85 backdrop-blur-xl flex flex-col ${
-        dragging ? "border-[#8a2be2] select-none" : "border-white/8"
+      className={`socratic-surface absolute inset-y-0 right-0 z-40 shadow-2xl lg:static lg:z-auto lg:shadow-none shrink-0 border-l flex flex-col ${
+        dragging ? "border-[color:var(--soc-accent)] select-none" : "border-[color:var(--soc-line)]"
       }`}
       data-testid="socratic-panel"
     >
@@ -241,21 +250,21 @@ const SocraticPanel = ({ contentId, contentType, language, collapsed, onToggle, 
         className="group absolute left-0 inset-y-0 w-1.5 -ml-0.5 cursor-col-resize z-50 focus:outline-none"
       >
         <div
-          className={`h-full w-px mx-auto transition-colors group-hover:bg-[#8a2be2] group-focus:bg-[#8a2be2] ${
-            dragging ? "bg-[#8a2be2]" : "bg-transparent"
+          className={`h-full w-px mx-auto transition-colors group-hover:bg-[color:var(--soc-accent)] group-focus:bg-[color:var(--soc-accent)] ${
+            dragging ? "bg-[color:var(--soc-accent)]" : "bg-transparent"
           }`}
         />
       </div>
 
-      <div className="shrink-0 border-b border-white/8 px-4 py-3 flex items-center gap-2">
-        <div className="h-8 w-8 shrink-0 grid place-items-center rounded-lg bg-[#8a2be2]/15 border border-[#8a2be2]/35">
-          <Sparkles size={15} className="text-[#c9a3ff]" />
+      <div className="shrink-0 border-b border-[color:var(--soc-line)] bg-[color:var(--soc-header)] px-4 py-3.5 flex items-center gap-2.5">
+        <div className="h-9 w-9 shrink-0 grid place-items-center rounded-lg bg-[color:var(--soc-accent-soft)] border border-[color:var(--soc-accent)]/30">
+          <Sparkles size={17} className="text-[color:var(--soc-accent)]" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-display text-base text-white leading-tight truncate" data-testid="socratic-title">
+          <div className="font-display text-[17px] font-semibold text-[color:var(--soc-ink)] leading-tight truncate" data-testid="socratic-title">
             {tutorName ? `${tutorName} ${t("socratic_tutor_suffix")}` : t("socratic_tutor")}
           </div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-[#8a2be2]">{t("premium_label")}</div>
+          <div className="text-[11.5px] font-semibold uppercase tracking-[0.16em] text-[color:var(--soc-accent)]">{t("premium_label")}</div>
         </div>
         <button
           type="button"
@@ -263,44 +272,44 @@ const SocraticPanel = ({ contentId, contentType, language, collapsed, onToggle, 
           disabled={status !== "ready" || resetting || !turns.length}
           data-testid="socratic-new-chat"
           title={t("socratic_new_chat")}
-          className="group relative rounded-lg p-1.5 text-white/50 hover:text-[#00f0ff] transition-colors disabled:opacity-30"
+          className="group relative rounded-lg p-2 text-[color:var(--soc-ink-soft)] hover:bg-black/[0.05] hover:text-[color:var(--soc-accent)] transition-colors disabled:opacity-25"
         >
-          <Plus size={16} />
-          <RailTooltip>{t("socratic_new_chat")}</RailTooltip>
+          <Plus size={18} />
+          <RailTooltip placement="bottom-end">{t("socratic_new_chat")}</RailTooltip>
         </button>
         <button
           type="button"
           onClick={onToggle}
           data-testid="socratic-collapse"
           title={t("socratic_collapse")}
-          className="group relative rounded-lg p-1.5 text-white/50 hover:text-white transition-colors"
+          className="group relative rounded-lg p-2 text-[color:var(--soc-ink-soft)] hover:bg-black/[0.05] hover:text-[color:var(--soc-ink)] transition-colors"
         >
-          <PanelRightClose size={16} />
-          <RailTooltip>{t("socratic_collapse")}</RailTooltip>
+          <PanelRightClose size={18} />
+          <RailTooltip placement="bottom-end">{t("socratic_collapse")}</RailTooltip>
         </button>
       </div>
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3">
-        {status === "loading" && <div className="text-base text-white/40">Loading…</div>}
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-5 space-y-3.5">
+        {status === "loading" && <div className="text-[17px] text-[color:var(--soc-ink-faint)]">Loading…</div>}
 
         {status === "unavailable" && (
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-[15px] leading-relaxed text-white/60" data-testid="socratic-unavailable">
+          <div className="rounded-xl border border-[color:var(--soc-line)] bg-[color:var(--soc-raised)] p-4 text-[16px] leading-[1.6] text-[color:var(--soc-ink-soft)]" data-testid="socratic-unavailable">
             {reason}
           </div>
         )}
 
         {status === "ready" && turns.length === 0 && (
           <div data-testid="socratic-greeting">
-            <div className="font-display text-2xl tracking-tight text-[#c9a3ff]">
+            <div className="font-display text-[26px] font-semibold tracking-tight text-[color:var(--soc-accent)]">
               {t("socratic_hi")} {user?.name?.split(" ")[0] || ""}.
             </div>
-            <div className="font-display text-2xl tracking-tight text-white mb-5">{t("socratic_how_help")}</div>
+            <div className="font-display text-[26px] font-semibold tracking-tight text-[color:var(--soc-ink)] mb-5">{t("socratic_how_help")}</div>
 
             {/* The tutor's opening line is rendered here rather than generated: it costs
                 nothing, appears instantly, and never varies in quality. It introduces the
                 tutor by name and sets the expectation that it won't hand over answers. */}
-            <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-base leading-relaxed text-white/85">
-              <div className="overline text-[#8a2be2] mb-1.5">{tutorName}</div>
+            <div className="mb-5 rounded-2xl border border-[color:var(--soc-line)] bg-[color:var(--soc-raised)] px-4 py-3.5 text-[17px] leading-[1.6] text-[color:var(--soc-ink)] shadow-[0_1px_2px_rgba(59,47,26,0.05)]">
+              <MetaLabel>{tutorName}</MetaLabel>
               {t("socratic_intro")
                 .replace("{name}", tutorName)
                 .replace("{lesson}", session?.content_title || t("socratic_this_lesson"))}
@@ -313,9 +322,9 @@ const SocraticPanel = ({ contentId, contentType, language, collapsed, onToggle, 
                   type="button"
                   onClick={() => send(s)}
                   data-testid="socratic-starter"
-                  className="w-full text-left rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3.5 text-[15px] leading-snug text-white/80 hover:border-[#8a2be2]/50 hover:text-white transition-colors flex items-center gap-2.5"
+                  className="w-full text-left rounded-xl border border-[color:var(--soc-line)] bg-[color:var(--soc-raised)] px-4 py-3.5 text-[16px] leading-snug text-[color:var(--soc-ink)] hover:border-[color:var(--soc-accent)]/45 hover:bg-[color:var(--soc-accent-soft)] transition-colors flex items-center gap-3"
                 >
-                  <Sparkles size={13} className="shrink-0 text-[#8a2be2]" />
+                  <Sparkles size={15} className="shrink-0 text-[color:var(--soc-accent)]" />
                   {s}
                 </button>
               ))}
@@ -327,19 +336,19 @@ const SocraticPanel = ({ contentId, contentType, language, collapsed, onToggle, 
 
         {sending && (
           <div className="flex justify-start" data-testid="socratic-thinking">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-base text-white/50 flex items-center gap-2">
-              <Loader2 size={13} className="animate-spin" /> {t("socratic_thinking")}
+            <div className="rounded-2xl border border-[color:var(--soc-line)] bg-[color:var(--soc-raised)] px-4 py-3 text-[17px] text-[color:var(--soc-ink-soft)] flex items-center gap-2">
+              <Loader2 size={15} className="animate-spin" /> {t("socratic_thinking")}
             </div>
           </div>
         )}
 
         {session?.mastered && (
-          <div className="rounded-xl border border-[#00f0ff]/30 bg-[#00f0ff]/8 p-3.5 text-[15px] leading-relaxed text-[#00f0ff] flex items-start gap-2" data-testid="socratic-mastered">
-            <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
+          <div className="rounded-xl border border-[color:var(--soc-success)]/30 bg-[color:var(--soc-success)]/[0.08] p-4 text-[16px] leading-[1.6] text-[color:var(--soc-success)] flex items-start gap-2.5" data-testid="socratic-mastered">
+            <CheckCircle2 size={17} className="mt-0.5 shrink-0" />
             <div>
               {t("socratic_mastered")}
               {session.concepts_covered?.length > 0 && (
-                <div className="mt-1.5 text-[13px] text-white/60">{session.concepts_covered.join(" · ")}</div>
+                <div className="mt-1.5 text-[14px] text-[color:var(--soc-ink-soft)]">{session.concepts_covered.join(" · ")}</div>
               )}
             </div>
           </div>
@@ -347,9 +356,9 @@ const SocraticPanel = ({ contentId, contentType, language, collapsed, onToggle, 
       </div>
 
       {status === "ready" && (
-        <div className="shrink-0 border-t border-white/8 p-3 space-y-2">
+        <div className="shrink-0 border-t border-[color:var(--soc-line)] bg-[color:var(--soc-header)] p-3.5 space-y-2.5">
           {(atTurnLimit || atDailyLimit) && (
-            <div className="rounded-lg border border-[#ff0055]/30 bg-[#ff0055]/8 px-3 py-2.5 text-[13px] leading-relaxed text-[#ff8fb0]" data-testid="socratic-limit">
+            <div className="rounded-lg border border-[color:var(--soc-danger)]/30 bg-[color:var(--soc-danger)]/[0.07] px-3.5 py-2.5 text-[14px] leading-[1.55] text-[color:var(--soc-danger)]" data-testid="socratic-limit">
               {atDailyLimit ? t("socratic_daily_limit") : t("socratic_turn_limit")}
             </div>
           )}
@@ -364,16 +373,16 @@ const SocraticPanel = ({ contentId, contentType, language, collapsed, onToggle, 
               placeholder={t("socratic_placeholder")}
               disabled={sending || atTurnLimit || atDailyLimit}
               data-testid="socratic-input"
-              className="flex-1 resize-none rounded-xl border border-white/10 bg-black/40 px-3.5 py-3 text-base leading-relaxed text-white placeholder:text-white/35 focus:border-[#8a2be2] outline-none max-h-40 disabled:opacity-50"
+              className="flex-1 resize-none rounded-xl border border-[color:var(--soc-line-strong)] bg-[color:var(--soc-raised)] px-4 py-3 text-[17px] leading-[1.5] text-[color:var(--soc-ink)] focus:border-[color:var(--soc-accent)] outline-none max-h-40 disabled:opacity-50"
             />
             <button
               type="button"
               onClick={() => send()}
               disabled={sending || !draft.trim() || atTurnLimit || atDailyLimit}
               data-testid="socratic-send"
-              className="shrink-0 h-10 w-10 grid place-items-center rounded-xl bg-[#8a2be2] text-white hover:bg-[#a04dff] transition-colors disabled:opacity-30"
+              className="shrink-0 h-11 w-11 grid place-items-center rounded-xl bg-[color:var(--soc-accent)] text-white hover:bg-[#5b21b6] transition-colors disabled:opacity-25"
             >
-              <Send size={15} />
+              <Send size={17} />
             </button>
           </div>
 
@@ -383,19 +392,19 @@ const SocraticPanel = ({ contentId, contentType, language, collapsed, onToggle, 
               onClick={() => send(t("socratic_stuck_msg"), true)}
               disabled={sending || !turns.length || atTurnLimit || atDailyLimit}
               data-testid="socratic-hint"
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3.5 py-2 text-[13px] text-white/60 hover:border-[#ffb300]/50 hover:text-[#ffb300] transition-colors disabled:opacity-30"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--soc-line-strong)] bg-[color:var(--soc-raised)] px-4 py-2 text-[14px] text-[color:var(--soc-ink-soft)] hover:border-[color:var(--soc-warn)]/60 hover:text-[color:var(--soc-warn)] transition-colors disabled:opacity-35"
             >
-              <Lightbulb size={12} /> {t("socratic_stuck")}
+              <Lightbulb size={14} /> {t("socratic_stuck")}
               {session?.hint_level > 0 && ` (${session.hint_level}/3)`}
             </button>
-            <span className="text-[11px] text-white/35 font-mono">
+            <span className="text-[12px] text-[color:var(--soc-ink-faint)] font-mono">
               {session?.messages_used_today ?? 0}/{session?.daily_message_cap ?? 0}
             </span>
           </div>
 
           {/* Two things a minor is owed up front: that this is a machine, and that an
               adult can read it. Neither should be buried in a settings page. */}
-          <p className="text-[11px] leading-relaxed text-white/35">{t("socratic_disclaimer")}</p>
+          <p className="text-[12px] leading-[1.55] text-[color:var(--soc-ink-faint)]">{t("socratic_disclaimer")}</p>
         </div>
       )}
     </aside>
