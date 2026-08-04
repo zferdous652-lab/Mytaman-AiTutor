@@ -173,7 +173,7 @@ change the data model:
      already have a student account).
    - Option B: parent creates the child account directly from the parent
      portal (parent enters child's name/email/password).
-   - Option C: admin does the linking manually (fits the "MYTAMAN Staff"
+   - Option C: admin does the linking manually (fits the "Lv99.ai Staff"
      admin persona from the PRD, but adds admin workload).
 2. **One child or many per parent?** The PRD says "their child" (singular) but
    real households often have multiple kids — decide now, it changes whether

@@ -28,7 +28,7 @@ const Shell = ({ children }) => (
       <div className="flex items-center justify-between mb-8">
         <Link to="/" className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2]" />
-          <div className="font-display font-semibold text-white">MYTAMAN AI TUTOR</div>
+          <div className="font-display font-semibold text-white">Lv99.ai</div>
         </Link>
         <LanguageToggle testId="connect-lang" />
       </div>
@@ -234,7 +234,7 @@ const ConnectChild = () => {
         <div className="text-center">
           <div className="text-4xl">🎉</div>
           <h1 className="font-display text-2xl lg:text-3xl tracking-tighter text-white mt-4">
-            {preview.student_name} has started learning on MYTAMAN!
+            {preview.student_name} has started learning on Lv99.ai!
           </h1>
           <p className="text-sm text-white/60 mt-3 leading-relaxed">
             Join as a Parent to follow their learning journey and support their academic growth.
@@ -249,7 +249,7 @@ const ConnectChild = () => {
             className="mt-8 rounded-xl border border-amber-400/30 bg-amber-400/5 p-4 text-sm text-white/70 leading-relaxed"
             data-testid="connect-email-conflict"
           >
-            <span className="text-white">{preview.parent_email}</span> is already registered on MYTAMAN,
+            <span className="text-white">{preview.parent_email}</span> is already registered on Lv99.ai,
             but not as a parent account — so it can't be used to connect. Ask {preview.student_name} to
             resend the invitation to a different email address from their portal.
           </div>

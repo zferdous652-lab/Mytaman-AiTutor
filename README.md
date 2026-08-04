@@ -1,4 +1,4 @@
-# MYTAMAN AI Tutor
+# Lv99.ai
 
 An AI-powered e-learning platform for the Malaysian secondary curriculum (KSSM), built around **Tutor Packs** — bundles of courses and chapters that carry AI-generated or manually authored study content (summaries, quizzes, flashcards, mind maps, and notes) to students, with progress visibility for parents.
 

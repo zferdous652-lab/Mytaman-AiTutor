@@ -1,4 +1,4 @@
-"""MYTAMAN AI Tutor — FastAPI backend."""
+"""Lv99.ai — FastAPI backend."""
 import os
 import logging
 from pathlib import Path
@@ -41,13 +41,13 @@ async def lifespan(app: FastAPI):
     client.close()
 
 
-app = FastAPI(title="MYTAMAN AI Tutor", lifespan=lifespan)
+app = FastAPI(title="Lv99.ai", lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
 
 
 @api_router.get("/")
 async def root():
-    return {"message": "MYTAMAN AI Tutor API", "time": datetime.now(timezone.utc).isoformat()}
+    return {"message": "Lv99.ai API", "time": datetime.now(timezone.utc).isoformat()}
 
 
 # Attach shared db onto app.state for sub-routers

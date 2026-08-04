@@ -192,7 +192,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
           <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2] shrink-0" />
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <div className="font-display font-semibold text-white leading-tight truncate">MYTAMAN</div>
+              <div className="font-display font-semibold text-white leading-tight truncate">Lv99.ai</div>
               <div className="text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">Course navigator</div>
             </div>
           )}

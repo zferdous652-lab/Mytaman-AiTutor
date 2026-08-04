@@ -1,17 +1,17 @@
 services:
   mongo:
     image: mongo:7
-    container_name: mytaman-mongo
+    container_name: lv99-mongo
     restart: unless-stopped
     volumes:
       - mongo_data:/data/db
     networks:
-      - mytaman
+      - lv99
 
   backend:
     build:
       context: ./backend
-    container_name: mytaman-backend
+    container_name: lv99-backend
     restart: unless-stopped
     depends_on:
       - mongo
@@ -29,7 +29,7 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-MYTAMAN AI Tutor <no-reply@mytaman.ai>}
+      SMTP_FROM: ${SMTP_FROM:-Lv99.ai <no-reply@mytaman.ai>}
       SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
       # Optional deploy-time fallback keys, used only when no key is saved in the Model
@@ -40,7 +40,7 @@ services:
     volumes:
       - backend_uploads:/app/uploads
     networks:
-      - mytaman
+      - lv99
 
   frontend:
     build:
@@ -48,17 +48,17 @@ services:
       args:
         # Empty -> API calls resolve as /api/... and nginx proxies to backend.
         REACT_APP_BACKEND_URL: ""
-    container_name: mytaman-frontend
+    container_name: lv99-frontend
     restart: unless-stopped
     depends_on:
       - backend
     ports:
       - "${APP_PORT:-3000}:80"
     networks:
-      - mytaman
+      - lv99
 
 networks:
-  mytaman:
+  lv99:
     driver: bridge
 
 volumes:

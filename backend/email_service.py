@@ -16,7 +16,7 @@ SMTP_HOST = os.environ.get("SMTP_HOST")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
-SMTP_FROM = os.environ.get("SMTP_FROM", "MYTAMAN AI Tutor <no-reply@mytaman.ai>")
+SMTP_FROM = os.environ.get("SMTP_FROM", "Lv99.ai <no-reply@mytaman.ai>")
 SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "true").lower() != "false"
 
 # Where the emailed links point. Must be the address a parent's browser can reach --
@@ -66,7 +66,7 @@ def send_parent_invite_email(parent_email: str, student_name: str, token: str) -
     link = f"{APP_BASE_URL}/connect-child?token={token}"
     body = (
         f"Hi,\n\n"
-        f"Great news -- {student_name} has started learning on MYTAMAN AI Tutor!\n\n"
+        f"Great news -- {student_name} has started learning on Lv99.ai!\n\n"
         f"They listed you as their parent or guardian. Join as a Parent to follow their "
         f"learning journey and support their academic growth. Creating an account only "
         f"takes a minute.\n\n"
@@ -78,16 +78,16 @@ def send_parent_invite_email(parent_email: str, student_name: str, token: str) -
         f"  * Support their academic growth with what actually helps\n\n"
         f"Create your Parent account and connect with {student_name}:\n\n"
         f"    {link}\n\n"
-        f"Already have a MYTAMAN parent account? The same link will connect "
+        f"Already have a Lv99.ai parent account? The same link will connect "
         f"{student_name} to it.\n\n"
         f"This invitation expires in 30 days. {student_name} can send you a fresh one "
         f"from their portal at any time.\n\n"
         f"If you weren't expecting this, you can safely ignore this email -- nothing "
         f"will be shared with you unless you accept.\n\n"
-        f"-- MYTAMAN AI Tutor"
+        f"-- Lv99.ai"
     )
     return send_email(
         parent_email,
-        f"{student_name} has started learning on MYTAMAN -- join them!",
+        f"{student_name} has started learning on Lv99.ai -- join them!",
         body,
     )

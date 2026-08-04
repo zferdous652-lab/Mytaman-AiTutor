@@ -1,4 +1,4 @@
-# MYTAMAN AI Tutor — PRD
+# Lv99.ai — PRD
 
 ## Original problem statement
 User uploaded `MYTAMAN AI Tutor_concept_draft_v2.docx` and asked to "start building the website following the MVP." The document describes an AI-powered e-learning platform for Malaysian secondary curriculum (KSSM) with three roles (Admin / Parent / Student), a Tutor Pack tier system (Basic / Premium / X-Points), and a Model Router that manages multiple AI providers with failover, editable system prompts, and encrypted key storage.
@@ -11,7 +11,7 @@ User uploaded `MYTAMAN AI Tutor_concept_draft_v2.docx` and asked to "start build
 - **Language**: EN + BM toggle from day 1
 
 ## User personas
-- **Admin (MYTAMAN Staff)** — creates Tutor Packs, generates AI content, configures the Model Router, monitors ops.
+- **Admin (Lv99.ai Staff)** — creates Tutor Packs, generates AI content, configures the Model Router, monitors ops.
 - **Parent (Guardian)** — selects Tutor Packs for their child, monitors progress.
 - **Student (Learner)** — enrolls into packs, consumes published summaries / quizzes / flashcards / notes / mind maps.
 

@@ -1,4 +1,4 @@
-"""MYTAMAN AI Tutor — Backend regression tests (pytest)
+"""Lv99.ai — Backend regression tests (pytest)
 
 Covers:
 - Auth (register, login, /me, role gating)
@@ -53,7 +53,7 @@ class TestHealth:
         r = requests.get(f"{API}/", timeout=10)
         assert r.status_code == 200
         data = r.json()
-        assert "MYTAMAN" in data["message"]
+        assert "Lv99.ai" in data["message"]
 
 
 # ---------- Auth ----------
