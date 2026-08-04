@@ -4,10 +4,13 @@ import { motion } from "framer-motion";
 import { Sparkles, Cpu, Languages, LineChart, Shield, User, GraduationCap } from "lucide-react";
 import HeroScene from "@/components/HeroScene";
 import LandingNav from "@/components/LandingNav";
+import TiltCard from "@/components/TiltCard";
+import { Reveal, StatStrip, PipelineSection, ProgressionSection, MascotSlot } from "@/components/LandingSections";
 import { useLang } from "@/context/LangContext";
 
 const RoleCard = ({ to, label, tag, icon: Icon, image, testId }) => (
-  <Link to={to} data-testid={testId} className="group relative overflow-hidden rounded-2xl border border-white/10 bg-[#0a0514]/60 hover:border-[#00f0ff]/50 transition-colors">
+  <TiltCard intensity={9} className="rounded-2xl">
+  <Link to={to} data-testid={testId} className="group relative block overflow-hidden rounded-2xl border border-white/10 bg-[#0a0514]/60 hover:border-[#00f0ff]/50 transition-colors">
     <div className="absolute inset-0 opacity-30 group-hover:opacity-40 transition-opacity">
       <img src={image} alt="" className="w-full h-full object-cover" />
       <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/70 to-transparent" />
@@ -24,6 +27,7 @@ const RoleCard = ({ to, label, tag, icon: Icon, image, testId }) => (
       </div>
     </div>
   </Link>
+  </TiltCard>
 );
 
 const Feature = ({ i, title, body, icon: Icon }) => (
@@ -32,14 +36,15 @@ const Feature = ({ i, title, body, icon: Icon }) => (
     whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true, margin: "-80px" }}
     transition={{ delay: i * 0.05 }}
-    className="relative rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6 hover:border-[#00f0ff]/40 transition-colors"
     data-testid={`feature-${i}`}
   >
+    <TiltCard intensity={8} className="h-full rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6 hover:border-[#00f0ff]/40 transition-colors">
     <div className="mb-4 h-10 w-10 grid place-items-center rounded-lg bg-[#00f0ff]/10 border border-[#00f0ff]/30 text-[#00f0ff]">
       <Icon size={18} />
     </div>
     <div className="font-display text-lg text-white tracking-tight">{title}</div>
     <p className="mt-2 text-sm text-white/60 leading-relaxed">{body}</p>
+    </TiltCard>
   </motion.div>
 );
 
@@ -84,6 +89,14 @@ const Landing = () => {
           </div>
         </div>
       </section>
+
+      <StatStrip t={t} />
+
+      {/* HOW IT WORKS / UNDER THE HOOD */}
+      <PipelineSection t={t} />
+
+      {/* GAMIFICATION */}
+      <ProgressionSection t={t} />
 
       {/* ROLE CARDS */}
       <section className="relative mx-auto max-w-7xl px-6 py-24">
@@ -152,6 +165,9 @@ const Landing = () => {
           </div>
         </div>
       </section>
+
+      {/* RESERVED FOR COMMISSIONED 3D ART — see LANDING_ASSETS.md */}
+      <MascotSlot t={t} />
 
       {/* CONTACT */}
       <section id="contact" className="relative mx-auto max-w-7xl px-6 py-24">

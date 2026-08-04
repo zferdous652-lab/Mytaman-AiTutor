@@ -34,6 +34,48 @@ const dict = {
     contact_body: "Reach the team for partnerships, school pilots, or enterprise licensing.",
     email: "Email",
     footer: "© Lv99.ai. Built with adaptive AI.",
+
+    // --- Landing: stats, pipeline, progression, asset slot ---
+    stat_types: "content types generated per chapter",
+    stat_langs: "languages, generated side by side",
+    stat_providers: "AI providers with automatic failover",
+    stat_levels: "levels to climb, from Lv1 to Lv99",
+
+    under_hood: "Under the hood",
+    under_hood_title_1: "Engineered for how students",
+    under_hood_title_2: "actually learn",
+    under_hood_sub:
+      "Not a chatbot bolted onto a textbook. Every layer is built around one chapter at a time, in the language the student thinks in.",
+    uh1_title: "Multi-provider Model Router",
+    uh1_body:
+      "OpenAI, Anthropic and Gemini behind one router, with automatic failover and per-provider rate limits — so a lesson still generates when a provider is slow or down.",
+    uh2_title: "Bilingual by construction",
+    uh2_body:
+      "Every lesson is produced in Bahasa Melayu and English and aligned line for line, so a student can read either language — or both at once — without losing their place.",
+    uh3_title: "A tutor that asks before it answers",
+    uh3_body:
+      "The Socratic tutor leads with questions and escalates hints only as far as a student actually needs, so understanding is earned rather than handed over.",
+    uh4_title: "Grounded in your curriculum",
+    uh4_body:
+      "Summaries, quizzes, flashcards, mind maps and notes are generated from your own KSSM chapter material — not scraped from the open web.",
+
+    progression: "Progression",
+    progression_title: "Learning, leveled up.",
+    progression_body:
+      "Every lesson earns XP and every day you return compounds your streak. Missions, mystery chests and a season pass turn revision into a run worth finishing — all the way to Lv99.",
+    g_xp: "XP for every lesson & quiz",
+    g_streak: "Daily streaks that compound",
+    g_missions: "Weekly missions & challenges",
+    g_season: "Season pass rewards",
+    g_level: "Level",
+    g_xp_earned: "XP earned",
+    g_chest: "Mystery chest",
+    g_spin: "Lucky spin",
+    g_badge: "Achievements",
+
+    mascot_title: "Your AI study companion, arriving soon",
+    mascot_body:
+      "This space is reserved for the Lv99 companion — an animated 3D character that reacts as you learn. The layout, lighting and motion are already in place, waiting on the artwork.",
     // auth
     email_ph: "you@school.edu",
     password: "Password",
@@ -139,6 +181,48 @@ const dict = {
     contact_body: "Hubungi kami untuk kerjasama, uji-jalan sekolah, atau lesen enterprise.",
     email: "Emel",
     footer: "© Lv99.ai. Dibina dengan AI adaptif.",
+
+    // --- Landing: stats, pipeline, progression, asset slot ---
+    stat_types: "jenis kandungan dijana bagi setiap bab",
+    stat_langs: "bahasa, dijana seiring",
+    stat_providers: "penyedia AI dengan failover automatik",
+    stat_levels: "tahap untuk didaki, dari Lv1 ke Lv99",
+
+    under_hood: "Di sebalik tabir",
+    under_hood_title_1: "Direka untuk cara pelajar",
+    under_hood_title_2: "benar-benar belajar",
+    under_hood_sub:
+      "Bukan sekadar chatbot yang dicantum pada buku teks. Setiap lapisan dibina mengelilingi satu bab pada satu masa, dalam bahasa yang difikirkan pelajar.",
+    uh1_title: "Model Router pelbagai penyedia",
+    uh1_body:
+      "OpenAI, Anthropic dan Gemini di sebalik satu router, dengan failover automatik dan had kadar bagi setiap penyedia — jadi pelajaran tetap dijana walaupun satu penyedia perlahan atau tergendala.",
+    uh2_title: "Dwibahasa secara reka bentuk",
+    uh2_body:
+      "Setiap pelajaran dihasilkan dalam Bahasa Melayu dan Inggeris serta diselaraskan baris demi baris, supaya pelajar boleh membaca mana-mana bahasa — atau kedua-duanya sekali.",
+    uh3_title: "Tutor yang bertanya sebelum menjawab",
+    uh3_body:
+      "Tutor Socratic memimpin dengan soalan dan menaikkan bantuan hanya sejauh yang diperlukan pelajar, supaya kefahaman diperoleh sendiri dan bukan sekadar diberi.",
+    uh4_title: "Berteraskan kurikulum anda",
+    uh4_body:
+      "Ringkasan, kuiz, kad imbas, peta minda dan nota dijana daripada bahan bab KSSM anda sendiri — bukan diambil dari internet terbuka.",
+
+    progression: "Perkembangan",
+    progression_title: "Pembelajaran, dinaik taraf.",
+    progression_body:
+      "Setiap pelajaran memberi XP dan setiap hari anda kembali menambah rentetan anda. Misi, peti misteri dan pas musim menjadikan ulang kaji satu perjalanan yang berbaloi dihabiskan — sehingga ke Lv99.",
+    g_xp: "XP bagi setiap pelajaran & kuiz",
+    g_streak: "Rentetan harian yang terkumpul",
+    g_missions: "Misi & cabaran mingguan",
+    g_season: "Ganjaran pas musim",
+    g_level: "Tahap",
+    g_xp_earned: "XP diperoleh",
+    g_chest: "Peti misteri",
+    g_spin: "Putaran bertuah",
+    g_badge: "Pencapaian",
+
+    mascot_title: "Rakan belajar AI anda, akan tiba tidak lama lagi",
+    mascot_body:
+      "Ruang ini dikhaskan untuk rakan Lv99 — watak 3D beranimasi yang bertindak balas semasa anda belajar. Susun atur, pencahayaan dan pergerakan sudah sedia, menunggu karya seninya.",
     email_ph: "anda@sekolah.edu",
     password: "Kata laluan",
     name: "Nama penuh",
