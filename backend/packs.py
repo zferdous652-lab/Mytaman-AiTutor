@@ -173,11 +173,40 @@ class EnrollIn(BaseModel):
     pack_id: str
 
 
+async def switch_enrollment(user_id: str, pack_id: str) -> List[str]:
+    """Enforces one active Tutor Pack per student: enrolling in a pack drops every other
+    enrolment that student holds. Returns the pack ids that were dropped.
+
+    Only the enrolment row is removed. Progress, quiz results, XP events and tutor
+    transcripts for the dropped pack are all left in place -- they are a record of work
+    the student actually did, XP feeds a global level and streak that must not fall when
+    they change pack, and re-enrolling restores the lot. Losing access is reversible;
+    deleting the history would not be.
+
+    Shared with the parent portal's enrol-a-child route, so the rule can't be sidestepped
+    by enrolling from the other side.
+    """
+    previous = await db.enrollments.find(
+        {"user_id": user_id, "pack_id": {"$ne": pack_id}}, {"_id": 0, "pack_id": 1}
+    ).to_list(500)
+    if previous:
+        await db.enrollments.delete_many({"user_id": user_id, "pack_id": {"$ne": pack_id}})
+    return [p["pack_id"] for p in previous]
+
+
 @router.post("/enroll")
 async def enroll(payload: EnrollIn, user: dict = Depends(get_current_user)):
+    pack = await db.packs.find_one({"id": payload.pack_id}, {"_id": 0, "id": 1})
+    if not pack:
+        raise HTTPException(status_code=404, detail="Tutor Pack not found")
+
     exists = await db.enrollments.find_one({"user_id": user["id"], "pack_id": payload.pack_id})
+    # Runs even when already enrolled, so a student holding two packs from before this
+    # rule existed is collapsed to one rather than staying stuck outside it.
+    replaced = await switch_enrollment(user["id"], payload.pack_id)
     if exists:
-        return {"ok": True, "already": True}
+        return {"ok": True, "already": True, "replaced_pack_ids": replaced}
+
     await db.enrollments.insert_one({
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
@@ -185,7 +214,7 @@ async def enroll(payload: EnrollIn, user: dict = Depends(get_current_user)):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "progress": 0,
     })
-    return {"ok": True}
+    return {"ok": True, "replaced_pack_ids": replaced}
 
 
 @router.get("/mine", response_model=List[PackOut])

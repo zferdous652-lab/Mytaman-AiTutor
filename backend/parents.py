@@ -351,7 +351,13 @@ async def reset_child_password(student_id: str, payload: ResetChildPasswordIn,
 
 
 async def _enroll(student_id: str, pack_id: str) -> bool:
-    if await db.enrollments.find_one({"user_id": student_id, "pack_id": pack_id}):
+    """Same one-pack-at-a-time rule as the student's own Browse & Enrol page -- a parent
+    putting their child on a new pack moves them, it doesn't stack a second one."""
+    from packs import switch_enrollment  # local import: packs imports nothing from here
+
+    already = await db.enrollments.find_one({"user_id": student_id, "pack_id": pack_id})
+    await switch_enrollment(student_id, pack_id)
+    if already:
         return False
     await db.enrollments.insert_one({
         "id": str(uuid.uuid4()),
