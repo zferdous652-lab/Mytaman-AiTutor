@@ -77,6 +77,20 @@ const HeroScene = () => {
           </Suspense>
         </CanvasBoundary>
       )}
+
+      {/* Vignette, over the canvas and under the copy. The first stop lifts a violet haze
+          behind the mesh; the second sinks the lower half back toward the page background
+          so the headline sits on near-solid ink instead of on moving wireframe. Without
+          this the mesh competes with the type wherever a bright strand crosses it. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(58% 48% at 50% 30%, rgba(139,92,246,0.16), transparent 70%)," +
+            "radial-gradient(85% 65% at 50% 108%, rgba(5,5,5,0.96), transparent 62%)",
+        }}
+      />
     </div>
   );
 };

@@ -1,79 +1,118 @@
-import React, { useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Float, Stars } from "@react-three/drei";
+import { Stars } from "@react-three/drei";
 import * as THREE from "three";
 
 /**
- * The WebGL hero: a wireframe "knowledge core" wrapped in orbiting rings and subject nodes,
- * drifting with the pointer.
+ * The WebGL hero: a shader-displaced wireframe sphere ("the knowledge mesh") with the five
+ * content types the app generates orbiting it.
  *
- * Loaded lazily by HeroScene so three.js stays out of the initial bundle — a landing page
- * that blocks first paint on a 600kb 3D library has already lost the visitor it was trying
- * to impress. Every animation here is also gated on `reduce`.
+ * The mesh is a WireframeGeometry icosahedron drawn as LineSegments, displaced along each
+ * vertex normal by a sum of sines in the vertex shader, and coloured by that displacement
+ * in the fragment shader. Additive blending with depthWrite off is what makes overlapping
+ * strands accumulate light instead of z-fighting into a flat cage.
+ *
+ * Lazy-loaded by HeroScene so three.js stays off the critical path, and every animation is
+ * gated on `reduce`.
  */
 
 const CYAN = "#00f0ff";
-const VIOLET = "#8a2be2";
-const MAGENTA = "#ff0055";
+const VIOLET = "#8b5cf6";
+const PINK = "#ff5ca8";
 
-// The five content types the app actually generates, orbiting the core.
+// The five content types generated per chapter, orbiting the mesh.
 const NODES = [
-  { label: "notes", color: CYAN, radius: 3.1, speed: 0.22, phase: 0 },
-  { label: "mindmap", color: VIOLET, radius: 3.6, speed: -0.17, phase: 1.2 },
-  { label: "summary", color: CYAN, radius: 2.7, speed: 0.29, phase: 2.4 },
-  { label: "flashcards", color: MAGENTA, radius: 3.9, speed: -0.13, phase: 3.6 },
-  { label: "quiz", color: VIOLET, radius: 3.3, speed: 0.19, phase: 4.8 },
+  { label: "notes", color: CYAN, radius: 3.15, speed: 0.20, phase: 0 },
+  { label: "mindmap", color: VIOLET, radius: 3.55, speed: -0.16, phase: 1.25 },
+  { label: "summary", color: CYAN, radius: 2.85, speed: 0.26, phase: 2.5 },
+  { label: "flashcards", color: PINK, radius: 3.85, speed: -0.12, phase: 3.75 },
+  { label: "quiz", color: VIOLET, radius: 3.35, speed: 0.18, phase: 5.0 },
 ];
 
-const KnowledgeCore = ({ reduce }) => {
-  const inner = useRef();
-  const outer = useRef();
+const vertexShader = /* glsl */ `
+  uniform float uTime;
+  varying float vMix;
 
-  useFrame((state, delta) => {
-    if (reduce) return;
-    if (inner.current) {
-      inner.current.rotation.y += delta * 0.12;
-      inner.current.rotation.x += delta * 0.05;
-      // Slow breathing pulse so the core reads as alive rather than a static prop.
-      const s = 1 + Math.sin(state.clock.elapsedTime * 0.8) * 0.04;
-      inner.current.scale.setScalar(s);
-    }
-    if (outer.current) {
-      outer.current.rotation.y -= delta * 0.06;
-      outer.current.rotation.z += delta * 0.03;
-    }
-  });
+  // Summed sines at different frequencies/directions -- cheaper than noise and, because the
+  // periods don't divide evenly, it never visibly loops.
+  float wob(vec3 p) {
+    return sin(p.x * 2.1 + uTime * 0.55) * 0.50
+         + sin(p.y * 2.7 - uTime * 0.42) * 0.42
+         + sin(p.z * 2.3 + uTime * 0.33) * 0.46;
+  }
 
-  return (
-    <group>
-      <mesh ref={outer}>
-        <icosahedronGeometry args={[2.15, 1]} />
-        <meshBasicMaterial color={VIOLET} wireframe transparent opacity={0.28} />
-      </mesh>
-      <mesh ref={inner}>
-        <icosahedronGeometry args={[1.5, 2]} />
-        <meshBasicMaterial color={CYAN} wireframe transparent opacity={0.55} />
-      </mesh>
-      {/* Solid inner glow so the wireframe reads as a shell around something. */}
-      <mesh>
-        <sphereGeometry args={[0.85, 32, 32]} />
-        <meshBasicMaterial color={CYAN} transparent opacity={0.13} />
-      </mesh>
-      <pointLight position={[0, 0, 0]} color={CYAN} intensity={12} distance={9} />
-    </group>
+  void main() {
+    vec3 n = normalize(position);
+    float d = wob(n * 1.55);
+    // Displace along the normal so the sphere breathes rather than shears.
+    vec3 p = position + n * d * 0.36;
+    vMix = clamp(d * 0.5 + 0.5, 0.0, 1.0);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  }
+`;
+
+const fragmentShader = /* glsl */ `
+  uniform vec3 uA;
+  uniform vec3 uB;
+  uniform vec3 uC;
+  varying float vMix;
+
+  void main() {
+    // Two-stop ramp through the brand triad, driven by how far this vertex was pushed out.
+    vec3 c = vMix < 0.5 ? mix(uA, uB, vMix * 2.0) : mix(uB, uC, (vMix - 0.5) * 2.0);
+    gl_FragColor = vec4(c, 0.34);
+  }
+`;
+
+const KnowledgeMesh = ({ reduce }) => {
+  const group = useRef();
+  const { size } = useThree();
+
+  // Subdivision is the entire mobile performance story: detail 5 is ~4x the line segments
+  // of detail 3. Dropping it on narrow viewports keeps phones smooth.
+  const detail = size.width < 760 ? 3 : 5;
+
+  const geometry = useMemo(
+    () => new THREE.WireframeGeometry(new THREE.IcosahedronGeometry(2.35, detail)),
+    [detail]
   );
-};
 
-const OrbitRing = ({ radius, tilt, color, speed, reduce, opacity = 0.35 }) => {
-  const ref = useRef();
-  useFrame((_, delta) => {
-    if (!reduce && ref.current) ref.current.rotation.z += delta * speed;
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+          uA: { value: new THREE.Color(CYAN) },
+          uB: { value: new THREE.Color(VIOLET) },
+          uC: { value: new THREE.Color(PINK) },
+        },
+        vertexShader,
+        fragmentShader,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    []
+  );
+
+  // These are created imperatively, so R3F won't dispose them for us on unmount.
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(() => () => material.dispose(), [material]);
+
+  useFrame((state) => {
+    if (reduce) return;
+    const t = state.clock.elapsedTime;
+    material.uniforms.uTime.value = t;
+    if (group.current) {
+      group.current.rotation.y = t * 0.12;
+      group.current.rotation.x = Math.sin(t * 0.18) * 0.14;
+    }
   });
+
   return (
-    <mesh ref={ref} rotation={tilt}>
-      <torusGeometry args={[radius, 0.006, 8, 128]} />
-      <meshBasicMaterial color={color} transparent opacity={opacity} />
-    </mesh>
+    <group ref={group}>
+      <lineSegments geometry={geometry} material={material} />
+    </group>
   );
 };
 
@@ -85,73 +124,65 @@ const SubjectNodes = ({ reduce }) => {
     group.current.children.forEach((child, i) => {
       const n = NODES[i];
       const a = t * n.speed + n.phase;
-      child.position.set(
-        Math.cos(a) * n.radius,
-        Math.sin(a * 1.3) * 0.55,
-        Math.sin(a) * n.radius
-      );
+      child.position.set(Math.cos(a) * n.radius, Math.sin(a * 1.3) * 0.6, Math.sin(a) * n.radius);
     });
   });
   return (
     <group ref={group}>
       {NODES.map((n) => (
         <mesh key={n.label} position={[n.radius, 0, 0]}>
-          <sphereGeometry args={[0.075, 16, 16]} />
-          <meshBasicMaterial color={n.color} />
+          <sphereGeometry args={[0.07, 16, 16]} />
+          <meshBasicMaterial color={n.color} transparent opacity={0.9} />
         </mesh>
       ))}
     </group>
   );
 };
 
-// The dome of points behind everything — the depth cue that makes the core feel suspended
-// in space rather than pasted onto a flat background.
-const MeshDome = ({ reduce }) => {
-  const ref = useRef();
-  const geometry = useMemo(() => new THREE.SphereGeometry(7.5, 28, 18), []);
-  useFrame((_, delta) => {
-    if (!reduce && ref.current) ref.current.rotation.y += delta * 0.015;
-  });
-  return (
-    <points ref={ref} geometry={geometry}>
-      <pointsMaterial color={VIOLET} size={0.035} transparent opacity={0.55} sizeAttenuation />
-    </points>
-  );
-};
+/**
+ * Parallax by moving the CAMERA rather than rotating the scene. Orbiting the camera around
+ * a fixed mesh gives real perspective shift, where spinning the group only ever looks like
+ * the object turning -- the difference between depth and a turntable.
+ */
+const CameraRig = ({ reduce }) => {
+  const target = useRef({ x: 0, y: 0 });
+  const current = useRef({ x: 0, y: 0 });
 
-/** Eases the whole scene toward the pointer — the "it follows me" effect, damped. */
-const PointerRig = ({ children, reduce }) => {
-  const group = useRef();
-  const { pointer } = useThree();
-  useFrame((_, delta) => {
-    if (reduce || !group.current) return;
-    const k = 1 - Math.pow(0.001, delta); // frame-rate independent damping
-    group.current.rotation.y += (pointer.x * 0.35 - group.current.rotation.y) * k;
-    group.current.rotation.x += (-pointer.y * 0.22 - group.current.rotation.x) * k;
+  useEffect(() => {
+    const onMove = (e) => {
+      target.current.x = (e.clientX / window.innerWidth - 0.5) * 0.42;
+      target.current.y = (e.clientY / window.innerHeight - 0.5) * 0.32;
+    };
+    window.addEventListener("pointermove", onMove);
+    return () => window.removeEventListener("pointermove", onMove);
+  }, []);
+
+  useFrame(({ camera }, delta) => {
+    if (reduce) return;
+    // Frame-rate independent damping, so the follow feels identical at 60 and 144Hz.
+    const k = 1 - Math.pow(0.0001, delta);
+    current.current.x += (target.current.x - current.current.x) * k;
+    current.current.y += (target.current.y - current.current.y) * k;
+    camera.position.x = current.current.x * 2.4;
+    camera.position.y = -current.current.y * 1.8;
+    camera.lookAt(0, 0, 0);
   });
-  return <group ref={group}>{children}</group>;
+  return null;
 };
 
 const HeroCanvas = ({ reduce = false }) => (
   <Canvas
-    camera={{ position: [0, 0, 8.5], fov: 50 }}
-    // Capped DPR: retina at full resolution triples the fragment cost for a background.
-    dpr={[1, 1.75]}
+    camera={{ position: [0, 0, 6.2], fov: 46 }}
+    // Capped DPR: a retina background at full resolution triples fragment cost for no
+    // perceptible gain on a soft, additive scene.
+    dpr={[1, 2]}
     gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
     style={{ pointerEvents: "none" }}
   >
-    <ambientLight intensity={0.4} />
-    <PointerRig reduce={reduce}>
-      <Float speed={reduce ? 0 : 1.2} rotationIntensity={reduce ? 0 : 0.25} floatIntensity={reduce ? 0 : 0.5}>
-        <KnowledgeCore reduce={reduce} />
-      </Float>
-      <SubjectNodes reduce={reduce} />
-      <OrbitRing radius={3.1} tilt={[Math.PI / 2.4, 0, 0]} color={CYAN} speed={0.05} reduce={reduce} />
-      <OrbitRing radius={3.6} tilt={[Math.PI / 2.9, 0.5, 0]} color={VIOLET} speed={-0.04} reduce={reduce} opacity={0.3} />
-      <OrbitRing radius={4.3} tilt={[Math.PI / 2.2, -0.4, 0.3]} color={MAGENTA} speed={0.03} reduce={reduce} opacity={0.2} />
-      <MeshDome reduce={reduce} />
-    </PointerRig>
-    <Stars radius={60} depth={40} count={1200} factor={3} saturation={0} fade speed={reduce ? 0 : 0.4} />
+    <CameraRig reduce={reduce} />
+    <KnowledgeMesh reduce={reduce} />
+    <SubjectNodes reduce={reduce} />
+    <Stars radius={60} depth={40} count={900} factor={3} saturation={0} fade speed={reduce ? 0 : 0.4} />
   </Canvas>
 );
 
