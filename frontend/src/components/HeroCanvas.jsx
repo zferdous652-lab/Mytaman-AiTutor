@@ -95,9 +95,22 @@ const KnowledgeMesh = ({ reduce }) => {
     []
   );
 
-  // These are created imperatively, so R3F won't dispose them for us on unmount.
-  useEffect(() => () => geometry.dispose(), [geometry]);
-  useEffect(() => () => material.dispose(), [material]);
+  // Dispose only a geometry that has already been REPLACED (the viewport crossed the 760px
+  // breakpoint and `detail` changed), never the live one.
+  //
+  // The obvious version of this -- `useEffect(() => () => geometry.dispose(), [geometry])`
+  // -- is wrong under StrictMode, which double-invokes effects as mount → cleanup → mount.
+  // useMemo keeps its cache across that simulated remount, so the cleanup disposes the very
+  // object still attached to the live lineSegments; its GPU buffers are freed, the next
+  // render throws, and the entire canvas goes blank. Comparing against the previous value
+  // is immune to that, because a superseded object is safe to free no matter how many times
+  // the effect runs.
+  const prevGeometry = useRef(null);
+  useEffect(() => {
+    const prev = prevGeometry.current;
+    if (prev && prev !== geometry) prev.dispose();
+    prevGeometry.current = geometry;
+  }, [geometry]);
 
   useFrame((state) => {
     if (reduce) return;
