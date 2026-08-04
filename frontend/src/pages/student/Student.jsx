@@ -426,24 +426,56 @@ const StudentBrowse = () => {
   };
   useEffect(() => { load(); }, []);
 
-  const enroll = async (id) => {
-    await api.post("/packs/enroll", { pack_id: id });
-    toast.success("Enrolled");
-    navigate("/student");
+  // A student holds one Tutor Pack at a time, so enrolling somewhere new drops the
+  // current one. That's a real loss of access, so it asks first and names what's going --
+  // the progress itself is kept server-side and comes back if they switch back, which the
+  // prompt says so nobody thinks their work has been thrown away.
+  const enroll = async (pack) => {
+    const current = packs.find((p) => enrolled.has(p.id) && p.id !== pack.id);
+    if (current) {
+      const ok = window.confirm(
+        `Switch to "${pack.title}"?\n\n` +
+        `You'll lose access to "${current.title}" — you can only study one Tutor Pack at a time.\n\n` +
+        `Your progress in "${current.title}" is kept, and comes back if you switch to it again.`
+      );
+      if (!ok) return;
+    }
+    try {
+      const { data } = await api.post("/packs/enroll", { pack_id: pack.id });
+      toast.success(data.replaced_pack_ids?.length ? `Switched to ${pack.title}` : "Enrolled");
+      navigate("/student");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Couldn't enroll in that pack.");
+    }
   };
+
+  const currentPack = packs.find((p) => enrolled.has(p.id)) || null;
 
   return (
     <div className="p-8 lg:p-12">
       <div className="overline text-[#00f0ff]">{t("browse_packs")}</div>
-      <h1 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mt-2 mb-8">Available Tutor Packs</h1>
+      <h1 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mt-2 mb-3">Available Tutor Packs</h1>
+      <p className="text-sm text-white/50 max-w-xl mb-8" data-testid="one-pack-note">
+        {currentPack
+          ? `${t("one_pack_rule")} ${t("one_pack_current")} "${currentPack.title}".`
+          : t("one_pack_rule")}
+      </p>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="browse-list">
         {packs.map((p) => {
           const courses = coursesByPack[p.id] || [];
+          const hasOtherPack = !!currentPack && currentPack.id !== p.id;
           return (
             <div key={p.id} className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5 flex flex-col">
               <div className="flex justify-between">
                 <div className="overline text-[#00f0ff]">{p.tier}</div>
-                <div className="text-[10px] uppercase tracking-widest text-white/40">{p.language.toUpperCase()}</div>
+                <div className="flex items-center gap-2">
+                  {enrolled.has(p.id) && (
+                    <span className="rounded-full border border-[#00f0ff]/40 bg-[#00f0ff]/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-[#00f0ff]">
+                      {t("current_pack")}
+                    </span>
+                  )}
+                  <div className="text-[10px] uppercase tracking-widest text-white/40">{p.language.toUpperCase()}</div>
+                </div>
               </div>
               <div className="font-display text-lg tracking-tight text-white mt-2">{p.title}</div>
               <div className="text-xs text-white/50 mt-1">{p.grade}</div>
@@ -462,15 +494,15 @@ const StudentBrowse = () => {
 
               <button
                 data-testid={`enroll-${p.id}`}
-                onClick={() => (enrolled.has(p.id) ? navigate("/student") : enroll(p.id))}
-                title={enrolled.has(p.id) ? "Go to My Tutor Packs" : undefined}
+                onClick={() => (enrolled.has(p.id) ? navigate("/student") : enroll(p))}
+                title={enrolled.has(p.id) ? "Go to My Tutor Packs" : hasOtherPack ? `Replaces ${currentPack.title}` : undefined}
                 className={`mt-4 w-full rounded-full py-2 text-sm font-semibold transition-colors ${
                   enrolled.has(p.id)
                     ? "border border-white/10 text-white/70 hover:border-[#00f0ff]/40 hover:text-[#00f0ff]"
                     : "bg-[#00f0ff] text-black hover:bg-white"
                 }`}
               >
-                {enrolled.has(p.id) ? t("enrolled") : t("enroll")}
+                {enrolled.has(p.id) ? t("enrolled") : hasOtherPack ? t("switch_pack") : t("enroll")}
               </button>
             </div>
           );

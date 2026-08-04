@@ -140,6 +140,52 @@ body {
   background: linear-gradient(180deg, #1f6f5c88, #8a6d3b88);
 }
 
+/* Socratic tutor dock — an off-white conversation surface.
+   Sits beside the cream `.paper-card` lesson pane and deliberately reads as a different
+   kind of surface: same warm ink so the two don't clash, but a cooler, plainer white and
+   the app's sans face rather than paper's serif. A chat is not a document.
+   Variables so the panel's many small parts can't drift apart over time. */
+.socratic-surface {
+  /* No pure white anywhere on this surface -- #fff glares against the warm cream lesson
+     pane beside it. Cards stay a touch lighter than the panel so they still read as
+     raised; the panel and header step down from there to keep that separation. */
+  --soc-bg: #f3f0ea;
+  --soc-raised: #fbfaf7;
+  --soc-header: #ece8e1;
+  /* Icon colour on the filled accent button -- off-white for the same reason. */
+  --soc-on-accent: #f8f5ff;
+  --soc-line: rgba(59, 47, 26, 0.13);
+  --soc-line-strong: rgba(59, 47, 26, 0.22);
+  --soc-ink: #23201b;
+  --soc-ink-soft: #5c5449;
+  /* Dark enough to clear 4.5:1 against the header/composer band. The AI-and-oversight
+     disclaimer renders in this colour, so it has to be genuinely readable, not decorative. */
+  --soc-ink-faint: #6f675b;
+  --soc-accent: #6d28d9;
+  --soc-accent-soft: #f0eafb;
+  --soc-warn: #a35c00;
+  --soc-danger: #b3261e;
+  --soc-success: #1f6f5c;
+
+  background: var(--soc-bg);
+  color: var(--soc-ink);
+}
+
+/* The global scrollbar is styled for the dark app shell and reads as a black gash on a
+   light panel, so the dock restyles its own. */
+.socratic-surface ::-webkit-scrollbar-track { background: #efece7; }
+.socratic-surface ::-webkit-scrollbar-thumb {
+  background: rgba(59, 47, 26, 0.22);
+  border-radius: 8px;
+}
+.socratic-surface ::-webkit-scrollbar-thumb:hover { background: rgba(59, 47, 26, 0.34); }
+.socratic-surface ::selection {
+  background: rgba(109, 40, 217, 0.18);
+  color: var(--soc-ink);
+}
+/* Placeholder inherits the dark theme's near-white otherwise, which is invisible here. */
+.socratic-surface textarea::placeholder { color: var(--soc-ink-faint); }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: #0a0514; }
