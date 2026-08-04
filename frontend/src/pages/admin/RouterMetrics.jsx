@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Activity, AlertTriangle, Clock, Coins, Gauge, Info, RefreshCw, Hash } from "lucide-react";
+import { Activity, AlertTriangle, ChevronDown, Clock, Coins, Gauge, Info, RefreshCw, Hash } from "lucide-react";
 import { api } from "@/lib/api";
 
 // Categorical slots 1-3 of the validated palette, dark steps. Three is the documented
@@ -40,6 +40,28 @@ const StatTile = ({ icon: Icon, label, value, sub, tone = "default" }) => (
       {value}
     </div>
     {sub && <div className="mt-0.5 text-[11px] text-white/40">{sub}</div>}
+  </div>
+);
+
+// Config/detail panels collapse so the observability read stays at the top of the page.
+// `summary` keeps the collapsed header informative -- how many caps or rates are set --
+// so the section still reports its state without being opened.
+const CollapsibleCard = ({ title, summary, open, onToggle, testId, children }) => (
+  <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5">
+    <button
+      type="button"
+      onClick={onToggle}
+      data-testid={testId}
+      aria-expanded={open}
+      className="flex w-full items-center justify-between gap-3 text-left"
+    >
+      <span className="text-sm text-white font-medium">{title}</span>
+      <span className="flex shrink-0 items-center gap-2 text-[11px] text-white/40">
+        {summary}
+        <ChevronDown size={14} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </span>
+    </button>
+    {open && <div className="mt-4">{children}</div>}
   </div>
 );
 
@@ -121,6 +143,8 @@ const RouterMetrics = ({ providers = [], config }) => {
   const [limits, setLimits] = useState({});
   const [pricing, setPricing] = useState({});
   const [showLogs, setShowLogs] = useState(false);
+  const [showLimits, setShowLimits] = useState(false);
+  const [showPricing, setShowPricing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -195,6 +219,14 @@ const RouterMetrics = ({ providers = [], config }) => {
     : top;
 
   const empty = t.requests === 0;
+
+  // Counts shown in the collapsed headers, so each config section reports whether it is
+  // actually configured without having to be opened.
+  const capCount = Object.values(limits).filter((v) => v !== "" && v != null && Number(v) > 0).length;
+  const pricedCount = providers.filter((p) => {
+    const r = pricing[p.model];
+    return r && (Number(r.input_per_1m) > 0 || Number(r.output_per_1m) > 0);
+  }).length;
 
   return (
     <div className="mb-8 space-y-4" data-testid="router-metrics">
@@ -336,10 +368,15 @@ const RouterMetrics = ({ providers = [], config }) => {
       )}
 
       {/* Rate limits + pricing */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5">
-          <div className="text-sm text-white font-medium">Token rate limits</div>
-          <div className="text-[11px] text-white/40 mt-1 mb-4">
+      <div className="grid gap-4 lg:grid-cols-2 items-start">
+        <CollapsibleCard
+          title="Token rate limits"
+          summary={capCount > 0 ? `${capCount} cap${capCount === 1 ? "" : "s"} set` : "No caps"}
+          open={showLimits}
+          onToggle={() => setShowLimits((s) => !s)}
+          testId="toggle-limits"
+        >
+          <div className="text-[11px] text-white/40 -mt-1 mb-4">
             Tokens per minute per provider. A provider over its cap is skipped and the request fails
             over to the next one, so a spike throttles rather than erroring. Blank = no cap.
           </div>
@@ -368,11 +405,16 @@ const RouterMetrics = ({ providers = [], config }) => {
           >
             Save limits
           </button>
-        </div>
+        </CollapsibleCard>
 
-        <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5">
-          <div className="text-sm text-white font-medium">Cost rates</div>
-          <div className="text-[11px] text-white/40 mt-1 mb-4">
+        <CollapsibleCard
+          title="Cost rates"
+          summary={pricedCount > 0 ? `${pricedCount} of ${providers.length} priced` : "Not set"}
+          open={showPricing}
+          onToggle={() => setShowPricing((s) => !s)}
+          testId="toggle-pricing"
+        >
+          <div className="text-[11px] text-white/40 -mt-1 mb-4">
             USD per 1M tokens, per model. Rates differ by provider and tier, so nothing is assumed —
             cost stays “—” until you enter your own.
           </div>
@@ -405,22 +447,18 @@ const RouterMetrics = ({ providers = [], config }) => {
           >
             Save rates
           </button>
-        </div>
+        </CollapsibleCard>
       </div>
 
       {/* Request logs */}
-      <div className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5">
-        <button
-          type="button"
-          onClick={() => setShowLogs((s) => !s)}
-          data-testid="toggle-logs"
-          className="flex w-full items-center justify-between text-left"
-        >
-          <span className="text-sm text-white font-medium">Request logs</span>
-          <span className="text-[11px] text-white/40">{showLogs ? "Hide" : `Show last ${logs.length}`}</span>
-        </button>
-        {showLogs && (
-          <div className="mt-4 overflow-x-auto">
+      <CollapsibleCard
+        title="Request logs"
+        summary={`Last ${logs.length}`}
+        open={showLogs}
+        onToggle={() => setShowLogs((s) => !s)}
+        testId="toggle-logs"
+      >
+        <div className="overflow-x-auto">
             <table className="w-full text-left text-xs min-w-[760px]">
               <thead className="text-white/40 uppercase tracking-widest text-[10px]">
                 <tr>
@@ -456,9 +494,8 @@ const RouterMetrics = ({ providers = [], config }) => {
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
-      </div>
+        </div>
+      </CollapsibleCard>
     </div>
   );
 };
