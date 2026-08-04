@@ -51,6 +51,27 @@ MAX_MESSAGE_CHARS = 1000
 # instead of the model deciding on its own to hand over the answer.
 MAX_HINT_LEVEL = 3
 
+# How many hints a student gets for one lesson, before "I'm stuck" stops working.
+#
+# The ladder alone was never a limit: it capped how *far* a hint could go (rung 3, a full
+# walkthrough) but not how *many* times one could be asked for, so a student could hold the
+# button down and be walked through the material indefinitely. This is the actual budget.
+#
+# A quiz gets one per question rather than one for the whole set -- 3 hints across 30
+# questions would be no help at all, and 3 per question would be a free answer key.
+HINT_BUDGET = {
+    "summary": 3,
+    "notes": 3,
+    "flashcards": 3,
+    "mindmap": 3,
+    "quiz": 30,
+}
+DEFAULT_HINT_BUDGET = 3
+
+
+def _hint_budget(content_type: str) -> int:
+    return HINT_BUDGET.get(content_type, DEFAULT_HINT_BUDGET)
+
 # A session counts as "mastered" (and pays XP, once) at or above this signal.
 MASTERY_THRESHOLD = 0.7
 
@@ -99,6 +120,8 @@ class SettingsOut(BaseModel):
     daily_message_cap: int
     allow_quiz_answers: bool
     tiers: List[str]
+    hint_budget: dict = Field(default_factory=lambda: dict(HINT_BUDGET))
+    max_hint_level: int = MAX_HINT_LEVEL
 
 
 class SettingsIn(BaseModel):
@@ -246,6 +269,8 @@ class SessionOut(BaseModel):
     status: str
     turn_count: int
     hint_level: int
+    hints_used: int = 0
+    hints_allowed: int = DEFAULT_HINT_BUDGET
     mastery_signal: float = 0.0
     concepts_covered: List[str] = Field(default_factory=list)
     mastered: bool = False
@@ -269,6 +294,8 @@ def _session_out(doc: dict, turns: List[dict], settings: dict, used_today: int) 
         status=doc.get("status", "active"),
         turn_count=doc.get("turn_count", 0),
         hint_level=doc.get("hint_level", 0),
+        hints_used=doc.get("hints_used", 0),
+        hints_allowed=_hint_budget(doc.get("content_type", "")),
         mastery_signal=doc.get("mastery_signal") or 0.0,
         concepts_covered=doc.get("concepts_covered") or [],
         mastered=bool(doc.get("mastered")),
@@ -341,6 +368,7 @@ async def start_or_resume_session(payload: StartSessionIn, user: dict = Depends(
             "status": "active",
             "turn_count": 0,
             "hint_level": 0,
+            "hints_used": 0,
             "mastery_signal": 0.0,
             "concepts_covered": [],
             "mastered": False,
@@ -486,7 +514,23 @@ async def send_message(session_id: str, payload: MessageIn, user: dict = Depends
         )
 
     now = datetime.now(timezone.utc).isoformat()
-    hint_level = min(session.get("hint_level", 0) + 1, MAX_HINT_LEVEL) if payload.request_hint else session.get("hint_level", 0)
+
+    # The hint budget is spent here, and refused outright once it runs out -- the ladder
+    # capping at rung 3 only ever limited how far a single hint could go, never how many
+    # a student could ask for.
+    budget = _hint_budget(session["content_type"])
+    hints_used = session.get("hints_used", 0)
+    hint_level = session.get("hint_level", 0)
+    if payload.request_hint:
+        if hints_used >= budget:
+            raise HTTPException(
+                status_code=429,
+                detail=f"You've used all {budget} hints for this lesson. Keep working it through "
+                       f"with the tutor -- it will still help you reason it out.",
+            )
+        hints_used += 1
+        hint_level = min(hint_level + 1, MAX_HINT_LEVEL)
+
     flagged = bool(_FLAG_PATTERNS.search(payload.text))
 
     await db.socratic_turns.insert_one({
@@ -534,11 +578,18 @@ async def send_message(session_id: str, payload: MessageIn, user: dict = Depends
     mastery = parsed["mastery_signal"] if parsed["mastery_signal"] is not None else session.get("mastery_signal", 0.0)
     mastered = bool(session.get("mastered")) or (mastery >= MASTERY_THRESHOLD and parsed["done"])
 
+    # Once the tutor reaches "consolidate" the student has produced the answer in their
+    # own words, so the next thing they get stuck on starts the ladder over at a guiding
+    # question. Without this the rung is sticky for the whole session: hit rung 3 on
+    # question 2 of a quiz and every later hint opens with a full walkthrough.
+    next_hint_level = 0 if parsed["phase"] == "consolidate" else hint_level
+
     await db.socratic_sessions.update_one(
         {"id": session_id},
         {"$set": {
             "turn_count": session.get("turn_count", 0) + 1,
-            "hint_level": hint_level,
+            "hint_level": next_hint_level,
+            "hints_used": hints_used,
             "concepts_covered": concepts[:24],
             "mastery_signal": mastery,
             "mastered": mastered,

@@ -177,6 +177,10 @@ const SocraticPanel = ({ contentId, contentType, language, collapsed, onToggle, 
   const turns = session?.turns || [];
   const tutorName = session?.tutor_name || "";
   const starters = useMemo(() => STARTERS[contentType] || STARTERS.summary, [contentType]);
+  // Hints remaining, not hints spent: a student should see what they have left to use,
+  // and the button has to actually stop working once that reaches zero.
+  const hintsAllowed = session?.hints_allowed ?? 0;
+  const hintsLeft = Math.max(0, hintsAllowed - (session?.hints_used ?? 0));
   const atTurnLimit = session && session.turn_count >= session.max_turns_per_session;
   const atDailyLimit = session && session.messages_used_today >= session.daily_message_cap;
 
@@ -393,12 +397,13 @@ const SocraticPanel = ({ contentId, contentType, language, collapsed, onToggle, 
             <button
               type="button"
               onClick={() => send(t("socratic_stuck_msg"), true)}
-              disabled={sending || !turns.length || atTurnLimit || atDailyLimit}
+              disabled={sending || !turns.length || hintsLeft === 0 || atTurnLimit || atDailyLimit}
               data-testid="socratic-hint"
+              title={hintsLeft === 0 ? t("socratic_hints_spent") : undefined}
               className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--soc-line-strong)] bg-[color:var(--soc-raised)] px-4 py-2.5 text-[15px] text-[color:var(--soc-ink-soft)] hover:border-[color:var(--soc-warn)]/60 hover:text-[color:var(--soc-warn)] transition-colors disabled:opacity-35"
             >
               <Lightbulb size={15} /> {t("socratic_stuck")}
-              {session?.hint_level > 0 && ` (${session.hint_level}/3)`}
+              {hintsAllowed > 0 && ` (${hintsLeft}/${hintsAllowed})`}
             </button>
             <span className="text-[13px] text-[color:var(--soc-ink-faint)] font-mono">
               {session?.messages_used_today ?? 0}/{session?.daily_message_cap ?? 0}

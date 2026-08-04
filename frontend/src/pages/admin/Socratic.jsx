@@ -268,6 +268,24 @@ const Socratic = () => {
           </label>
 
           <div className="mt-5 pt-4 border-t border-white/8">
+            <div className="overline text-[#00f0ff] mb-2">Hints per lesson</div>
+            <p className="text-[11px] text-white/35 mb-3">
+              How many times a student can press “I'm stuck” before the tutor stops giving hints.
+              A quiz gets one per question; everything else gets three for the whole lesson.
+            </p>
+            <div className="flex flex-wrap gap-2" data-testid="socratic-hint-budget">
+              {Object.entries(settings.hint_budget || {}).map(([type, n]) => (
+                <span
+                  key={type}
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70"
+                >
+                  {type} <span className="text-[#8a2be2] font-mono">{n}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 pt-4 border-t border-white/8">
             <div className="text-xs text-white/60">
               Available on{" "}
               <span className="text-[#8a2be2] font-semibold">{settings.tiers.join(", ")}</span> tier packs
