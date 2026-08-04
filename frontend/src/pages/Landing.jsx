@@ -58,8 +58,9 @@ const Landing = () => {
       {/* HERO */}
       <section className="relative min-h-screen overflow-hidden">
         <HeroScene />
-        <div className="absolute inset-0 grid-bg pointer-events-none" />
-        <div className="relative mx-auto max-w-7xl px-6 pt-40 pb-24">
+        <div className="absolute inset-0 z-[1] grid-bg pointer-events-none" />
+        {/* Explicit z-10 so the copy always sits above the scene and the grid overlay. */}
+        <div className="relative z-10 mx-auto max-w-7xl px-6 pt-40 pb-24">
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 overline text-[#00f0ff] mb-6">
               <Sparkles size={12} /> {t("tagline")}

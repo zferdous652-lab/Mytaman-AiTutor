@@ -60,7 +60,10 @@ const HeroScene = () => {
   const webgl = useWebGL();
 
   return (
-    <div className="absolute inset-0 -z-10 overflow-hidden">
+    // z-0, NOT -z-10. A negative z-index paints at step 2 of the root stacking context,
+    // while #root's own opaque background paints at step 3 -- later, and over the top. The
+    // scene was rendering correctly all along and being buried by that background.
+    <div className="absolute inset-0 z-0 overflow-hidden">
       <AmbientLayers reduce={reduce} />
 
       {webgl && (
