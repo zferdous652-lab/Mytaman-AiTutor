@@ -383,7 +383,7 @@ const SocraticPanel = ({ contentId, contentType, language, collapsed, onToggle, 
               onClick={() => send()}
               disabled={sending || !draft.trim() || atTurnLimit || atDailyLimit}
               data-testid="socratic-send"
-              className="shrink-0 h-12 w-12 grid place-items-center rounded-xl bg-[color:var(--soc-accent)] text-white hover:bg-[#5b21b6] transition-colors disabled:opacity-25"
+              className="shrink-0 h-12 w-12 grid place-items-center rounded-xl bg-[color:var(--soc-accent)] text-[color:var(--soc-on-accent)] hover:bg-[#5b21b6] transition-colors disabled:opacity-25"
             >
               <Send size={18} />
             </button>

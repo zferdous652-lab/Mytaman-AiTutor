@@ -146,9 +146,14 @@ body {
    the app's sans face rather than paper's serif. A chat is not a document.
    Variables so the panel's many small parts can't drift apart over time. */
 .socratic-surface {
-  --soc-bg: #f7f5f2;
-  --soc-raised: #ffffff;
-  --soc-header: #f1eee9;
+  /* No pure white anywhere on this surface -- #fff glares against the warm cream lesson
+     pane beside it. Cards stay a touch lighter than the panel so they still read as
+     raised; the panel and header step down from there to keep that separation. */
+  --soc-bg: #f3f0ea;
+  --soc-raised: #fbfaf7;
+  --soc-header: #ece8e1;
+  /* Icon colour on the filled accent button -- off-white for the same reason. */
+  --soc-on-accent: #f8f5ff;
   --soc-line: rgba(59, 47, 26, 0.13);
   --soc-line-strong: rgba(59, 47, 26, 0.22);
   --soc-ink: #23201b;
