@@ -352,10 +352,10 @@ class TestRouter:
 
 # ---------- Socratic Learning ----------
 class TestSocratic:
-    """Socratic Learning is gated two ways: role (admin-only settings/oversight) and
-    enrolment (a student only gets a tutor on a pack they are enrolled in). Tiers are
-    gone, so every pack exposes the tutor; enrolment is what remains, and it is enforced
-    server-side, so it is tested here rather than trusted to the UI.
+    """Socratic Learning is gated two ways: role (admin-only settings/oversight) and the
+    learner's Tutor Pack unlock (the tutor discusses paid lesson material, so it is locked
+    wherever that material is). Both are enforced server-side, so both are tested here
+    rather than trusted to the UI.
 
     The conversation endpoints themselves are not exercised -- every turn is a live,
     billable model call through the Model Router, which this suite deliberately avoids.
@@ -424,18 +424,13 @@ class TestSocratic:
         )
         assert r.status_code == 404
 
-    def test_unenrolled_pack_is_refused(self, admin_token, student_token):
-        """With tiers gone, enrolment is the only pack-level boundary left -- a student
+    def test_locked_pack_is_refused(self, admin_token, student_token):
+        """The unlock gate is the whole commercial premise -- a student who has not paid
         must be refused by the API, not merely not shown the panel."""
-        mine = requests.get(f"{API}/packs/mine", headers=_h(student_token), timeout=10).json()
-        enrolled_ids = {p["id"] for p in mine}
         contents = requests.get(f"{API}/content/list", headers=_h(admin_token), timeout=15).json()
-        target = next(
-            (c for c in contents if c.get("published") and c.get("pack_id") not in enrolled_ids),
-            None,
-        )
+        target = next((c for c in contents if c.get("published")), None)
         if target is None:
-            pytest.skip("no published content on an unenrolled pack to test the enrolment gate against")
+            pytest.skip("no published content to test the unlock gate against")
 
         r = requests.post(
             f"{API}/socratic/session",
@@ -443,15 +438,10 @@ class TestSocratic:
             json={"content_id": target["id"]},
             timeout=10,
         )
+        # 403 whether the refusal is the unlock gate or enrolment -- either way the
+        # student is not getting a tutor on content they have not paid for.
         assert r.status_code == 403
-        assert "enrolled" in r.json()["detail"].lower()
 
-        e = requests.get(
-            f"{API}/socratic/eligibility?content_id={target['id']}",
-            headers=_h(student_token), timeout=10,
-        )
-        assert e.status_code == 200
-        assert e.json()["available"] is False
 
     def test_socratic_prompt_is_editable_in_router(self, admin_token):
         """The tutor prompt has to show up in the Model Router editor -- that panel is the
@@ -459,3 +449,67 @@ class TestSocratic:
         cfg = requests.get(f"{API}/router/config", headers=_h(admin_token), timeout=10).json()
         assert "socratic_tutor" in cfg["prompts"]
         assert "JSON" in cfg["prompts"]["socratic_tutor"]
+
+# ---------- Tutor Pack unlocks ----------
+class TestBilling:
+    """Notes are free on every pack; everything else needs an unlock. The lock is enforced
+    server-side, so these hit the API rather than trusting the UI's lock icons."""
+
+    def test_pricing(self, student_token):
+        r = requests.get(f"{API}/billing/pricing", headers=_h(student_token), timeout=10)
+        assert r.status_code == 200, r.text
+        j = r.json()
+        assert j["currency"] == "MYR"
+        assert j["first_pack"] == 15
+        assert j["additional_pack"] == 5
+        assert j["free_content_types"] == ["notes"]
+
+    def test_locked_payloads_are_stripped_not_just_flagged(self, admin_token, student_token):
+        """The important half of the paywall: a locked lesson must arrive with no body at
+        all. Shipping the payload and hiding it in the client would leave it readable in
+        devtools."""
+        packs = requests.get(f"{API}/packs/list", headers=_h(admin_token), timeout=10).json()
+        pack_id = packs[0]["id"]
+        requests.post(f"{API}/packs/enroll", headers=_h(student_token), json={"pack_id": pack_id}, timeout=10)
+
+        r = requests.get(
+            f"{API}/content/list-paired?pack_id={pack_id}&only_published=true",
+            headers=_h(student_token), timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        for item in r.json():
+            if item["content_type"] == "notes":
+                assert item["locked"] is False, "notes must stay free"
+            elif item["locked"]:
+                assert item["bm"] is None and item["en"] is None, (
+                    f"locked {item['content_type']} still shipped a payload"
+                )
+
+    def test_grant_is_admin_only(self, student_token):
+        r = requests.post(
+            f"{API}/billing/grant", headers=_h(student_token),
+            json={"user_id": "someone", "pack_ids": ["x"]}, timeout=10,
+        )
+        assert r.status_code == 403
+
+    def test_checkout_prices_the_bundle(self, admin_token, student_token):
+        """First pack MYR 15, each additional MYR 5 -- and checkout must NOT grant access,
+        since nothing has verified a payment."""
+        packs = requests.get(f"{API}/packs/list", headers=_h(admin_token), timeout=10).json()
+        owned = set(requests.get(f"{API}/billing/entitlements", headers=_h(student_token), timeout=10).json()["pack_ids"])
+        available = [p["id"] for p in packs if p["id"] not in owned]
+        if len(available) < 2:
+            pytest.skip("need two un-owned packs to exercise bundle pricing")
+
+        r = requests.post(
+            f"{API}/billing/checkout", headers=_h(student_token),
+            json={"pack_ids": available[:2]}, timeout=10,
+        )
+        assert r.status_code == 200, r.text
+        j = r.json()
+        assert j["amount"] == 20, "15 for the first pack + 5 for the add-on"
+        assert j["payment_required"] is True
+        assert j["status"] == "pending"
+
+        after = set(requests.get(f"{API}/billing/entitlements", headers=_h(student_token), timeout=10).json()["pack_ids"])
+        assert after == owned, "an unpaid checkout must not grant access"

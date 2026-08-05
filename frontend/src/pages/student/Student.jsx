@@ -12,6 +12,7 @@ import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 import CourseSidebar, { isPairDone, CourseSidebarRail } from "./CourseSidebar";
 import ContentViewer, { primaryVariant } from "./ContentViewer";
 import SocraticPanel from "./SocraticPanel";
+import UnlockDialog from "./UnlockDialog";
 
 const LANG_FILTERS = ["all", "en", "bm"];
 
@@ -63,14 +64,20 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   const [openCourseId, setOpenCourseId] = useState(null);
   const [openChapterIds, setOpenChapterIds] = useState(new Set());
   const [collapsed, toggleCollapsed] = useSidebarCollapsed("mytaman:sidebar:course");
+  // Which locked content type triggered the unlock prompt (null = closed).
+  const [unlockFor, setUnlockFor] = useState(null);
   const [tutorCollapsed, toggleTutorCollapsed] = useSidebarCollapsed("mytaman:sidebar:socratic");
 
-  useEffect(() => {
-    setLoaded(false);
-    setSelected(null);
-    setOpenCourseId(null);
-    setOpenChapterIds(new Set());
-    (async () => {
+  // Extracted from the mount effect so an unlock can refetch the pack: `locked` is decided
+  // server-side, so the only way to reflect new access is to ask the server again.
+  const loadPack = async ({ reset = true } = {}) => {
+    if (reset) {
+      setLoaded(false);
+      setSelected(null);
+      setOpenCourseId(null);
+      setOpenChapterIds(new Set());
+    }
+    {
       const [itemsRes, coursesRes, progressRes] = await Promise.all([
         api.get(`/content/list-paired?pack_id=${activePack.id}&only_published=true`),
         api.get(`/courses/list?pack_id=${activePack.id}`),
@@ -85,9 +92,13 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
       const map = {};
       coursesRes.data.forEach((c, i) => { map[c.id] = chapterLists[i].data; });
       setChaptersByCourse(map);
-      if (coursesRes.data.length === 1) setOpenCourseId(coursesRes.data[0].id);
+      if (reset && coursesRes.data.length === 1) setOpenCourseId(coursesRes.data[0].id);
       setLoaded(true);
-    })();
+    }
+  };
+
+  useEffect(() => {
+    loadPack();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePack.id]);
 
@@ -153,9 +164,20 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   // It talks about the exact language variant being read, not the pair.
   const tutorVariant = selected ? primaryVariant(selected, langFilter) : null;
   const tutorLang = tutorVariant && selected?.bm && tutorVariant.id === selected.bm.id ? "bm" : "en";
-  // Every pack carries the tutor now that tiers are gone; the dock just needs a lesson
-  // open. Access is still re-checked server-side on every Socratic endpoint.
-  const showTutor = !!tutorVariant;
+  // The tutor is part of the paid unlock, so it only docks on a lesson the learner can
+  // actually open. Server-side checks still gate every Socratic endpoint.
+  const showTutor = !!tutorVariant && !selected?.locked;
+
+  // A locked lesson opens the unlock prompt rather than the reader. The server already
+  // strips locked payloads, so there is nothing to show even if this were bypassed --
+  // this is the prompt, not the boundary.
+  const chooseLesson = (pair) => {
+    if (pair?.locked) {
+      setUnlockFor(pair.content_type);
+      return;
+    }
+    setSelected(pair);
+  };
 
   const goToNext = () => {
     if (!nextLesson) return;
@@ -167,6 +189,10 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   // Picking a lesson from the collapsed rail also expands its course/chapter, so the tree
   // is already showing that lesson in context whenever the sidebar is opened back up.
   const selectFromRail = (pair) => {
+    if (pair?.locked) {
+      setUnlockFor(pair.content_type);
+      return;
+    }
     const entry = flatLessons.find((l) => l.item.key === pair.key);
     if (entry) {
       setOpenCourseId(entry.courseId);
@@ -177,6 +203,13 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
 
   return (
     <div className="fixed inset-0 z-30 flex bg-[var(--bg)]">
+      <UnlockDialog
+        open={!!unlockFor}
+        lockedType={unlockFor}
+        activePack={activePack}
+        onClose={() => setUnlockFor(null)}
+        onUnlocked={() => { setUnlockFor(null); loadPack({ reset: false }); }}
+      />
       <motion.aside
         initial={reduce ? false : { x: -24, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
@@ -277,7 +310,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
               onToggleChapter={toggleChapter}
               selectedKey={selected?.key}
               langFilter={langFilter}
-              onSelectContent={setSelected}
+              onSelectContent={chooseLesson}
             />
           )}
         </div>

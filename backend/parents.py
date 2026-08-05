@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from db import db
+from billing import entitled_pack_ids
 from auth import require_role, _hash
 from registrations import (
     assert_username_available,
@@ -230,8 +231,10 @@ class ChildPackOut(BaseModel):
     id: str
     title: str
     grade: str
-    tier: str
     language: str
+    # Whether the child has unlocked this pack, so the parent portal shows the same
+    # locked/unlocked state the child sees rather than implying full access.
+    unlocked: bool = False
     completed: int
     total: int
     percent: int
@@ -248,6 +251,8 @@ async def child_packs(student_id: str, parent: dict = Depends(require_role("pare
     if not pack_ids:
         return []
     packs = await db.packs.find({"id": {"$in": pack_ids}}, {"_id": 0}).to_list(500)
+    # The CHILD's unlocks, not the parent's -- this view reports the child's access.
+    child_entitlements = await entitled_pack_ids(student_id)
 
     out = []
     for pack in packs:
@@ -279,8 +284,8 @@ async def child_packs(student_id: str, parent: dict = Depends(require_role("pare
             id=pack["id"],
             title=pack["title"],
             grade=pack["grade"],
-            tier=pack["tier"],
             language=pack["language"],
+            unlocked=pack["id"] in child_entitlements,
             completed=completed,
             total=total,
             percent=percent,

@@ -3,9 +3,7 @@
 ## Original problem statement
 User uploaded `MYTAMAN AI Tutor_concept_draft_v2.docx` and asked to "start building the website following the MVP." The document describes an AI-powered e-learning platform for Malaysian secondary curriculum (KSSM) with three roles (Admin / Parent / Student), a Tutor Pack tier system (Basic / Premium / X-Points), and a Model Router that manages multiple AI providers with failover, editable system prompts, and encrypted key storage.
 
-> **Superseded:** the Basic / Premium / X-Points tier system described above was removed.
-> A pack no longer carries a tier, so every Tutor Pack — including any created from now on —
-> exposes the Socratic tutor to the students enrolled in it, with no per-pack configuration.
+> **Superseded:** the Basic / Premium / X-Points tier system described above was removed. Access is now per learner per pack: Notes are free on every chapter, everything else unlocks for MYR 15 per pack (MYR 5 for each additional pack bought in the same order). See `backend/billing.py`.
 
 ## User choices (Feb 17, 2026)
 - **MVP slice**: 3D-styled landing + Admin dashboard (Generate + Model Router) + Student view + Parent view
@@ -60,8 +58,9 @@ User uploaded `MYTAMAN AI Tutor_concept_draft_v2.docx` and asked to "start build
 - Mind map + quiz-taking UI (currently render raw JSON body).
 - File upload for source materials (PDF/DOCX ingestion → text).
 
-### P2
-- Daily study planner, leaderboard, purchases, video tutorials, mock exams.
+### P2 (from concept doc future tiers)
+- Unlocked Tutor Pack: live Socratic AI chat, streaming tutor conversation.
+- Future: daily study planner, leaderboard, payment gateway, video tutorials, mock exams.
 - Analytics dashboard: daily ops stats, retention.
 - Content moderation queue for AI outputs before publish.
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronDown, Check, FileText, HelpCircle, Layers, Share2, ClipboardList, Folder } from "lucide-react";
+import { ChevronDown, Check, FileText, HelpCircle, Layers, Share2, ClipboardList, Folder, Lock } from "lucide-react";
 import { RailTooltip } from "@/components/SidebarToggle";
 
 // Each content type gets its own icon + gradient tile so a lesson is identifiable at a
@@ -62,18 +62,26 @@ const LessonRow = ({ pair, step, isLast, done, active, langFilter, onSelect }) =
           active ? "border-[#00f0ff]/50 bg-[#00f0ff]/[0.07]" : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/20"
         }`}
       >
-        <span className={`shrink-0 h-11 w-11 rounded-xl bg-gradient-to-br ${type.gradient} grid place-items-center shadow-lg`}>
+        <span
+          className={`shrink-0 h-11 w-11 rounded-xl bg-gradient-to-br ${type.gradient} grid place-items-center shadow-lg ${
+            pair.locked ? "opacity-40 saturate-50" : ""
+          }`}
+        >
           <Icon size={20} className="text-white" strokeWidth={2.2} />
         </span>
 
         <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-semibold uppercase tracking-wide text-white">{type.label}</span>
+          <span className={`block text-[13px] font-semibold uppercase tracking-wide ${pair.locked ? "text-white/45" : "text-white"}`}>
+            {type.label}
+          </span>
           <span className="mt-1 block text-[10px] font-medium uppercase tracking-[0.15em] text-white/35">
             {langBadge(langFilter)}
           </span>
         </span>
 
-        {done ? (
+        {pair.locked ? (
+          <Lock size={14} className="shrink-0 text-[#ffb020]" />
+        ) : done ? (
           <Check size={15} className="shrink-0 text-emerald-400" />
         ) : (
           <span className="shrink-0 h-3 w-3 rounded-full border border-white/20" />
@@ -179,15 +187,19 @@ export const CourseSidebarRail = ({ lessons, completed, selectedKey, onSelectCon
           data-testid={`rail-content-${pair.key}`}
           title={`${type.label} — ${pair.title}`}
           className={`group relative h-11 w-11 shrink-0 rounded-xl bg-gradient-to-br ${type.gradient} grid place-items-center transition-all hover:scale-105 ${
-            active ? "ring-2 ring-[#00f0ff] ring-offset-2 ring-offset-[#0a0514]" : "opacity-75 hover:opacity-100"
+            pair.locked ? "opacity-35 saturate-50 hover:opacity-60" : active ? "ring-2 ring-[#00f0ff] ring-offset-2 ring-offset-[#0a0514]" : "opacity-75 hover:opacity-100"
           }`}
         >
           <Icon size={19} className="text-white" strokeWidth={2.2} />
-          {done && (
+          {pair.locked ? (
+            <span className="absolute -right-0.5 -top-0.5 h-4 w-4 rounded-full border-2 border-[#0a0514] bg-[#ffb020] grid place-items-center">
+              <Lock size={8} className="text-[#0a0514]" strokeWidth={3} />
+            </span>
+          ) : done ? (
             <span className="absolute -right-0.5 -top-0.5 h-4 w-4 rounded-full border-2 border-[#0a0514] bg-emerald-400 grid place-items-center">
               <Check size={9} className="text-[#0a0514]" strokeWidth={3.5} />
             </span>
-          )}
+          ) : null}
           <RailTooltip>{type.label}</RailTooltip>
         </button>
       );

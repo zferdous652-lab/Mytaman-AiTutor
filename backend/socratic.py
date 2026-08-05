@@ -7,10 +7,10 @@ student currently has open, and every session is scoped to exactly one published
 content item -- (pack, chapter, content type, language) -- so the tutor is always
 talking about the thing on screen.
 
-Availability is no longer a pack property: every Tutor Pack exposes the tutor, so a
-pack created tomorrow gets it without any per-pack configuration. Enrolment is still
-enforced here, server-side, on every endpoint -- the student UI hiding the panel is a
-convenience, not the boundary.
+Availability follows the learner's Tutor Pack unlock: the tutor discusses the paid
+lesson material, so it is locked wherever that material is. That check lives here,
+server-side, on every endpoint -- the student UI hiding the panel is a convenience,
+not the boundary.
 
 Pedagogy is enforced by this module, not by trusting one long system prompt:
 each turn asks the model for a small JSON object (reply / phase / hint_level /
@@ -32,6 +32,7 @@ from db import db
 from auth import require_role, get_current_user
 from model_router import call_router
 from xp import award_socratic_xp
+from billing import has_entitlement
 
 router = APIRouter(prefix="/socratic", tags=["socratic"])
 
@@ -142,7 +143,11 @@ async def update_settings(payload: SettingsIn, _: dict = Depends(require_role("a
 async def _load_content_for_student(content_id: str, user: dict) -> tuple:
     """Resolves a published content item plus its pack, and enforces every access rule
     the tutor depends on: the item exists and is published, the student is enrolled in
-    its pack. Returns (content, pack).
+    its pack, and they have unlocked that pack. Returns (content, pack).
+
+    The tutor sits behind the same unlock as the paid content types -- it discusses the
+    lesson material, so giving it away on a locked pack would hand over the very content
+    the unlock is protecting.
 
     This is the security boundary. The student UI only renders the panel for eligible
     packs, but that is cosmetic -- a caller can post any content_id they like."""
@@ -152,6 +157,11 @@ async def _load_content_for_student(content_id: str, user: dict) -> tuple:
     pack = await db.packs.find_one({"id": content["pack_id"]}, {"_id": 0})
     if not pack:
         raise HTTPException(status_code=404, detail="Tutor Pack not found")
+    if user["role"] != "admin" and not await has_entitlement(user["id"], pack["id"]):
+        raise HTTPException(
+            status_code=403,
+            detail="Unlock this Tutor Pack to study with the Socratic tutor.",
+        )
     if user["role"] == "student":
         enrolled = await db.enrollments.find_one({"user_id": user["id"], "pack_id": pack["id"]})
         if not enrolled:
@@ -168,7 +178,7 @@ class EligibilityOut(BaseModel):
 
 @router.get("/eligibility", response_model=EligibilityOut)
 async def eligibility(content_id: str, user: dict = Depends(get_current_user)):
-    """Lets the student panel show a precise reason ("not enrolled", "daily limit
+    """Lets the student panel show a precise reason ("pack not unlocked", "daily limit
     reached") instead of silently not appearing."""
     settings = await _settings()
     if not settings["enabled"]:
@@ -798,8 +808,8 @@ async def admin_stats(_: dict = Depends(require_role("admin"))):
         flagged_sessions=len(flagged_sessions),
         sessions_last_7d=await db.socratic_sessions.count_documents({"created_at": {"$gte": week_ago}}),
         top_concepts=[{"concept": c["_id"], "count": c["n"]} for c in concepts],
-        # Every pack exposes the tutor now that tiers are gone, so the eligible count is
-        # simply the number of packs.
+        # Every pack is now tutor-eligible; access is per learner via their unlock, so a
+        # pack-level count of "eligible packs" is simply the number of packs.
         eligible_packs=await db.packs.count_documents({}),
     )
 

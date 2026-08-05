@@ -134,7 +134,7 @@ const dict = {
     socratic_collapse: "Click to collapse",
     socratic_admin_title: "Socratic Learning",
     socratic_admin_sub:
-      "The per-lesson AI tutor that guides students to answers instead of giving them. Available on every Tutor Pack a student is enrolled in. Every conversation is recorded and readable here.",
+      "The per-lesson AI tutor that guides students to answers instead of giving them. Available on Tutor Packs a learner has unlocked. Every conversation is recorded and readable here.",
     premium_label: "Tutor",
     socratic_hi: "Hi,",
     socratic_how_help: "How can I help?",
@@ -275,7 +275,7 @@ const dict = {
     socratic_collapse: "Klik untuk lipat",
     socratic_admin_title: "Pembelajaran Socratic",
     socratic_admin_sub:
-      "Tutor AI setiap pelajaran yang membimbing pelajar mencari jawapan sendiri, bukan memberi jawapan. Tersedia untuk setiap Pek Tutor yang didaftari pelajar. Setiap perbualan direkod dan boleh dibaca di sini.",
+      "Tutor AI setiap pelajaran yang membimbing pelajar mencari jawapan sendiri, bukan memberi jawapan. Tersedia untuk Pek Tutor yang telah dibuka oleh pelajar. Setiap perbualan direkod dan boleh dibaca di sini.",
     premium_label: "Tutor",
     socratic_hi: "Hai,",
     socratic_how_help: "Apa yang boleh saya bantu?",

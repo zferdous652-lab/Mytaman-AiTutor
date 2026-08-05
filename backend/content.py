@@ -17,6 +17,7 @@ from auth import require_role, get_current_user
 from model_router import call_router
 from xp import award_lesson_xp, award_quiz_xp
 from rewards import on_xp_earned
+from billing import can_access, entitled_pack_ids, is_free_type
 
 router = APIRouter(prefix="/content", tags=["content"])
 
@@ -785,6 +786,17 @@ async def list_content(pack_id: Optional[str] = None, only_published: bool = Fal
     if only_published or user["role"] != "admin":
         q["published"] = True
     docs = await db.contents.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+    # Same lock as /list-paired. The student UI doesn't call this endpoint, but it is
+    # reachable by any authenticated user, so without this it would be a way to read every
+    # locked lesson in full and walk straight around the paywall.
+    if user["role"] != "admin":
+        owned = await entitled_pack_ids(user["id"])
+        for d in docs:
+            if is_free_type(d.get("content_type")) or d.get("pack_id") in owned:
+                continue
+            d["body"] = None
+            d["payload"] = None
     return [ContentOut(**{k: d.get(k) for k in ContentOut.model_fields.keys()}) for d in docs]
 
 
@@ -808,6 +820,10 @@ class PairedContentOut(BaseModel):
     bm: Optional[LangVariant] = None
     en: Optional[LangVariant] = None
     created_at: str
+    # True when this learner hasn't unlocked the pack and the type isn't free. The lesson
+    # still appears in the list -- a locked item you can't see doesn't sell anything -- but
+    # its bm/en payloads are stripped before the response leaves the server.
+    locked: bool = False
 
 
 @router.get("/list-paired", response_model=List[PairedContentOut])
@@ -862,6 +878,19 @@ async def list_content_paired(pack_id: Optional[str] = None, only_published: boo
     # is stable, so items sharing a type keep their created_at ordering, and the caller's
     # per-chapter grouping preserves this order within each chapter.
     out.sort(key=lambda p: _STUDENT_TYPE_RANK.get(p.content_type, len(_STUDENT_TYPE_RANK)))
+
+    # Lock pass. Locked lessons keep their key/type/title so the UI can render a locked row
+    # and open the unlock prompt, but the actual lesson bodies are removed here rather than
+    # hidden in the client -- anything shipped to the browser is readable in devtools, so a
+    # client-side lock is decoration, not a paywall.
+    if user.get("role") != "admin":
+        owned = await entitled_pack_ids(user["id"])
+        for item in out:
+            if is_free_type(item.content_type) or item.pack_id in owned:
+                continue
+            item.locked = True
+            item.bm = None
+            item.en = None
     return out
 
 
@@ -881,11 +910,27 @@ async def delete_content(content_id: str, _: dict = Depends(require_role("admin"
     return {"ok": True}
 
 
-@router.post("/{content_id}/complete")
-async def mark_complete(content_id: str, user: dict = Depends(get_current_user)):
+async def _require_content_access(content_id: str, user: dict) -> dict:
+    """Fetches a published item and refuses it when the learner hasn't unlocked its pack.
+
+    Needed on every per-item endpoint, not just the listing: /grade-short-answer reads the
+    quiz payload (so without this it would hand back answers from a locked quiz), and the
+    completion endpoints would otherwise award XP for lessons the learner cannot open.
+    """
     content = await db.contents.find_one({"id": content_id, "published": True}, {"_id": 0})
     if not content:
         raise HTTPException(status_code=404, detail="Not found")
+    if not await can_access(user, content.get("pack_id"), content.get("content_type")):
+        raise HTTPException(
+            status_code=403,
+            detail="This lesson is locked. Unlock the Tutor Pack to continue.",
+        )
+    return content
+
+
+@router.post("/{content_id}/complete")
+async def mark_complete(content_id: str, user: dict = Depends(get_current_user)):
+    content = await _require_content_access(content_id, user)
     await db.progress.update_one(
         {"user_id": user["id"], "content_id": content_id},
         {"$setOnInsert": {
@@ -937,9 +982,7 @@ async def grade_short_answer(content_id: str, payload: GradeShortAnswerIn, user:
     Looks the question up server-side from the published content by index, rather than
     trusting question/correct_answer text from the client, so this can't be used to grade
     arbitrary text unrelated to an actual assigned quiz."""
-    content = await db.contents.find_one({"id": content_id, "published": True}, {"_id": 0})
-    if not content:
-        raise HTTPException(status_code=404, detail="Not found")
+    content = await _require_content_access(content_id, user)
     if content["content_type"] != "quiz":
         raise HTTPException(status_code=400, detail="Not a quiz")
     questions = (content.get("payload") or {}).get("questions", [])
@@ -974,9 +1017,7 @@ class QuizResultIn(BaseModel):
 
 @router.post("/{content_id}/quiz-result")
 async def submit_quiz_result(content_id: str, payload: QuizResultIn, user: dict = Depends(get_current_user)):
-    content = await db.contents.find_one({"id": content_id, "published": True}, {"_id": 0})
-    if not content:
-        raise HTTPException(status_code=404, detail="Not found")
+    content = await _require_content_access(content_id, user)
     if content["content_type"] != "quiz":
         raise HTTPException(status_code=400, detail="Not a quiz")
     existing = await db.quiz_results.find_one({"user_id": user["id"], "content_id": content_id}, {"_id": 0, "attempts": 1})

@@ -30,6 +30,24 @@ Authoring follows a **draft → confirm → publish** lifecycle:
 
 AI-generated content (via the Model Router) can also be created and published through the same `contents` pipeline, as an alternative to manual authoring.
 
+## Tutor Pack access & pricing
+
+There are no pack tiers. Access is per learner, per pack:
+
+- **Notes are free** on every chapter of every pack — the sample that shows a pack is worth buying.
+- **Everything else** (Mind Map, Summary, Flashcards, Quiz) and the **Socratic tutor** unlock together, across every chapter of that pack.
+- **MYR 15** unlocks one pack. **MYR 5** for each additional pack bought in the same order.
+
+The lock is enforced server-side in `backend/billing.py`: `/content/list-paired` returns locked
+lessons with `locked: true` and their payloads **stripped**, so a locked lesson body never reaches
+the browser, and every per-item endpoint (`/complete`, `/quiz-result`, `/grade-short-answer`,
+Socratic) re-checks entitlement.
+
+> **Payment is not connected.** `POST /billing/checkout` records a *pending* order and grants
+> nothing — treating an unpaid order as paid would be a free unlock button. Until a gateway is
+> wired in, an admin unlocks a pack via `POST /billing/grant` or `POST /billing/orders/{id}/mark-paid`.
+> `_fulfil_order()` is the single function a gateway webhook needs to call.
+
 ## Model Router
 
 Admin-configurable multi-provider AI setup (OpenAI / Anthropic / Gemini) with:
