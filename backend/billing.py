@@ -152,6 +152,13 @@ class CheckoutOut(BaseModel):
     message: str
 
 
+class CatalogCourseOut(BaseModel):
+    id: str
+    title: str
+    pack_id: Optional[str] = None
+    pack_title: Optional[str] = None
+
+
 class GrantIn(BaseModel):
     user_id: str
     course_ids: List[str] = Field(min_length=1, max_length=50)
@@ -174,6 +181,42 @@ async def my_entitlements(user: dict = Depends(get_current_user)):
         course_ids=sorted(await entitled_course_ids(user["id"])),
         free_content_types=sorted(FREE_CONTENT_TYPES),
     )
+
+
+@router.get("/catalog", response_model=List[CatalogCourseOut])
+async def catalog(exclude_course_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Every course a learner could add on at checkout — across all packs, not just the one
+    they happen to be reading.
+
+    Two filters keep the list honest: a course only appears if it has published content
+    (otherwise the add-on buys an empty shelf), and courses the learner already owns are
+    dropped so nobody is offered something they've paid for. Archived packs are excluded for
+    the same reason `GET /packs/list` excludes them — they aren't on sale any more.
+    """
+    with_content = [c for c in await db.contents.distinct("course_id", {"published": True}) if c]
+    owned = await entitled_course_ids(user["id"])
+    candidates = [c for c in with_content if c not in owned and c != exclude_course_id]
+    if not candidates:
+        return []
+
+    docs = await db.courses.find(
+        {"id": {"$in": candidates}}, {"_id": 0, "id": 1, "title": 1, "pack_id": 1}
+    ).to_list(500)
+    pack_ids = list({d.get("pack_id") for d in docs if d.get("pack_id")})
+    packs = await db.packs.find(
+        {"id": {"$in": pack_ids}, "archived": {"$ne": True}}, {"_id": 0, "id": 1, "title": 1}
+    ).to_list(500)
+    pack_titles = {p["id"]: p["title"] for p in packs}
+
+    out = [
+        CatalogCourseOut(
+            id=d["id"], title=d["title"], pack_id=d.get("pack_id"),
+            pack_title=pack_titles.get(d.get("pack_id")),
+        )
+        for d in docs
+        if d.get("pack_id") in pack_titles
+    ]
+    return sorted(out, key=lambda c: ((c.pack_title or "").lower(), c.title.lower()))
 
 
 @router.post("/checkout", response_model=CheckoutOut)

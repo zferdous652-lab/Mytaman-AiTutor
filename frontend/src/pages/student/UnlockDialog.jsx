@@ -22,23 +22,24 @@ const UnlockDialog = ({ open, onClose, activePack, course, lockedType, onUnlocke
   const [addOns, setAddOns] = useState(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [placed, setPlaced] = useState(null);
+  const [pickingAddOn, setPickingAddOn] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setPlaced(null);
     setAddOns(new Set());
+    setPickingAddOn(false);
     (async () => {
       try {
-        const [pr, cs, ent] = await Promise.all([
+        // The catalog spans every pack, so an add-on is "any other available course" --
+        // not just a sibling of the one being unlocked. The server already drops courses
+        // with no published content and ones this learner owns.
+        const [pr, cs] = await Promise.all([
           api.get("/billing/pricing"),
-          api.get(`/courses/list?pack_id=${activePack.id}`),
-          api.get("/billing/entitlements"),
+          api.get(`/billing/catalog?exclude_course_id=${encodeURIComponent(course?.id || "")}`),
         ]);
         setPricing(pr.data);
-        const owned = new Set(ent.data.course_ids);
-        // Bundle extras are the OTHER courses in this pack -- not the one being unlocked,
-        // and not any the learner already owns.
-        setCourses(cs.data.filter((c) => c.id !== course?.id && !owned.has(c.id)));
+        setCourses(cs.data);
       } catch {
         toast.error("Couldn't load unlock options");
       }
@@ -151,39 +152,72 @@ const UnlockDialog = ({ open, onClose, activePack, course, lockedType, onUnlocke
                   </span>
                 </div>
 
-                {courses.length > 0 && (
-                  <div className="mt-4">
-                    <div className="mb-2 flex items-center gap-1.5 text-xs text-white/50">
-                      <Plus size={12} /> Add another course — {pricing.currency} {pricing.additional_course} each,
-                      all chapters included
+                {courses.length > 0 &&
+                  (pickingAddOn || addOns.size > 0 ? (
+                    <div className="mt-4">
+                      <div className="mb-2 flex items-center gap-1.5 text-xs text-white/50">
+                        <Plus size={12} /> Add another course — {pricing.currency} {pricing.additional_course} each,
+                        every chapter unlocked
+                      </div>
+                      <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
+                        {courses.map((c) => {
+                          const on = addOns.has(c.id);
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => toggleAddOn(c.id)}
+                              data-testid={`unlock-addon-${c.id}`}
+                              className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                                on ? "border-[#00f0ff]/50 bg-[#00f0ff]/10 text-white" : "border-white/10 text-white/70 hover:border-white/25"
+                              }`}
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate">{c.title}</span>
+                                {c.pack_title && (
+                                  <span className="block truncate text-[11px] text-white/40">{c.pack_title}</span>
+                                )}
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2 text-xs">
+                                +{pricing.additional_course}
+                                {on && <Check size={13} className="text-[#00f0ff]" />}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
-                      {courses.map((c) => {
-                        const on = addOns.has(c.id);
-                        return (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => toggleAddOn(c.id)}
-                            data-testid={`unlock-addon-${c.id}`}
-                            className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                              on ? "border-[#00f0ff]/50 bg-[#00f0ff]/10 text-white" : "border-white/10 text-white/70 hover:border-white/25"
-                            }`}
-                          >
-                            <span className="min-w-0 truncate">{c.title}</span>
-                            <span className="flex shrink-0 items-center gap-2 text-xs">
-                              +{pricing.additional_course}
-                              {on && <Check size={13} className="text-[#00f0ff]" />}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPickingAddOn(true)}
+                      data-testid="unlock-addon-open"
+                      className="mt-3 flex w-full items-center justify-between gap-3 rounded-xl border border-dashed border-[#00f0ff]/30 px-4 py-3 text-left transition-colors hover:border-[#00f0ff]/60 hover:bg-[#00f0ff]/[0.06]"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Plus size={15} className="text-[#00f0ff]" />
+                        <span>
+                          <span className="block text-sm text-white/85">Add another course</span>
+                          <span className="block text-xs text-white/45">
+                            Any course in the catalogue — every chapter unlocked
+                          </span>
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-sm text-[#00f0ff]">
+                        +{pricing.currency} {pricing.additional_course}
+                      </span>
+                    </button>
+                  ))}
 
                 <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-4">
-                  <span className="text-sm text-white/60">Total</span>
+                  <span className="text-sm text-white/60">
+                    Total
+                    {addOns.size > 0 && (
+                      <span className="ml-1.5 text-xs text-white/40">
+                        · {addOns.size + 1} courses
+                      </span>
+                    )}
+                  </span>
                   <span className="font-display text-2xl text-white" data-testid="unlock-total">
                     {pricing.currency} {total}
                   </span>

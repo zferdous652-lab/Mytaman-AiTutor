@@ -38,6 +38,9 @@ Tingkatan 1") is the unit a learner recognises and buys, not the pack that conta
 - **Notes are free** on every chapter of every course — the sample that shows a course is worth buying.
 - **Everything else** (Mind Map, Summary, Flashcards, Quiz) and the **Socratic tutor** unlock together, across every chapter of that course.
 - **MYR 15** unlocks one course. **MYR 5** for each additional course bundled into the same order.
+- At checkout, **Add another course** offers any course in the catalogue — from any pack, not just
+  the one being read (`GET /billing/catalog`, which hides courses without published content and
+  ones the learner already owns). Each add-on unlocks every chapter of that course too.
 
 The lock is enforced server-side in `backend/billing.py`: `/content/list-paired` returns locked
 lessons with `locked: true` and their payloads **stripped**, so a locked lesson body never reaches
