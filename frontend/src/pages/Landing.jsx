@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Sparkles, Cpu, Languages, LineChart, Shield, User, GraduationCap } from "lucide-react";
+import { Sparkles, Shield, User, GraduationCap, Wallet } from "lucide-react";
 import HeroScene from "@/components/HeroScene";
 import LandingNav from "@/components/LandingNav";
 import TiltCard from "@/components/TiltCard";
@@ -99,6 +99,20 @@ const Landing = () => {
       {/* GAMIFICATION */}
       <ProgressionSection t={t} />
 
+      {/* FEATURES */}
+      <section id="features" className="relative mx-auto max-w-7xl px-6 py-24">
+        <div className="overline text-[#00f0ff] mb-3">{t("features")}</div>
+        <h2 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mb-2">{t("features_title")}</h2>
+        <p className="text-white/60 mb-10">{t("features_sub")}</p>
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+          {/* Icons follow the audience each card addresses, not the feature it used to describe. */}
+          <Feature i={0} title={t("f1_title")} body={t("f1_body")} icon={GraduationCap} />
+          <Feature i={1} title={t("f2_title")} body={t("f2_body")} icon={User} />
+          <Feature i={2} title={t("f3_title")} body={t("f3_body")} icon={Shield} />
+          <Feature i={3} title={t("f4_title")} body={t("f4_body")} icon={Wallet} />
+        </div>
+      </section>
+
       {/* ROLE CARDS */}
       <section className="relative mx-auto max-w-7xl px-6 py-24">
         <div className="overline text-[#00f0ff] mb-3">Portals</div>
@@ -130,19 +144,6 @@ const Landing = () => {
             icon={GraduationCap}
             image="https://images.unsplash.com/photo-1760260627301-c92d64cb2a67?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHwxfHxzdHVkZW50JTIwc3R1ZHlpbmclMjBnbG93aW5nJTIwc2NyZWVufGVufDB8fHx8MTc4Mjk5Mzg5N3ww&ixlib=rb-4.1.0&q=85"
           />
-        </div>
-      </section>
-
-      {/* FEATURES */}
-      <section id="features" className="relative mx-auto max-w-7xl px-6 py-24">
-        <div className="overline text-[#00f0ff] mb-3">{t("features")}</div>
-        <h2 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mb-2">{t("features_title")}</h2>
-        <p className="text-white/60 mb-10">{t("features_sub")}</p>
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
-          <Feature i={0} title={t("f1_title")} body={t("f1_body")} icon={Sparkles} />
-          <Feature i={1} title={t("f2_title")} body={t("f2_body")} icon={Cpu} />
-          <Feature i={2} title={t("f3_title")} body={t("f3_body")} icon={Languages} />
-          <Feature i={3} title={t("f4_title")} body={t("f4_body")} icon={LineChart} />
         </div>
       </section>
 
