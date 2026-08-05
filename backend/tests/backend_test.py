@@ -452,7 +452,7 @@ class TestSocratic:
 
 # ---------- Tutor Pack unlocks ----------
 class TestBilling:
-    """Notes are free on every pack; everything else needs an unlock. The lock is enforced
+    """Notes are free on every course; everything else needs an unlock. The lock is enforced
     server-side, so these hit the API rather than trusting the UI's lock icons."""
 
     def test_pricing(self, student_token):
@@ -460,8 +460,8 @@ class TestBilling:
         assert r.status_code == 200, r.text
         j = r.json()
         assert j["currency"] == "MYR"
-        assert j["first_pack"] == 15
-        assert j["additional_pack"] == 5
+        assert j["first_course"] == 15
+        assert j["additional_course"] == 5
         assert j["free_content_types"] == ["notes"]
 
     def test_locked_payloads_are_stripped_not_just_flagged(self, admin_token, student_token):
@@ -488,22 +488,27 @@ class TestBilling:
     def test_grant_is_admin_only(self, student_token):
         r = requests.post(
             f"{API}/billing/grant", headers=_h(student_token),
-            json={"user_id": "someone", "pack_ids": ["x"]}, timeout=10,
+            json={"user_id": "someone", "course_ids": ["x"]}, timeout=10,
         )
         assert r.status_code == 403
 
     def test_checkout_prices_the_bundle(self, admin_token, student_token):
-        """First pack MYR 15, each additional MYR 5 -- and checkout must NOT grant access,
+        """First course MYR 15, each additional MYR 5 -- and checkout must NOT grant access,
         since nothing has verified a payment."""
         packs = requests.get(f"{API}/packs/list", headers=_h(admin_token), timeout=10).json()
-        owned = set(requests.get(f"{API}/billing/entitlements", headers=_h(student_token), timeout=10).json()["pack_ids"])
-        available = [p["id"] for p in packs if p["id"] not in owned]
+        courses = []
+        for pk in packs:
+            courses += requests.get(
+                f"{API}/courses/list?pack_id={pk['id']}", headers=_h(admin_token), timeout=10
+            ).json()
+        owned = set(requests.get(f"{API}/billing/entitlements", headers=_h(student_token), timeout=10).json()["course_ids"])
+        available = [c["id"] for c in courses if c["id"] not in owned]
         if len(available) < 2:
-            pytest.skip("need two un-owned packs to exercise bundle pricing")
+            pytest.skip("need two un-owned courses to exercise bundle pricing")
 
         r = requests.post(
             f"{API}/billing/checkout", headers=_h(student_token),
-            json={"pack_ids": available[:2]}, timeout=10,
+            json={"course_ids": available[:2]}, timeout=10,
         )
         assert r.status_code == 200, r.text
         j = r.json()
@@ -511,5 +516,5 @@ class TestBilling:
         assert j["payment_required"] is True
         assert j["status"] == "pending"
 
-        after = set(requests.get(f"{API}/billing/entitlements", headers=_h(student_token), timeout=10).json()["pack_ids"])
+        after = set(requests.get(f"{API}/billing/entitlements", headers=_h(student_token), timeout=10).json()["course_ids"])
         assert after == owned, "an unpaid checkout must not grant access"

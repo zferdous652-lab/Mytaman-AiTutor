@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from db import db
-from billing import entitled_pack_ids
+from billing import entitled_course_ids
 from auth import require_role, _hash
 from registrations import (
     assert_username_available,
@@ -232,9 +232,10 @@ class ChildPackOut(BaseModel):
     title: str
     grade: str
     language: str
-    # Whether the child has unlocked this pack, so the parent portal shows the same
-    # locked/unlocked state the child sees rather than implying full access.
-    unlocked: bool = False
+    # How many of this pack's courses the child has unlocked, so the parent portal shows
+    # the same locked/unlocked state the child sees rather than implying full access.
+    courses_total: int = 0
+    courses_unlocked: int = 0
     completed: int
     total: int
     percent: int
@@ -252,10 +253,13 @@ async def child_packs(student_id: str, parent: dict = Depends(require_role("pare
         return []
     packs = await db.packs.find({"id": {"$in": pack_ids}}, {"_id": 0}).to_list(500)
     # The CHILD's unlocks, not the parent's -- this view reports the child's access.
-    child_entitlements = await entitled_pack_ids(student_id)
+    child_entitlements = await entitled_course_ids(student_id)
 
     out = []
     for pack in packs:
+        pack_course_ids = [
+            c["id"] for c in await db.courses.find({"pack_id": pack["id"]}, {"_id": 0, "id": 1}).to_list(200)
+        ]
         contents = await db.contents.find(
             {"pack_id": pack["id"], "published": True}, {"_id": 0, "id": 1}
         ).to_list(500)
@@ -285,7 +289,8 @@ async def child_packs(student_id: str, parent: dict = Depends(require_role("pare
             title=pack["title"],
             grade=pack["grade"],
             language=pack["language"],
-            unlocked=pack["id"] in child_entitlements,
+            courses_total=len(pack_course_ids),
+            courses_unlocked=len([c for c in pack_course_ids if c in child_entitlements]),
             completed=completed,
             total=total,
             percent=percent,

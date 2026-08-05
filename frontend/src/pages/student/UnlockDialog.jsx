@@ -13,12 +13,12 @@ const TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Flashcards"
  * on screen can never drift from the number the server charges.
  *
  * Payment is not connected yet: /billing/checkout records the order and returns
- * payment_required, so this dialog reports that honestly instead of implying the pack has
+ * payment_required, so this dialog reports that honestly instead of implying the course has
  * been unlocked. It does not fake a success state.
  */
-const UnlockDialog = ({ open, onClose, activePack, lockedType, onUnlocked }) => {
+const UnlockDialog = ({ open, onClose, activePack, course, lockedType, onUnlocked }) => {
   const [pricing, setPricing] = useState(null);
-  const [packs, setPacks] = useState([]);
+  const [courses, setCourses] = useState([]);
   const [addOns, setAddOns] = useState(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [placed, setPlaced] = useState(null);
@@ -29,21 +29,21 @@ const UnlockDialog = ({ open, onClose, activePack, lockedType, onUnlocked }) => 
     setAddOns(new Set());
     (async () => {
       try {
-        const [pr, pk, ent] = await Promise.all([
+        const [pr, cs, ent] = await Promise.all([
           api.get("/billing/pricing"),
-          api.get("/packs/list"),
+          api.get(`/courses/list?pack_id=${activePack.id}`),
           api.get("/billing/entitlements"),
         ]);
         setPricing(pr.data);
-        const owned = new Set(ent.data.pack_ids);
-        // Only packs that are neither the one being unlocked nor already owned can be
-        // added as bundle extras.
-        setPacks(pk.data.filter((p) => p.id !== activePack?.id && !owned.has(p.id)));
+        const owned = new Set(ent.data.course_ids);
+        // Bundle extras are the OTHER courses in this pack -- not the one being unlocked,
+        // and not any the learner already owns.
+        setCourses(cs.data.filter((c) => c.id !== course?.id && !owned.has(c.id)));
       } catch {
         toast.error("Couldn't load unlock options");
       }
     })();
-  }, [open, activePack?.id]);
+  }, [open, activePack?.id, course?.id]);
 
   if (!pricing) return null;
 
@@ -55,20 +55,24 @@ const UnlockDialog = ({ open, onClose, activePack, lockedType, onUnlocked }) => 
       return next;
     });
 
-  // Mirrors the server's price_for(): first pack full price, each extra at the add-on rate.
-  const total = pricing.first_pack + addOns.size * pricing.additional_pack;
+  // Mirrors the server's price_for(): first course full price, each extra at the add-on rate.
+  const total = pricing.first_course + addOns.size * pricing.additional_course;
 
   const submit = async () => {
+    if (!course?.id) {
+      toast.error("Couldn't identify the course to unlock");
+      return;
+    }
     setSubmitting(true);
     try {
       const { data } = await api.post("/billing/checkout", {
-        pack_ids: [activePack.id, ...Array.from(addOns)],
+        course_ids: [course.id, ...Array.from(addOns)],
       });
       setPlaced(data);
       // Only refresh access if the server actually granted it. It does not today, but this
       // keeps the dialog correct the moment a gateway is wired up.
       if (!data.payment_required) {
-        toast.success("Tutor Pack unlocked");
+        toast.success("Course unlocked");
         onUnlocked?.();
       }
     } catch (e) {
@@ -103,7 +107,7 @@ const UnlockDialog = ({ open, onClose, activePack, lockedType, onUnlocked }) => 
                 </span>
                 <div>
                   <div className="font-display text-lg tracking-tight text-white">
-                    Unlock {activePack?.title}
+                    Unlock {course?.title || activePack?.title}
                   </div>
                   <div className="text-xs text-white/50">
                     {lockedType ? `${TYPE_LABELS[lockedType] || lockedType} is locked` : "Locked content"}
@@ -122,8 +126,8 @@ const UnlockDialog = ({ open, onClose, activePack, lockedType, onUnlocked }) => 
                   <p className="mt-1.5 text-sm leading-relaxed text-white/70">{placed.message}</p>
                   <div className="mt-3 text-xs text-white/45">
                     Order <span className="font-mono text-white/70">{placed.order_id.slice(0, 8)}</span> ·{" "}
-                    {placed.currency} {placed.amount} · {placed.pack_ids.length} pack
-                    {placed.pack_ids.length === 1 ? "" : "s"}
+                    {placed.currency} {placed.amount} · {placed.course_ids.length} course
+                    {placed.course_ids.length === 1 ? "" : "s"}
                   </div>
                 </div>
                 <button
@@ -137,38 +141,38 @@ const UnlockDialog = ({ open, onClose, activePack, lockedType, onUnlocked }) => 
               <>
                 <p className="mt-5 text-sm leading-relaxed text-white/60">
                   Notes are free on every chapter. Unlocking adds the mind map, summary, flashcards, quiz
-                  and the Socratic tutor — across <span className="text-white">every chapter</span> of this pack.
+                  and the Socratic tutor — across <span className="text-white">every chapter</span> of this course.
                 </p>
 
                 <div className="mt-5 flex items-baseline justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                  <span className="text-sm text-white/80">{activePack?.title}</span>
+                  <span className="text-sm text-white/80">{course?.title || activePack?.title}</span>
                   <span className="font-display text-lg text-white">
-                    {pricing.currency} {pricing.first_pack}
+                    {pricing.currency} {pricing.first_course}
                   </span>
                 </div>
 
-                {packs.length > 0 && (
+                {courses.length > 0 && (
                   <div className="mt-4">
                     <div className="mb-2 flex items-center gap-1.5 text-xs text-white/50">
-                      <Plus size={12} /> Add another course — {pricing.currency} {pricing.additional_pack} each,
+                      <Plus size={12} /> Add another course — {pricing.currency} {pricing.additional_course} each,
                       all chapters included
                     </div>
                     <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
-                      {packs.map((p) => {
-                        const on = addOns.has(p.id);
+                      {courses.map((c) => {
+                        const on = addOns.has(c.id);
                         return (
                           <button
-                            key={p.id}
+                            key={c.id}
                             type="button"
-                            onClick={() => toggleAddOn(p.id)}
-                            data-testid={`unlock-addon-${p.id}`}
+                            onClick={() => toggleAddOn(c.id)}
+                            data-testid={`unlock-addon-${c.id}`}
                             className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
                               on ? "border-[#00f0ff]/50 bg-[#00f0ff]/10 text-white" : "border-white/10 text-white/70 hover:border-white/25"
                             }`}
                           >
-                            <span className="min-w-0 truncate">{p.title}</span>
+                            <span className="min-w-0 truncate">{c.title}</span>
                             <span className="flex shrink-0 items-center gap-2 text-xs">
-                              +{pricing.additional_pack}
+                              +{pricing.additional_course}
                               {on && <Check size={13} className="text-[#00f0ff]" />}
                             </span>
                           </button>

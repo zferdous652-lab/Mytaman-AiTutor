@@ -64,7 +64,8 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   const [openCourseId, setOpenCourseId] = useState(null);
   const [openChapterIds, setOpenChapterIds] = useState(new Set());
   const [collapsed, toggleCollapsed] = useSidebarCollapsed("mytaman:sidebar:course");
-  // Which locked content type triggered the unlock prompt (null = closed).
+  // The locked lesson that triggered the unlock prompt (null = closed). Holds the pair so
+  // the dialog can name both the content type and the course it belongs to.
   const [unlockFor, setUnlockFor] = useState(null);
   const [tutorCollapsed, toggleTutorCollapsed] = useSidebarCollapsed("mytaman:sidebar:socratic");
 
@@ -180,7 +181,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   // this is the prompt, not the boundary.
   const chooseLesson = (pair) => {
     if (pair?.locked) {
-      setUnlockFor(pair.content_type);
+      setUnlockFor(pair);
       return;
     }
     setSelected(pair);
@@ -197,7 +198,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   // is already showing that lesson in context whenever the sidebar is opened back up.
   const selectFromRail = (pair) => {
     if (pair?.locked) {
-      setUnlockFor(pair.content_type);
+      setUnlockFor(pair);
       return;
     }
     const entry = flatLessons.find((l) => l.item.key === pair.key);
@@ -212,7 +213,8 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
     <div className="fixed inset-0 z-30 flex bg-[var(--bg)]">
       <UnlockDialog
         open={!!unlockFor}
-        lockedType={unlockFor}
+        lockedType={unlockFor?.content_type}
+        course={courses.find((c) => c.id === unlockFor?.course_id)}
         activePack={activePack}
         onClose={() => setUnlockFor(null)}
         onUnlocked={() => { setUnlockFor(null); loadPack({ reset: false }); }}

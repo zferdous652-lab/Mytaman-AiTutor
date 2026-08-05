@@ -143,7 +143,7 @@ async def update_settings(payload: SettingsIn, _: dict = Depends(require_role("a
 async def _load_content_for_student(content_id: str, user: dict) -> tuple:
     """Resolves a published content item plus its pack, and enforces every access rule
     the tutor depends on: the item exists and is published, the student is enrolled in
-    its pack, and they have unlocked that pack. Returns (content, pack).
+    its pack, and they have unlocked the COURSE the lesson belongs to. Returns (content, pack).
 
     The tutor sits behind the same unlock as the paid content types -- it discusses the
     lesson material, so giving it away on a locked pack would hand over the very content
@@ -157,10 +157,10 @@ async def _load_content_for_student(content_id: str, user: dict) -> tuple:
     pack = await db.packs.find_one({"id": content["pack_id"]}, {"_id": 0})
     if not pack:
         raise HTTPException(status_code=404, detail="Tutor Pack not found")
-    if user["role"] != "admin" and not await has_entitlement(user["id"], pack["id"]):
+    if user["role"] != "admin" and not await has_entitlement(user["id"], content.get("course_id")):
         raise HTTPException(
             status_code=403,
-            detail="Unlock this Tutor Pack to study with the Socratic tutor.",
+            detail="Unlock this course to study with the Socratic tutor.",
         )
     if user["role"] == "student":
         enrolled = await db.enrollments.find_one({"user_id": user["id"], "pack_id": pack["id"]})

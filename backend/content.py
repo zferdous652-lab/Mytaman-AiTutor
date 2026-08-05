@@ -17,7 +17,7 @@ from auth import require_role, get_current_user
 from model_router import call_router
 from xp import award_lesson_xp, award_quiz_xp
 from rewards import on_xp_earned
-from billing import can_access, entitled_pack_ids, is_free_type
+from billing import can_access, entitled_course_ids, is_free_type
 
 router = APIRouter(prefix="/content", tags=["content"])
 
@@ -791,9 +791,9 @@ async def list_content(pack_id: Optional[str] = None, only_published: bool = Fal
     # reachable by any authenticated user, so without this it would be a way to read every
     # locked lesson in full and walk straight around the paywall.
     if user["role"] != "admin":
-        owned = await entitled_pack_ids(user["id"])
+        owned = await entitled_course_ids(user["id"])
         for d in docs:
-            if is_free_type(d.get("content_type")) or d.get("pack_id") in owned:
+            if is_free_type(d.get("content_type")) or d.get("course_id") in owned:
                 continue
             d["body"] = None
             d["payload"] = None
@@ -814,6 +814,9 @@ class PairedContentOut(BaseModel):
     already a reliable, collision-free pairing key with no extra schema field needed."""
     key: str
     pack_id: str
+    # The course is the unit that gets unlocked and paid for, so the client needs it to
+    # name the course in the unlock prompt and to check out the right thing.
+    course_id: Optional[str] = None
     chapter_id: Optional[str] = None
     content_type: ContentType
     title: Optional[str] = None
@@ -855,6 +858,7 @@ async def list_content_paired(pack_id: Optional[str] = None, only_published: boo
             groups[group_key] = {
                 "bm": None, "en": None,
                 "chapter_id": d.get("chapter_id"),  # None for no-chapter legacy content
+                "course_id": d.get("course_id"),
                 "created_at": d.get("created_at"),
             }
             order.append(group_key)
@@ -873,6 +877,7 @@ async def list_content_paired(pack_id: Optional[str] = None, only_published: boo
             key=f"{group_key[1]}:{content_type_}",
             pack_id=pack_id_,
             chapter_id=g["chapter_id"],
+            course_id=g["course_id"],
             content_type=content_type_,
             title=title,
             bm=g["bm"],
@@ -892,9 +897,9 @@ async def list_content_paired(pack_id: Optional[str] = None, only_published: boo
     # hidden in the client -- anything shipped to the browser is readable in devtools, so a
     # client-side lock is decoration, not a paywall.
     if user.get("role") != "admin":
-        owned = await entitled_pack_ids(user["id"])
+        owned = await entitled_course_ids(user["id"])
         for item in out:
-            if is_free_type(item.content_type) or item.pack_id in owned:
+            if is_free_type(item.content_type) or item.course_id in owned:
                 continue
             item.locked = True
             item.bm = None
@@ -928,7 +933,7 @@ async def _require_content_access(content_id: str, user: dict) -> dict:
     content = await db.contents.find_one({"id": content_id, "published": True}, {"_id": 0})
     if not content:
         raise HTTPException(status_code=404, detail="Not found")
-    if not await can_access(user, content.get("pack_id"), content.get("content_type")):
+    if not await can_access(user, content.get("course_id"), content.get("content_type")):
         raise HTTPException(
             status_code=403,
             detail="This lesson is locked. Unlock the Tutor Pack to continue.",
