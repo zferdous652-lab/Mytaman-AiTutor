@@ -10,7 +10,7 @@ const CONTENT_TYPE_LABELS = { summary: "Summary", quiz: "Quiz", flashcards: "Fla
 const Packs = () => {
   const { t } = useLang();
   const [packs, setPacks] = useState([]);
-  const [form, setForm] = useState({ title: "", description: "", grade: "", language: "both", tier: "basic" });
+  const [form, setForm] = useState({ title: "", description: "", grade: "", language: "both" });
   const [reviewPack, setReviewPack] = useState(null);
   const [confirmedDrafts, setConfirmedDrafts] = useState([]);
   const [selectedDraftIds, setSelectedDraftIds] = useState([]);
@@ -190,7 +190,7 @@ const Packs = () => {
     try {
       await api.post("/packs/create", form);
       toast.success("Pack created");
-      setForm({ title: "", description: "", grade: "", language: "both", tier: "basic" });
+      setForm({ title: "", description: "", grade: "", language: "both" });
       load();
     } catch (err) {
       toast.error("Failed");
@@ -254,14 +254,6 @@ const Packs = () => {
                 <option value="bm">BM</option>
               </select>
             </div>
-            <div>
-              <label className="text-xs text-white/60">Tier</label>
-              <select value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white">
-                <option value="basic">Basic</option>
-                <option value="premium">Premium</option>
-                <option value="xpoints">X-Points</option>
-              </select>
-            </div>
           </div>
           <button data-testid="pack-submit" type="submit" className="w-full rounded-full bg-[#00f0ff] py-2 text-sm font-semibold text-black hover:bg-white transition-colors">Create pack</button>
         </form>
@@ -279,7 +271,6 @@ const Packs = () => {
               title="Click to review confirmed drafts and publish"
             >
               <div className="flex items-center justify-between">
-                <div className="overline text-[#00f0ff]">{p.tier}</div>
                 <div className="flex items-center gap-2">
                   {p.published && (
                     <span className="inline-flex items-center gap-1 text-[10px] text-[#00ff66] uppercase tracking-widest">

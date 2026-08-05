@@ -14,7 +14,7 @@ const PROMPT_GROUPS = [
   {
     id: "socratic",
     label: "Socratic Learning",
-    hint: "Governs the per-lesson tutor docked beside Premium pack content. The tutor prompt must keep returning the documented JSON shape — free-form prose still renders, but the phase / mastery / concept signals that drive progress and admin reporting are lost.",
+    hint: "Governs the per-lesson tutor docked beside lesson content. The tutor prompt must keep returning the documented JSON shape — free-form prose still renders, but the phase / mastery / concept signals that drive progress and admin reporting are lost.",
     accent: "#8a2be2",
     icon: Brain,
     keys: ["socratic_tutor", "live_tutor"],

@@ -229,7 +229,7 @@ change the data model:
 
 ## Explicitly out of scope for this branch
 
-- Anything from the Premium/X-Points tiers (Socratic AI chat, leaderboards,
-  Stripe) — unrelated to the parent-visibility gap this branch exists to close.
+- Leaderboards and payments (Stripe) — unrelated to the parent-visibility gap this
+  branch exists to close.
 - Admin-side changes beyond what's needed to support parent linking (e.g. no
   need to touch Tutor Pack authoring/publishing flows).

@@ -15,11 +15,6 @@ import SocraticPanel from "./SocraticPanel";
 
 const LANG_FILTERS = ["all", "en", "bm"];
 
-// Socratic Learning is a Premium Tutor Pack feature. This only decides whether the dock
-// is rendered -- every Socratic endpoint re-checks the pack's tier server-side, so
-// nothing here is load-bearing for access control.
-const SOCRATIC_TIERS = ["premium"];
-
 // The right-hand pane shown before a lesson is picked -- an at-a-glance summary of the
 // active pack plus a nudge to start reading, instead of a blank area.
 const WelcomePane = ({ pack, progressPct, itemCount }) => (
@@ -158,7 +153,9 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   // It talks about the exact language variant being read, not the pair.
   const tutorVariant = selected ? primaryVariant(selected, langFilter) : null;
   const tutorLang = tutorVariant && selected?.bm && tutorVariant.id === selected.bm.id ? "bm" : "en";
-  const showTutor = SOCRATIC_TIERS.includes(activePack.tier) && !!tutorVariant;
+  // Every pack carries the tutor now that tiers are gone; the dock just needs a lesson
+  // open. Access is still re-checked server-side on every Socratic endpoint.
+  const showTutor = !!tutorVariant;
 
   const goToNext = () => {
     if (!nextLesson) return;
@@ -467,7 +464,7 @@ const StudentBrowse = () => {
           return (
             <div key={p.id} className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5 flex flex-col">
               <div className="flex justify-between">
-                <div className="overline text-[#00f0ff]">{p.tier}</div>
+                <div className="overline text-[#00f0ff]">{p.grade}</div>
                 <div className="flex items-center gap-2">
                   {enrolled.has(p.id) && (
                     <span className="rounded-full border border-[#00f0ff]/40 bg-[#00f0ff]/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-[#00f0ff]">

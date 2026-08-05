@@ -12,15 +12,11 @@ from auth import require_role, get_current_user
 
 router = APIRouter(prefix="/packs", tags=["packs"])
 
-Tier = Literal["basic", "premium", "xpoints"]
-
-
 class PackIn(BaseModel):
     title: str
     description: str
     grade: str
     language: Literal["en", "bm", "both"] = "both"
-    tier: Tier = "basic"
 
 
 class PackOut(PackIn):
@@ -238,7 +234,6 @@ async def seed_packs(target_db):
             "description": "Bab-bab utama sejarah tingkatan 1 dengan ringkasan, kuiz dan kad imbas.",
             "grade": "Form 1",
             "language": "both",
-            "tier": "basic",
             "created_at": datetime.now(timezone.utc).isoformat(),
         },
         {
@@ -247,7 +242,6 @@ async def seed_packs(target_db):
             "description": "Algebra, geometry, and statistics with AI-generated practice quizzes.",
             "grade": "Form 2",
             "language": "en",
-            "tier": "basic",
             "created_at": datetime.now(timezone.utc).isoformat(),
         },
         {
@@ -256,7 +250,6 @@ async def seed_packs(target_db):
             "description": "Biology, chemistry, physics fundamentals with flashcards and mind maps.",
             "grade": "Form 3",
             "language": "both",
-            "tier": "premium",
             "created_at": datetime.now(timezone.utc).isoformat(),
         },
     ]

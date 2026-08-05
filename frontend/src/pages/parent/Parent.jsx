@@ -547,7 +547,6 @@ const ParentHome = () => {
             <div className="grid md:grid-cols-2 gap-4" data-testid="parent-packs">
               {packs.map((p) => (
                 <div key={p.id} className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6">
-                  <div className="overline text-[#00f0ff]">{p.tier}</div>
                   <div className="font-display text-xl tracking-tighter text-white mt-2">{p.title}</div>
                   <div className="text-xs text-white/50 mt-1">{p.grade}</div>
                   <div className="mt-4">
@@ -621,7 +620,6 @@ const ParentPacks = () => {
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="parent-browse">
         {packs.map((p) => (
           <div key={p.id} className="rounded-2xl border border-white/10 bg-[#0a0514]/60 p-5">
-            <div className="overline text-[#00f0ff]">{p.tier}</div>
             <div className="font-display text-lg tracking-tight text-white mt-2">{p.title}</div>
             <div className="text-xs text-white/50 mt-1">{p.grade}</div>
             <p className="text-sm text-white/70 mt-3 leading-relaxed">{p.description}</p>
