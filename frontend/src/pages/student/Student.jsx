@@ -117,23 +117,28 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
   };
 
   // "All" shows bilingual pairs (BM primary, EN secondary). "En"/"Bm" each show every
-  // lesson generated in that language, regardless of whether the other language also
-  // exists for it -- "has this language", not "only this language". Both language ids
-  // stay on the pair either way -- ContentViewer/CourseSidebar decide what to *display*
-  // from `langFilter`, but "done" is always checked against both ids, so completing a
-  // lesson under one filter still reads as done under the others.
+  // lesson available in that language -- "has this language", not "only this language".
+  // Completion is still checked against both language ids, so finishing a lesson under one
+  // filter still reads as done under the others.
+  //
+  // Filters on has_bm/has_en rather than on bm/en being present: the server strips the
+  // payloads of locked lessons, so testing the content itself would drop every locked row
+  // out of the sidebar -- hiding exactly what the learner is meant to be offered.
   const filteredItems = useMemo(() => {
-    if (langFilter === "all") return items.filter((it) => it.bm && it.en);
-    if (langFilter === "en") return items.filter((it) => it.en);
-    return items.filter((it) => it.bm);
+    if (langFilter === "all") return items.filter((it) => it.has_bm && it.has_en);
+    if (langFilter === "en") return items.filter((it) => it.has_en);
+    return items.filter((it) => it.has_bm);
   }, [items, langFilter]);
 
   useEffect(() => {
     setSelected(null);
   }, [langFilter]);
 
-  const completedPairCount = filteredItems.filter((it) => isPairDone(it, completed)).length;
-  const progressPct = filteredItems.length ? Math.round((completedPairCount / filteredItems.length) * 100) : 0;
+  // Locked lessons are shown but excluded from progress: they cannot be completed, so
+  // counting them would leave a bar that can never reach 100%.
+  const unlockedItems = useMemo(() => filteredItems.filter((it) => !it.locked), [filteredItems]);
+  const completedPairCount = unlockedItems.filter((it) => isPairDone(it, completed)).length;
+  const progressPct = unlockedItems.length ? Math.round((completedPairCount / unlockedItems.length) * 100) : 0;
 
   const itemsByChapter = useMemo(() => {
     const map = {};
@@ -150,7 +155,9 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
     const out = [];
     courses.forEach((course) => {
       (chaptersByCourse[course.id] || []).forEach((ch) => {
-        (itemsByChapter[ch.id] || []).forEach((it) => out.push({ item: it, courseId: course.id, chapterId: ch.id }));
+        (itemsByChapter[ch.id] || [])
+          .filter((it) => !it.locked)
+          .forEach((it) => out.push({ item: it, courseId: course.id, chapterId: ch.id }));
       });
     });
     return out;
@@ -352,7 +359,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
                 />
               </div>
               <span className="text-xs text-white/50 shrink-0">
-                {completedPairCount}/{filteredItems.length} completed
+                {completedPairCount}/{unlockedItems.length} completed
               </span>
             </div>
 

@@ -824,6 +824,12 @@ class PairedContentOut(BaseModel):
     # still appears in the list -- a locked item you can't see doesn't sell anything -- but
     # its bm/en payloads are stripped before the response leaves the server.
     locked: bool = False
+    # WHICH languages exist, independent of whether their content was withheld. The client
+    # filters the sidebar by language, and it used to do that by testing bm/en presence --
+    # which silently dropped every locked lesson once stripping nulled those out. Reporting
+    # availability separately from content lets the filter keep working on locked rows.
+    has_bm: bool = False
+    has_en: bool = False
 
 
 @router.get("/list-paired", response_model=List[PairedContentOut])
@@ -871,6 +877,8 @@ async def list_content_paired(pack_id: Optional[str] = None, only_published: boo
             title=title,
             bm=g["bm"],
             en=g["en"],
+            has_bm=g["bm"] is not None,
+            has_en=g["en"] is not None,
             created_at=g["created_at"],
         ))
     # Sorted by content type so every chapter presents its lessons in the same learning
