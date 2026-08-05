@@ -288,7 +288,7 @@ const Socratic = () => {
           <div className="mt-5 pt-4 border-t border-white/8">
             <div className="text-xs text-white/60">
               Available on{" "}
-              <span className="text-[#8a2be2] font-semibold">unlocked</span> Tutor Packs
+              <span className="text-[#8a2be2] font-semibold">every</span> Tutor Pack
               <span className="block text-white/35 mt-1">
                 {stats.eligible_packs} pack{stats.eligible_packs === 1 ? "" : "s"} currently eligible.
               </span>
