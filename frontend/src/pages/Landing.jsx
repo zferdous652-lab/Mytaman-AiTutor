@@ -1,13 +1,16 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Sparkles, Cpu, Languages, LineChart, Shield, User, GraduationCap } from "lucide-react";
+import { Sparkles, Shield, User, GraduationCap, Wallet } from "lucide-react";
 import HeroScene from "@/components/HeroScene";
 import LandingNav from "@/components/LandingNav";
+import TiltCard from "@/components/TiltCard";
+import { Reveal, StatStrip, PipelineSection, ProgressionSection, MascotSlot } from "@/components/LandingSections";
 import { useLang } from "@/context/LangContext";
 
 const RoleCard = ({ to, label, tag, icon: Icon, image, testId }) => (
-  <Link to={to} data-testid={testId} className="group relative overflow-hidden rounded-2xl border border-white/10 bg-[#0a0514]/60 hover:border-[#00f0ff]/50 transition-colors">
+  <TiltCard intensity={9} className="rounded-2xl">
+  <Link to={to} data-testid={testId} className="group relative block overflow-hidden rounded-2xl border border-white/10 bg-[#0a0514]/60 hover:border-[#00f0ff]/50 transition-colors">
     <div className="absolute inset-0 opacity-30 group-hover:opacity-40 transition-opacity">
       <img src={image} alt="" className="w-full h-full object-cover" />
       <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/70 to-transparent" />
@@ -24,6 +27,7 @@ const RoleCard = ({ to, label, tag, icon: Icon, image, testId }) => (
       </div>
     </div>
   </Link>
+  </TiltCard>
 );
 
 const Feature = ({ i, title, body, icon: Icon }) => (
@@ -32,14 +36,15 @@ const Feature = ({ i, title, body, icon: Icon }) => (
     whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true, margin: "-80px" }}
     transition={{ delay: i * 0.05 }}
-    className="relative rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6 hover:border-[#00f0ff]/40 transition-colors"
     data-testid={`feature-${i}`}
   >
+    <TiltCard intensity={8} className="h-full rounded-2xl border border-white/10 bg-[#0a0514]/60 p-6 hover:border-[#00f0ff]/40 transition-colors">
     <div className="mb-4 h-10 w-10 grid place-items-center rounded-lg bg-[#00f0ff]/10 border border-[#00f0ff]/30 text-[#00f0ff]">
       <Icon size={18} />
     </div>
     <div className="font-display text-lg text-white tracking-tight">{title}</div>
     <p className="mt-2 text-sm text-white/60 leading-relaxed">{body}</p>
+    </TiltCard>
   </motion.div>
 );
 
@@ -53,8 +58,9 @@ const Landing = () => {
       {/* HERO */}
       <section className="relative min-h-screen overflow-hidden">
         <HeroScene />
-        <div className="absolute inset-0 grid-bg pointer-events-none" />
-        <div className="relative mx-auto max-w-7xl px-6 pt-40 pb-24">
+        <div className="absolute inset-0 z-[1] grid-bg pointer-events-none" />
+        {/* Explicit z-10 so the copy always sits above the scene and the grid overlay. */}
+        <div className="relative z-10 mx-auto max-w-7xl px-6 pt-40 pb-24">
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 overline text-[#00f0ff] mb-6">
               <Sparkles size={12} /> {t("tagline")}
@@ -82,6 +88,28 @@ const Landing = () => {
               </Link>
             </div>
           </div>
+        </div>
+      </section>
+
+      <StatStrip t={t} />
+
+      {/* HOW IT WORKS / UNDER THE HOOD */}
+      <PipelineSection t={t} />
+
+      {/* GAMIFICATION */}
+      <ProgressionSection t={t} />
+
+      {/* FEATURES */}
+      <section id="features" className="relative mx-auto max-w-7xl px-6 py-24">
+        <div className="overline text-[#00f0ff] mb-3">{t("features")}</div>
+        <h2 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mb-2">{t("features_title")}</h2>
+        <p className="text-white/60 mb-10">{t("features_sub")}</p>
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+          {/* Icons follow the audience each card addresses, not the feature it used to describe. */}
+          <Feature i={0} title={t("f1_title")} body={t("f1_body")} icon={GraduationCap} />
+          <Feature i={1} title={t("f2_title")} body={t("f2_body")} icon={User} />
+          <Feature i={2} title={t("f3_title")} body={t("f3_body")} icon={Shield} />
+          <Feature i={3} title={t("f4_title")} body={t("f4_body")} icon={Wallet} />
         </div>
       </section>
 
@@ -119,19 +147,6 @@ const Landing = () => {
         </div>
       </section>
 
-      {/* FEATURES */}
-      <section id="features" className="relative mx-auto max-w-7xl px-6 py-24">
-        <div className="overline text-[#00f0ff] mb-3">{t("features")}</div>
-        <h2 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mb-2">{t("features_title")}</h2>
-        <p className="text-white/60 mb-10">{t("features_sub")}</p>
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
-          <Feature i={0} title={t("f1_title")} body={t("f1_body")} icon={Sparkles} />
-          <Feature i={1} title={t("f2_title")} body={t("f2_body")} icon={Cpu} />
-          <Feature i={2} title={t("f3_title")} body={t("f3_body")} icon={Languages} />
-          <Feature i={3} title={t("f4_title")} body={t("f4_body")} icon={LineChart} />
-        </div>
-      </section>
-
       {/* ABOUT */}
       <section id="about" className="relative mx-auto max-w-7xl px-6 py-24">
         <div className="grid lg:grid-cols-12 gap-10">
@@ -152,6 +167,9 @@ const Landing = () => {
           </div>
         </div>
       </section>
+
+      {/* RESERVED FOR COMMISSIONED 3D ART — see LANDING_ASSETS.md */}
+      <MascotSlot t={t} />
 
       {/* CONTACT */}
       <section id="contact" className="relative mx-auto max-w-7xl px-6 py-24">

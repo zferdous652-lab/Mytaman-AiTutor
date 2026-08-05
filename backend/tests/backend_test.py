@@ -1,4 +1,4 @@
-"""MYTAMAN AI Tutor — Backend regression tests (pytest)
+"""Lv99.ai — Backend regression tests (pytest)
 
 Covers:
 - Auth (register, login, /me, role gating)
@@ -53,7 +53,7 @@ class TestHealth:
         r = requests.get(f"{API}/", timeout=10)
         assert r.status_code == 200
         data = r.json()
-        assert "MYTAMAN" in data["message"]
+        assert "Lv99.ai" in data["message"]
 
 
 # ---------- Auth ----------
@@ -153,7 +153,6 @@ class TestPacks:
             "subject": "Science",
             "grade": "Form 3",
             "language": "en",
-            "tier": "basic",
         }
         r = requests.post(f"{API}/packs/create", headers=_h(admin_token), json=payload, timeout=10)
         assert r.status_code == 200, r.text
@@ -354,8 +353,9 @@ class TestRouter:
 # ---------- Socratic Learning ----------
 class TestSocratic:
     """Socratic Learning is gated two ways: role (admin-only settings/oversight) and
-    Tutor Pack tier (students only get a tutor on a Premium pack). Both are enforced
-    server-side, so both are tested here rather than trusted to the UI.
+    enrolment (a student only gets a tutor on a pack they are enrolled in). Tiers are
+    gone, so every pack exposes the tutor; enrolment is what remains, and it is enforced
+    server-side, so it is tested here rather than trusted to the UI.
 
     The conversation endpoints themselves are not exercised -- every turn is a live,
     billable model call through the Model Router, which this suite deliberately avoids.
@@ -375,8 +375,9 @@ class TestSocratic:
         r = requests.get(f"{API}/socratic/settings", headers=_h(admin_token), timeout=10)
         assert r.status_code == 200, r.text
         s = r.json()
-        assert set(s) >= {"enabled", "max_turns_per_session", "daily_message_cap", "allow_quiz_answers", "tiers"}
-        assert s["tiers"] == ["premium"]
+        assert set(s) >= {"enabled", "max_turns_per_session", "daily_message_cap", "allow_quiz_answers"}
+        # Tiers are gone: the settings payload must not reintroduce a pack-level gate.
+        assert "tiers" not in s
         # The tutor must never hand over a quiz answer unless an admin deliberately opts in.
         assert s["allow_quiz_answers"] is False
 
@@ -423,15 +424,18 @@ class TestSocratic:
         )
         assert r.status_code == 404
 
-    def test_non_premium_pack_is_refused(self, admin_token, student_token):
-        """The tier gate is the whole commercial premise of the feature -- a student on a
-        Basic pack must be refused by the API, not merely not shown the panel."""
-        packs = requests.get(f"{API}/packs/list", headers=_h(admin_token), timeout=10).json()
+    def test_unenrolled_pack_is_refused(self, admin_token, student_token):
+        """With tiers gone, enrolment is the only pack-level boundary left -- a student
+        must be refused by the API, not merely not shown the panel."""
+        mine = requests.get(f"{API}/packs/mine", headers=_h(student_token), timeout=10).json()
+        enrolled_ids = {p["id"] for p in mine}
         contents = requests.get(f"{API}/content/list", headers=_h(admin_token), timeout=15).json()
-        non_premium = {p["id"] for p in packs if p.get("tier") != "premium"}
-        target = next((c for c in contents if c.get("pack_id") in non_premium and c.get("published")), None)
+        target = next(
+            (c for c in contents if c.get("published") and c.get("pack_id") not in enrolled_ids),
+            None,
+        )
         if target is None:
-            pytest.skip("no published content on a non-Premium pack to test the tier gate against")
+            pytest.skip("no published content on an unenrolled pack to test the enrolment gate against")
 
         r = requests.post(
             f"{API}/socratic/session",
@@ -440,7 +444,7 @@ class TestSocratic:
             timeout=10,
         )
         assert r.status_code == 403
-        assert "Premium" in r.json()["detail"]
+        assert "enrolled" in r.json()["detail"].lower()
 
         e = requests.get(
             f"{API}/socratic/eligibility?content_id={target['id']}",

@@ -173,7 +173,7 @@ change the data model:
      already have a student account).
    - Option B: parent creates the child account directly from the parent
      portal (parent enters child's name/email/password).
-   - Option C: admin does the linking manually (fits the "MYTAMAN Staff"
+   - Option C: admin does the linking manually (fits the "Lv99.ai Staff"
      admin persona from the PRD, but adds admin workload).
 2. **One child or many per parent?** The PRD says "their child" (singular) but
    real households often have multiple kids — decide now, it changes whether
@@ -229,7 +229,7 @@ change the data model:
 
 ## Explicitly out of scope for this branch
 
-- Anything from the Premium/X-Points tiers (Socratic AI chat, leaderboards,
-  Stripe) — unrelated to the parent-visibility gap this branch exists to close.
+- Leaderboards and payments (Stripe) — unrelated to the parent-visibility gap this
+  branch exists to close.
 - Admin-side changes beyond what's needed to support parent linking (e.g. no
   need to touch Tutor Pack authoring/publishing flows).

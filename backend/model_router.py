@@ -1,6 +1,7 @@
 """Model Router — configure providers, keys, order, system prompts. Failover across providers."""
 import asyncio
 import os
+import time
 import uuid
 import logging
 from typing import Optional, List, Literal
@@ -11,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from db import db, encrypt, decrypt
 from auth import require_role
+from router_metrics import estimate_tokens, record_call, tpm_would_exceed
 
 log = logging.getLogger("model_router")
 
@@ -162,6 +164,10 @@ class ProviderConfig(BaseModel):
 class RouterConfigOut(BaseModel):
     providers: List[ProviderConfig]
     prompts: dict
+    # Telemetry-side settings, surfaced here so the Router page can populate its rate-limit
+    # and cost-rate fields from the same config fetch it already makes.
+    limits: dict = Field(default_factory=dict)
+    pricing: dict = Field(default_factory=dict)
 
 
 class ProviderUpdate(BaseModel):
@@ -320,22 +326,47 @@ async def call_router(system_prompt_key: str, user_text: str, session_id: Option
     if not ordered:
         raise HTTPException(status_code=500, detail="No enabled AI providers")
 
+    # The prompt is billed too, so the TPM estimate has to cover system prompt + user text.
+    prompt_tokens = estimate_tokens(system_prompt) + estimate_tokens(user_text)
+
     errors = []
     for provider, pcfg in ordered:
         key = _resolve_key(provider, pcfg)
         if not key:
             errors.append(f"{provider}: no key available")
             continue
+
+        # A provider over its tokens-per-minute cap is skipped so the request fails over to
+        # the next one, rather than erroring outright -- the cap is there to flatten spikes,
+        # not to take content generation down.
+        cap = await tpm_would_exceed(provider, cfg, prompt_tokens)
+        if cap:
+            log.info("Provider %s skipped: TPM cap %s reached", provider, cap)
+            errors.append(f"{provider}: TPM cap of {cap} reached")
+            continue
+
+        model = pcfg.get("model", DEFAULT_MODELS[provider])
+        started = time.monotonic()
         try:
             sid = session_id or str(uuid.uuid4())
-            chat = LlmChat(api_key=key, session_id=sid, system_message=system_prompt).with_model(
-                provider, pcfg.get("model", DEFAULT_MODELS[provider])
-            )
+            chat = LlmChat(api_key=key, session_id=sid, system_message=system_prompt).with_model(provider, model)
             resp = await chat.send_message(UserMessage(text=user_text))
             text = resp if isinstance(resp, str) else str(resp)
-            return {"provider": provider, "model": pcfg.get("model", DEFAULT_MODELS[provider]), "text": text}
+            await record_call(
+                provider=provider, model=model, prompt_key=system_prompt_key,
+                latency_ms=int((time.monotonic() - started) * 1000),
+                input_text=f"{system_prompt}\n{user_text}", output_text=text, ok=True,
+            )
+            return {"provider": provider, "model": model, "text": text}
         except Exception as e:  # noqa: BLE001
             log.warning("Provider %s failed: %s", provider, e)
+            # Failures are recorded too -- an error rate computed only from successes is
+            # always zero.
+            await record_call(
+                provider=provider, model=model, prompt_key=system_prompt_key,
+                latency_ms=int((time.monotonic() - started) * 1000),
+                input_text=f"{system_prompt}\n{user_text}", output_text="", ok=False, error=str(e)[:500],
+            )
             errors.append(f"{provider}: {e}")
             continue
 
@@ -361,7 +392,10 @@ async def get_config(_: dict = Depends(require_role("admin"))):
     # Merge in any built-in prompt keys (e.g. translate_*) added after this config was first
     # persisted, so they're visible/editable here instead of silently using their default.
     prompts = {**DEFAULT_PROMPTS, **cfg["prompts"]}
-    return RouterConfigOut(providers=providers, prompts=prompts)
+    return RouterConfigOut(
+        providers=providers, prompts=prompts,
+        limits=cfg.get("limits") or {}, pricing=cfg.get("pricing") or {},
+    )
 
 
 @router.patch("/providers/{provider}")

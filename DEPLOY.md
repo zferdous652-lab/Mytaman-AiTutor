@@ -1,4 +1,4 @@
-# Deploying MYTAMAN AI Tutor to an Azure Ubuntu VM (Docker)
+# Deploying Lv99.ai to an Azure Ubuntu VM (Docker)
 
 This repo ships a fully containerized stack:
 
@@ -106,7 +106,7 @@ docker compose up -d backend          # env changes need a restart, not a rebuil
 docker compose exec backend python -c \
   "from email_service import send_email, is_configured; \
    print('configured:', is_configured()); \
-   print('sent:', send_email('you@example.com','MYTAMAN SMTP test','It works.'))"
+   print('sent:', send_email('you@example.com','Lv99.ai SMTP test','It works.'))"
 ```
 
 `configured: True` / `sent: True` means delivery succeeded. If `sent: False`, the

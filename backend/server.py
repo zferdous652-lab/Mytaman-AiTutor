@@ -1,4 +1,4 @@
-"""MYTAMAN AI Tutor — FastAPI backend."""
+"""Lv99.ai — FastAPI backend."""
 import os
 import logging
 from pathlib import Path
@@ -25,6 +25,7 @@ from students import router as students_router  # noqa: E402
 from xp import router as xp_router  # noqa: E402
 from rewards import router as rewards_router  # noqa: E402
 from socratic import router as socratic_router, ensure_indexes as ensure_socratic_indexes  # noqa: E402
+from router_metrics import router as router_metrics_router, ensure_indexes as ensure_router_metrics_indexes  # noqa: E402
 
 
 mongo_url = os.environ["MONGO_URL"]
@@ -37,17 +38,18 @@ async def lifespan(app: FastAPI):
     await seed_admin(db)
     await seed_packs(db)
     await ensure_socratic_indexes(db)
+    await ensure_router_metrics_indexes(db)
     yield
     client.close()
 
 
-app = FastAPI(title="MYTAMAN AI Tutor", lifespan=lifespan)
+app = FastAPI(title="Lv99.ai", lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
 
 
 @api_router.get("/")
 async def root():
-    return {"message": "MYTAMAN AI Tutor API", "time": datetime.now(timezone.utc).isoformat()}
+    return {"message": "Lv99.ai API", "time": datetime.now(timezone.utc).isoformat()}
 
 
 # Attach shared db onto app.state for sub-routers
@@ -56,6 +58,7 @@ app.state.db = db
 # Include sub-routers under /api
 api_router.include_router(auth_router)
 api_router.include_router(router_router)
+api_router.include_router(router_metrics_router)
 api_router.include_router(content_router)
 api_router.include_router(packs_router)
 api_router.include_router(courses_router)

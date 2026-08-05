@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ChevronDown, KeyRound, RefreshCw, Info, ChevronRight, Brain } from "lucide-react";
 import { api } from "@/lib/api";
+import RouterMetrics from "./RouterMetrics";
 import { useLang } from "@/context/LangContext";
 
 // System prompts are grouped into collapsible panels rather than one flat wall of
@@ -13,7 +14,7 @@ const PROMPT_GROUPS = [
   {
     id: "socratic",
     label: "Socratic Learning",
-    hint: "Governs the per-lesson tutor docked beside Premium pack content. The tutor prompt must keep returning the documented JSON shape — free-form prose still renders, but the phase / mastery / concept signals that drive progress and admin reporting are lost.",
+    hint: "Governs the per-lesson tutor docked beside lesson content. The tutor prompt must keep returning the documented JSON shape — free-form prose still renders, but the phase / mastery / concept signals that drive progress and admin reporting are lost.",
     accent: "#8a2be2",
     icon: Brain,
     keys: ["socratic_tutor", "live_tutor"],
@@ -346,6 +347,8 @@ const Router = () => {
       <div className="overline text-[#00f0ff]">{t("router")}</div>
       <h1 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mt-2 mb-2">{t("router_title")}</h1>
       <p className="text-white/60 max-w-2xl mb-8">{t("router_sub")}</p>
+
+      <RouterMetrics providers={cfg.providers} config={cfg} />
 
       <div className="space-y-4" data-testid="providers-list">
         {cfg.providers.map((p) => (

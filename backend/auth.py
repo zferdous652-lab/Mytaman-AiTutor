@@ -184,7 +184,7 @@ async def seed_admin(target_db):
     """
     now = datetime.now(timezone.utc).isoformat()
     for s in [
-        {"email": "admin@mytaman.ai", "password": "Admin@12345", "name": "MYTAMAN Admin", "role": "admin"},
+        {"email": "admin@mytaman.ai", "password": "Admin@12345", "name": "Lv99.ai Admin", "role": "admin"},
         {"email": "parent@mytaman.ai", "password": "Parent@12345", "name": "Demo Parent", "role": "parent"},
     ]:
         if await target_db.users.find_one({"email": s["email"]}):

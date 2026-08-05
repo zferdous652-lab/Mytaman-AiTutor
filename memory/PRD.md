@@ -1,7 +1,11 @@
-# MYTAMAN AI Tutor — PRD
+# Lv99.ai — PRD
 
 ## Original problem statement
 User uploaded `MYTAMAN AI Tutor_concept_draft_v2.docx` and asked to "start building the website following the MVP." The document describes an AI-powered e-learning platform for Malaysian secondary curriculum (KSSM) with three roles (Admin / Parent / Student), a Tutor Pack tier system (Basic / Premium / X-Points), and a Model Router that manages multiple AI providers with failover, editable system prompts, and encrypted key storage.
+
+> **Superseded:** the Basic / Premium / X-Points tier system described above was removed.
+> A pack no longer carries a tier, so every Tutor Pack — including any created from now on —
+> exposes the Socratic tutor to the students enrolled in it, with no per-pack configuration.
 
 ## User choices (Feb 17, 2026)
 - **MVP slice**: 3D-styled landing + Admin dashboard (Generate + Model Router) + Student view + Parent view
@@ -11,7 +15,7 @@ User uploaded `MYTAMAN AI Tutor_concept_draft_v2.docx` and asked to "start build
 - **Language**: EN + BM toggle from day 1
 
 ## User personas
-- **Admin (MYTAMAN Staff)** — creates Tutor Packs, generates AI content, configures the Model Router, monitors ops.
+- **Admin (Lv99.ai Staff)** — creates Tutor Packs, generates AI content, configures the Model Router, monitors ops.
 - **Parent (Guardian)** — selects Tutor Packs for their child, monitors progress.
 - **Student (Learner)** — enrolls into packs, consumes published summaries / quizzes / flashcards / notes / mind maps.
 
@@ -20,7 +24,7 @@ User uploaded `MYTAMAN AI Tutor_concept_draft_v2.docx` and asked to "start build
 - AI content generation for: summary, quiz, flashcards, mind map, notes — bilingual EN / BM.
 - Model Router: providers list (OpenAI GPT-5.4, Anthropic Claude Sonnet 4.6, Gemini 3 Flash), enable/disable, reorder, encrypted API keys, editable system prompts.
 - Publishing workflow: admin generates → publishes → visible to enrolled students.
-- Tutor Pack CRUD (Basic tier for MVP).
+- Tutor Pack CRUD.
 - Language toggle (EN/BM) persisted in localStorage.
 
 ## What's been implemented — v1 (Feb 17, 2026)
@@ -56,9 +60,8 @@ User uploaded `MYTAMAN AI Tutor_concept_draft_v2.docx` and asked to "start build
 - Mind map + quiz-taking UI (currently render raw JSON body).
 - File upload for source materials (PDF/DOCX ingestion → text).
 
-### P2 (from concept doc future tiers)
-- Premium Tutor Pack: live Socratic AI chat, streaming tutor conversation.
-- X-Points Tutor Pack: daily study planner, leaderboard, purchases (Stripe), video tutorials, mock exams.
+### P2
+- Daily study planner, leaderboard, purchases, video tutorials, mock exams.
 - Analytics dashboard: daily ops stats, retention.
 - Content moderation queue for AI outputs before publish.
 
