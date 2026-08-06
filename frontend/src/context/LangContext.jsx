@@ -5,7 +5,7 @@ const LangCtx = createContext(null);
 const dict = {
   en: {
     // landing
-    tagline: "Learning, engineered by AI",
+    tagline: "Learning with a Tutor, Powered by Ai",
     hero_title_1: "Personalised tutoring",
     hero_title_2: "for every learner.",
     hero_sub:
@@ -165,7 +165,7 @@ const dict = {
       "This tutor is AI — it can make mistakes, so check anything important. It only discusses this lesson, and your parent and teacher can read these conversations. Don't share personal details.",
   },
   bm: {
-    tagline: "Pembelajaran dijayakan AI",
+    tagline: "Belajar dengan Tutor, Dikuasakan oleh Ai",
     hero_title_1: "Tutor peribadi",
     hero_title_2: "untuk setiap pelajar.",
     hero_sub:

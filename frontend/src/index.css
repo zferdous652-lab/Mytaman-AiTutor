@@ -104,6 +104,13 @@ body {
   font-size: clamp(1.0625rem, 1.4vw, 1.375rem);
   line-height: 1.6;
 }
+/* The hero overline sits alone above a 92px headline; at the shared 0.7rem it reads as
+   a caption that got lost. Tracking eases off slightly as it grows, because 0.2em on
+   larger text opens the words up too far. */
+.overline-hero {
+  font-size: clamp(0.8125rem, 1.05vw, 0.9375rem);
+  letter-spacing: 0.17em;
+}
 .section-title {
   font-size: clamp(2rem, 3.4vw, 3.25rem);
   line-height: 1.1;
@@ -416,14 +423,6 @@ input:focus, textarea:focus, select:focus {
 .hero-particle {
   animation: lv99-twinkle var(--dur, 5s) ease-in-out var(--delay, 0s) infinite;
   will-change: opacity;
-}
-
-/* The logo artwork draws "Lv" and ".ai" in near-black navy: it is built for a light
-   surface. Rather than recolour the brand, it is given the surface it expects. */
-.brand-plate {
-  background: #f7f8fc;
-  border-radius: 0.875rem;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 8px 30px rgba(0, 0, 0, 0.35);
 }
 
 @media (prefers-reduced-motion: reduce) {

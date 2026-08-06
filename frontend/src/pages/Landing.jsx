@@ -92,8 +92,8 @@ const Landing = () => {
         {/* Explicit z-10 so the copy always sits above the scene and the grid overlay. */}
         <div className="relative z-10 mx-auto max-w-7xl px-6 pt-40 pb-24 text-center">
           <div className="mx-auto max-w-5xl">
-            <div className="inline-flex items-center gap-2 overline text-[#00f0ff] mb-6">
-              <Sparkles size={12} /> {t("tagline")}
+            <div className="inline-flex items-center gap-2.5 overline overline-hero text-[#00f0ff] mb-7">
+              <Sparkles size={14} /> {t("tagline")}
             </div>
             <h1 className="landing-display hero-title text-white">
               {t("hero_title_1")}
@@ -251,9 +251,7 @@ const Landing = () => {
 
       <footer className="border-t border-white/8 py-12">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-6">
-          {/* The artwork's "Lv" and ".ai" are near-black navy -- it is drawn for a light
-              surface, so it gets one rather than being recoloured. 200px is the smallest
-              width at which the tagline under the lockup is still readable. */}
+          {/* The supplied PNG as-is: transparent, colours untouched, no backing plate. */}
           <img
             src={lv99Lockup}
             alt="Lv99.ai — The AI Tutor That Levels You Up"
@@ -261,7 +259,7 @@ const Landing = () => {
             height={351}
             loading="lazy"
             decoding="async"
-            className="brand-plate w-[200px] max-w-full px-4 py-3 sm:w-[240px]"
+            className="w-[280px] max-w-full sm:w-[340px]"
           />
           {/* white/40 measured 3.73:1 on this background, under the 4.5:1 AA needs. */}
           <div className="text-center text-xs text-white/55">{t("footer")}</div>

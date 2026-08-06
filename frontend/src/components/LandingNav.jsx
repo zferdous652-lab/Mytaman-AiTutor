@@ -7,17 +7,18 @@ const LandingNav = ({ t }) => (
   <header className="fixed top-0 inset-x-0 z-40">
     <div className="mx-auto max-w-7xl px-6 py-4">
       <div className="glass rounded-2xl px-5 py-3 flex items-center justify-between">
-        {/* The wordmark, on the light surface the artwork is drawn for -- its "Lv" and
-            ".ai" are near-black navy and vanish on this background otherwise. Alt text
-            carries the name because this replaces the text wordmark. Tagline is cropped
-            off: its rule is illegible at nav height. */}
+        {/* The supplied PNG, transparent and unmodified. Note its "Lv" and ".ai" are
+            drawn in near-black navy, so they sit very dark against this background --
+            the artwork is built for a light surface. Alt text carries the name because
+            this replaces the text wordmark. Tagline is cropped off: its rule is
+            illegible at nav height. */}
         <Link to="/" data-testid="nav-logo" className="flex items-center">
           <img
             src={lv99Mark}
             alt="Lv99.ai"
             width={420}
             height={180}
-            className="brand-plate h-9 w-auto px-2.5 py-1.5 sm:h-10"
+            className="h-12 w-auto sm:h-14"
           />
         </Link>
         <nav className="hidden md:flex items-center gap-8 text-sm text-white/70">
