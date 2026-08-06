@@ -63,6 +63,11 @@ rather than being stranded. The admin can opt into deleting them too with a chec
 The reverse is covered as well: removing a learner leaves a notice on their guardian's
 portal, so the child does not simply vanish from it unexplained.
 
+A learner with no guardian is invisible to every parent account, so the **Students**
+roster is where that state surfaces: each row shows the guardian's name, flags
+`No guardian` where the guardian was removed, and a counter filters the roster down to
+everyone still waiting to be reconnected.
+
 Existing passwords are never displayed, here or anywhere else — they are stored as
 bcrypt hashes and cannot be read back, so any UI claiming to show one would be lying. A
 generated password is returned exactly once, in the response that created it; it is

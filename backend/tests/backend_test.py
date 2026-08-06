@@ -637,6 +637,21 @@ class TestAccounts:
         uid2 = requests.get(f"{API}/auth/me", headers=_h(again.json()["token"]), timeout=10).json()["id"]
         requests.delete(f"{API}/accounts/{uid2}", headers=_h(admin_token), timeout=15)
 
+    def test_roster_reports_guardian_state(self, admin_token):
+        """The roster is the only surface where a guardian-less learner is visible, so it
+        has to carry the guardian fields."""
+        r = requests.get(f"{API}/students/roster", headers=_h(admin_token), timeout=20)
+        assert r.status_code == 200, r.text
+        rows = r.json()
+        if not rows:
+            pytest.skip("no students on the roster")
+        for row in rows:
+            assert set(row) >= {"parent_name", "guardian_removed", "former_parent_name", "active"}
+            # A learner with a live guardian is never simultaneously flagged as having
+            # lost one.
+            if row["parent_name"]:
+                assert row["guardian_removed"] is False
+
     def test_notifications_are_scoped_to_the_caller(self, student_token, parent_token):
         """A notice is per user; one account must not be able to read or dismiss
         another's."""
