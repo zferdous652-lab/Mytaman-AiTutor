@@ -69,12 +69,26 @@ body {
 }
 
 /* Landing-page display type.
-   Unbounded is a wide, quirky display face -- it reads as distinctive rather than as
-   the clean geometric grotesque the reference site uses. Outfit is the closest match
-   already in the bundle, so this costs no extra font request, and it keeps Unbounded
-   for the dashboards where the wider face still works. */
+
+   The reference site sets `Nohemi, "Segoe UI", system-ui, sans-serif`. Nohemi is a
+   commercial face (Pangram Pangram) -- free for personal use only, not on Google Fonts
+   -- so it is NOT bundled here. It is named first in the stack anyway: drop a licensed
+   nohemi.woff2 into src/assets/fonts/, uncomment the @font-face below, and every
+   landing headline picks it up with no other change.
+
+   Until then Outfit carries it. Outfit is the closest geometric grotesque already in
+   the bundle, so this costs no extra font request, and Unbounded stays on the
+   dashboards where the wider display face still works. */
+
+/* @font-face {
+  font-family: "Nohemi";
+  src: url("./assets/fonts/nohemi-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+} */
+
 .landing-display {
-  font-family: "Outfit", system-ui, sans-serif;
+  font-family: "Nohemi", "Outfit", system-ui, sans-serif;
   font-weight: 600;
   letter-spacing: -0.035em;
 }
