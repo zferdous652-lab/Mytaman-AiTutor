@@ -121,6 +121,11 @@ async def register(payload: RegisterIn):
     """Creates a parent account. This is the only public registration path -- a student
     account is never created here (see the RegisterIn note above)."""
     email = payload.email.lower()
+    # Imported here rather than at module scope: accounts.py imports from this module,
+    # so a top-level import would be circular.
+    from accounts import is_blocked
+    if await is_blocked(email):
+        raise HTTPException(status_code=403, detail="This email address cannot be registered")
     exists = await db.users.find_one({"email": email})
     if exists:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -148,6 +153,9 @@ async def login(payload: LoginIn):
     doc = await db.users.find_one({
         "$or": [{"email": ident}, {"email": ident.lower()}, {"username": ident.lower()}]
     })
+    from accounts import is_blocked
+    if await is_blocked(ident, ident.lower()):
+        raise HTTPException(status_code=403, detail="This account has been blocked")
     if not doc or not _verify(payload.password, doc["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if doc.get("active") is False:

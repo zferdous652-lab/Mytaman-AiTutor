@@ -41,9 +41,21 @@ are answering ("who is locked out?") spans roles.
 - **Reset a password**: generate a random 16-character one, or type a temporary one.
   Either way the account is flagged to require a change at next sign-in, so an
   admin-known password never becomes someone's permanent password.
-- **Suspend / restore** access. Two guards prevent an unrecoverable lockout: you cannot
-  deactivate your own account, and the last active admin cannot be deactivated.
+- **Remove** — deletes the account *and everything it owns*: password, enrolments,
+  progress, XP, quiz results, tutor conversations and pending invitations. There is no
+  restore. The person is free to sign up again afterwards with the same email.
+- **Block** — the same deletion, plus the login is added to a blocklist that bars it from
+  registering or signing in again. Students are blocked by student ID rather than email,
+  since that is what they actually sign in with. A **Blocked** panel lists every barred
+  identifier with its reason, lets an admin block an address that has no account here,
+  and lifts a block (which permits registration again — it does not restore the account).
 - An **audit trail** records who changed what and when.
+
+Both destructive actions require typing the account's login to confirm, and both are
+guarded twice: you cannot remove your own account, and the last active admin cannot be
+removed. Removing a **parent** would orphan their children — a student account can only
+exist under a guardian — so the server refuses with `409` until the admin explicitly
+confirms the linked children are deleted too.
 
 Existing passwords are never displayed, here or anywhere else — they are stored as
 bcrypt hashes and cannot be read back, so any UI claiming to show one would be lying. A
@@ -80,7 +92,7 @@ backend/
   packs.py        # Tutor Pack CRUD, enroll, publish
   courses.py      # Course/Chapter CRUD with cascade deletes
   content.py      # AI generate + manual drafts + publish + stats
-  accounts.py     # Account Manager: password resets, suspend/restore, audit trail
+  accounts.py     # Account Manager: password resets, account removal, blocklist, audit
   scripts/        # Operational scripts (demo credential rotation)
   db.py           # Shared Mongo client + Fernet cipher
 frontend/

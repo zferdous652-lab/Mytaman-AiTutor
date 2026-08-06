@@ -16,9 +16,14 @@ What this module deliberately does NOT do:
   * The audit trail records who did what to whom and when. That is what makes an admin
     password reset accountable rather than invisible.
 
+Removal is a real deletion, not a flag: the user document and everything keyed to it are
+erased, so the person can sign up again from scratch. Blocking is the same deletion plus
+an entry on `blocked_identifiers`, which registration and sign-in both consult -- that is
+what makes a block permanent rather than something a new signup walks around.
+
 Two lockout guards exist because both failures are unrecoverable from inside the app:
-an admin cannot deactivate their own account, and the last active admin cannot be
-deactivated by anyone.
+an admin cannot remove or deactivate their own account, and the last active admin cannot
+be removed or deactivated by anyone.
 """
 import logging
 import secrets
@@ -67,6 +72,70 @@ def validate_password(pw: str) -> None:
 async def ensure_indexes(target_db):
     await target_db.account_audit.create_index([("created_at", -1)])
     await target_db.account_audit.create_index([("target_user_id", 1), ("created_at", -1)])
+    # The blocklist is read on every sign-in and every registration, so the identifier
+    # is indexed and unique -- blocking the same address twice is a no-op, not a
+    # duplicate row that a later unblock would half-remove.
+    await target_db.blocked_identifiers.create_index([("identifier", 1)], unique=True)
+
+
+# Everything a learner or guardian accumulates, keyed by the field that points back at
+# them. Deleting an account walks this table, so a collection added later is one line
+# here rather than a silent leftover.
+USER_OWNED_COLLECTIONS = [
+    ("enrollments", "user_id"),
+    ("progress", "user_id"),
+    ("quiz_results", "user_id"),
+    ("xp_events", "user_id"),
+    ("xp_chests", "user_id"),
+    ("socratic_sessions", "user_id"),
+]
+
+
+async def purge_user(user_id: str) -> dict:
+    """Erases an account and everything it owns. There is no recovery.
+
+    Socratic turns are keyed by session rather than by user, so the sessions are read
+    first and their turns deleted by id -- deleting the sessions alone would leave the
+    conversation text behind, which is exactly the data a deletion request is about.
+    """
+    removed = {}
+
+    session_ids = [
+        s["id"] for s in await db.socratic_sessions.find(
+            {"user_id": user_id}, {"_id": 0, "id": 1}
+        ).to_list(5000)
+    ]
+    if session_ids:
+        r = await db.socratic_turns.delete_many({"session_id": {"$in": session_ids}})
+        removed["socratic_turns"] = r.deleted_count
+
+    for collection, field in USER_OWNED_COLLECTIONS:
+        r = await db[collection].delete_many({field: user_id})
+        if r.deleted_count:
+            removed[collection] = r.deleted_count
+
+    # Pending parent invitations name the student directly.
+    r = await db.parent_invites.delete_many({"student_id": user_id})
+    if r.deleted_count:
+        removed["parent_invites"] = r.deleted_count
+
+    r = await db.users.delete_one({"id": user_id})
+    removed["users"] = r.deleted_count
+    return removed
+
+
+async def _blocked_identifiers_for(doc: dict) -> List[str]:
+    """What blocking this account should bar. Parents and admins sign in with an email;
+    students with a username, so that is what gets blocked for them -- blocking "by
+    email" alone would leave a student account trivially re-creatable."""
+    return [v.lower() for v in (doc.get("email"), doc.get("username")) if v]
+
+
+async def is_blocked(*identifiers) -> bool:
+    wanted = [i.strip().lower() for i in identifiers if i and i.strip()]
+    if not wanted:
+        return False
+    return await db.blocked_identifiers.find_one({"identifier": {"$in": wanted}}) is not None
 
 
 async def _audit(actor: dict, action: str, target: dict, detail: Optional[str] = None) -> None:
@@ -134,6 +203,33 @@ class SetPasswordOut(BaseModel):
 
 class SetActiveIn(BaseModel):
     active: bool
+
+
+class DeleteAccountOut(BaseModel):
+    ok: bool
+    deleted_users: int
+    removed: dict
+    blocked: List[str] = Field(default_factory=list)
+
+
+class BlockIn(BaseModel):
+    """Blocking an account also deletes it -- a block that left the account signed-in
+    would not be a block. `reason` is for the admin who reads the list a year later."""
+    reason: Optional[str] = Field(default=None, max_length=300)
+    cascade_children: bool = False
+
+
+class BlockIdentifierIn(BaseModel):
+    identifier: str = Field(min_length=3, max_length=254)
+    reason: Optional[str] = Field(default=None, max_length=300)
+
+
+class BlockedOut(BaseModel):
+    id: str
+    identifier: str
+    reason: Optional[str] = None
+    blocked_by: Optional[str] = None
+    created_at: str
 
 
 class AuditEntryOut(BaseModel):
@@ -257,6 +353,176 @@ async def set_active(user_id: str, payload: SetActiveIn, actor: dict = Depends(r
     await db.users.update_one({"id": user_id}, {"$set": {"active": payload.active}})
     await _audit(actor, "activated" if payload.active else "deactivated", target)
     return {"ok": True, "active": payload.active}
+
+
+async def _guard_removable(target: dict, actor: dict) -> None:
+    """The two ways an admin could lock everyone out of the product permanently."""
+    if target["id"] == actor["id"]:
+        raise HTTPException(status_code=400, detail="You cannot remove your own account")
+    if target.get("role") == "admin":
+        remaining = await db.users.count_documents({
+            "role": "admin", "active": {"$ne": False}, "id": {"$ne": target["id"]},
+        })
+        if remaining == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="This is the last active admin — removing it would lock everyone out",
+            )
+
+
+async def _children_of(user: dict) -> List[dict]:
+    if user.get("role") != "parent":
+        return []
+    return await db.users.find({"parent_id": user["id"]}, {"_id": 0}).to_list(200)
+
+
+async def _remove_account(target: dict, actor: dict, cascade_children: bool, block: bool,
+                          reason: Optional[str]) -> DeleteAccountOut:
+    """Shared body of Remove and Block: the two differ only in whether the identifiers
+    are added to the blocklist afterwards."""
+    await _guard_removable(target, actor)
+
+    children = await _children_of(target)
+    if children and not cascade_children:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{target.get('name')} has {len(children)} linked child account"
+                f"{'' if len(children) == 1 else 'ren'}. A student can only exist under a "
+                "guardian, so removing this parent must remove them too — confirm to proceed."
+            ),
+        )
+
+    removed: dict = {}
+    blocked: List[str] = []
+    victims = [target] + (children if cascade_children else [])
+
+    for victim in victims:
+        if block:
+            now = datetime.now(timezone.utc).isoformat()
+            for ident in await _blocked_identifiers_for(victim):
+                # Upsert: blocking an address that is already blocked keeps the original
+                # record rather than erroring or duplicating it.
+                await db.blocked_identifiers.update_one(
+                    {"identifier": ident},
+                    {"$setOnInsert": {
+                        "id": str(uuid.uuid4()),
+                        "identifier": ident,
+                        "reason": reason,
+                        "blocked_by": actor.get("email") or actor.get("username"),
+                        "created_at": now,
+                    }},
+                    upsert=True,
+                )
+                blocked.append(ident)
+
+        counts = await purge_user(victim["id"])
+        for k, v in counts.items():
+            removed[k] = removed.get(k, 0) + v
+
+        # Audited AFTER the purge, and deliberately kept when the user's own records are
+        # not: this entry is the record of an administrator's action, which is what makes
+        # an irreversible deletion accountable. It holds a name and login, never a
+        # password, and never any of the deleted content.
+        await _audit(
+            actor,
+            "blocked" if block else "removed",
+            victim,
+            detail=(reason or None) if block else (
+                "removed with parent" if victim is not target else None
+            ),
+        )
+
+    return DeleteAccountOut(
+        ok=True,
+        deleted_users=len(victims),
+        removed=removed,
+        blocked=sorted(set(blocked)),
+    )
+
+
+@router.delete("/{user_id}", response_model=DeleteAccountOut)
+async def remove_account(user_id: str, cascade_children: bool = False,
+                         actor: dict = Depends(require_role("admin"))):
+    """Deletes an account and everything it owns — permanently, with no restore.
+
+    The person can sign up again afterwards with the same email; nothing bars them. Use
+    Block for the case where they should not be able to.
+    """
+    target = await _get_target(user_id)
+    return await _remove_account(target, actor, cascade_children, block=False, reason=None)
+
+
+@router.post("/{user_id}/block", response_model=DeleteAccountOut)
+async def block_account(user_id: str, payload: BlockIn,
+                        actor: dict = Depends(require_role("admin"))):
+    """Deletes the account exactly like Remove, and additionally bars its identifiers
+    from ever registering again. Reversible only by an admin unblocking the address."""
+    target = await _get_target(user_id)
+    return await _remove_account(target, actor, payload.cascade_children, block=True,
+                                 reason=payload.reason)
+
+
+@router.get("/blocked/list", response_model=List[BlockedOut])
+async def list_blocked(_: dict = Depends(require_role("admin"))):
+    docs = await db.blocked_identifiers.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return [BlockedOut(**d) for d in docs]
+
+
+@router.post("/blocked/add", response_model=BlockedOut)
+async def block_identifier(payload: BlockIdentifierIn, actor: dict = Depends(require_role("admin"))):
+    """Blocks an address that has no account here — someone who should never be able to
+    sign up in the first place."""
+    ident = payload.identifier.strip().lower()
+    existing = await db.blocked_identifiers.find_one({"identifier": ident}, {"_id": 0})
+    if existing:
+        return BlockedOut(**existing)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "identifier": ident,
+        "reason": payload.reason,
+        "blocked_by": actor.get("email") or actor.get("username"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.blocked_identifiers.insert_one(doc)
+    await db.account_audit.insert_one({
+        "id": str(uuid.uuid4()),
+        "actor_id": actor["id"],
+        "actor_name": actor.get("name"),
+        "actor_login": actor.get("email") or actor.get("username"),
+        "action": "blocked_identifier",
+        "target_user_id": None,
+        "target_name": None,
+        "target_login": ident,
+        "target_role": None,
+        "detail": payload.reason,
+        "created_at": doc["created_at"],
+    })
+    return BlockedOut(**doc)
+
+
+@router.delete("/blocked/{block_id}")
+async def unblock_identifier(block_id: str, actor: dict = Depends(require_role("admin"))):
+    """Lifts a block. The deleted account does not come back — this only allows the
+    address to register again."""
+    doc = await db.blocked_identifiers.find_one({"id": block_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Not on the blocklist")
+    await db.blocked_identifiers.delete_one({"id": block_id})
+    await db.account_audit.insert_one({
+        "id": str(uuid.uuid4()),
+        "actor_id": actor["id"],
+        "actor_name": actor.get("name"),
+        "actor_login": actor.get("email") or actor.get("username"),
+        "action": "unblocked_identifier",
+        "target_user_id": None,
+        "target_name": None,
+        "target_login": doc["identifier"],
+        "target_role": None,
+        "detail": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"ok": True}
 
 
 @router.get("/audit", response_model=List[AuditEntryOut])

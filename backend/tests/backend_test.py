@@ -541,6 +541,102 @@ class TestAccounts:
         )
         assert r.status_code == 422
 
+    def test_cannot_remove_self(self, admin_token):
+        me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
+        r = requests.delete(f"{API}/accounts/{me['id']}", headers=_h(admin_token), timeout=10)
+        assert r.status_code == 400
+        assert "own account" in r.json()["detail"]
+
+    def test_cannot_block_self(self, admin_token):
+        """Block deletes as well, so the self-guard has to cover it too -- otherwise the
+        last admin could delete themselves and blocklist the address on the way out."""
+        me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
+        r = requests.post(
+            f"{API}/accounts/{me['id']}/block", headers=_h(admin_token), json={}, timeout=10
+        )
+        assert r.status_code == 400
+
+    def test_block_and_unblock_an_identifier(self, admin_token):
+        """A blocked address must be refused at registration, and registrable again once
+        the block is lifted."""
+        email = f"blocktest-{uuid.uuid4().hex[:8]}@example.com"
+        r = requests.post(
+            f"{API}/accounts/blocked/add",
+            headers=_h(admin_token), json={"identifier": email, "reason": "automated test"},
+            timeout=10,
+        )
+        assert r.status_code == 200, r.text
+        block_id = r.json()["id"]
+
+        try:
+            reg = requests.post(
+                f"{API}/auth/register",
+                json={"email": email, "password": "TestPass123", "name": "Blocked Tester"},
+                timeout=10,
+            )
+            assert reg.status_code == 403, reg.text
+
+            listing = requests.get(f"{API}/accounts/blocked/list", headers=_h(admin_token), timeout=10)
+            assert any(b["identifier"] == email for b in listing.json())
+        finally:
+            un = requests.delete(f"{API}/accounts/blocked/{block_id}", headers=_h(admin_token), timeout=10)
+            assert un.status_code == 200, un.text
+
+        # Registrable again once unblocked.
+        reg2 = requests.post(
+            f"{API}/auth/register",
+            json={"email": email, "password": "TestPass123", "name": "Blocked Tester"},
+            timeout=10,
+        )
+        assert reg2.status_code == 200, reg2.text
+        me = requests.get(
+            f"{API}/auth/me", headers=_h(reg2.json()["token"]), timeout=10
+        ).json()
+        # Clean up the account this test created.
+        requests.delete(f"{API}/accounts/{me['id']}", headers=_h(admin_token), timeout=10)
+
+    def test_blocking_the_same_address_twice_is_idempotent(self, admin_token):
+        email = f"dupe-{uuid.uuid4().hex[:8]}@example.com"
+        a = requests.post(f"{API}/accounts/blocked/add", headers=_h(admin_token),
+                          json={"identifier": email}, timeout=10)
+        b = requests.post(f"{API}/accounts/blocked/add", headers=_h(admin_token),
+                          json={"identifier": email}, timeout=10)
+        assert a.status_code == 200 and b.status_code == 200
+        assert a.json()["id"] == b.json()["id"]
+        requests.delete(f"{API}/accounts/blocked/{a.json()['id']}", headers=_h(admin_token), timeout=10)
+
+    def test_remove_purges_the_account_and_its_data(self, admin_token):
+        """Create a throwaway parent, delete it, and confirm it is gone from the API --
+        Remove is a real deletion, not a flag."""
+        email = f"purge-{uuid.uuid4().hex[:8]}@example.com"
+        reg = requests.post(
+            f"{API}/auth/register",
+            json={"email": email, "password": "TestPass123", "name": "Purge Tester"},
+            timeout=10,
+        )
+        assert reg.status_code == 200, reg.text
+        token = reg.json()["token"]
+        uid = requests.get(f"{API}/auth/me", headers=_h(token), timeout=10).json()["id"]
+
+        r = requests.delete(f"{API}/accounts/{uid}", headers=_h(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        assert r.json()["deleted_users"] == 1
+        assert r.json()["removed"]["users"] == 1
+
+        listing = requests.get(f"{API}/accounts/list", headers=_h(admin_token), timeout=15).json()
+        assert all(a["id"] != uid for a in listing)
+        # The old session must stop working immediately.
+        assert requests.get(f"{API}/auth/me", headers=_h(token), timeout=10).status_code == 401
+        # Remove does not blocklist: the address is free to register again.
+        again = requests.post(
+            f"{API}/auth/register",
+            json={"email": email, "password": "TestPass123", "name": "Purge Tester"},
+            timeout=10,
+        )
+        assert again.status_code == 200, again.text
+        uid2 = requests.get(f"{API}/auth/me", headers=_h(again.json()["token"]), timeout=10).json()["id"]
+        requests.delete(f"{API}/accounts/{uid2}", headers=_h(admin_token), timeout=15)
+
     def test_cannot_deactivate_self(self, admin_token):
         me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
         r = requests.post(

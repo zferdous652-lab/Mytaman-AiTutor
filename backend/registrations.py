@@ -137,6 +137,12 @@ async def register_student(payload: StudentRegisterIn):
             detail="That address is already in use by a student account. Please use your parent's own email.",
         )
 
+    from accounts import is_blocked
+    if await is_blocked(username, parent_email):
+        # Covers both halves of this flow: a blocked student ID, and a blocked guardian
+        # trying to get back in by having a child request an account for them.
+        raise HTTPException(status_code=403, detail="This account cannot be registered")
+
     now = _now().isoformat()
     student = {
         "id": str(uuid.uuid4()),
