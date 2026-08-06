@@ -255,8 +255,8 @@ const DestroyDialog = ({ account, mode, onClose, onDone }) => {
   const [typed, setTyped] = useState("");
   const [reason, setReason] = useState("");
   const [cascade, setCascade] = useState(false);
-  const [childWarning, setChildWarning] = useState(null);
   const [busy, setBusy] = useState(false);
+  const isParent = account.role === "parent";
 
   const confirmed = typed.trim().toLowerCase() === account.login.toLowerCase();
 
@@ -271,18 +271,19 @@ const DestroyDialog = ({ account, mode, onClose, onDone }) => {
         : await api.delete(
             `/accounts/${account.id}?cascade_children=${withCascade ? "true" : "false"}`
           );
+      const orphaned = data.orphaned_children;
       toast.success(
-        blocking
-          ? `${account.name} removed and blocked`
-          : `${account.name} removed — ${data.deleted_users} account${data.deleted_users === 1 ? "" : "s"} deleted`
+        `${account.name} ${blocking ? "removed and blocked" : "removed"}` +
+          (orphaned
+            ? ` — ${orphaned} learner${orphaned === 1 ? "" : "s"} kept and asked to reconnect`
+            : data.deleted_users > 1
+            ? ` — ${data.deleted_users} accounts deleted`
+            : "")
       );
       onDone?.();
       onClose();
     } catch (e) {
-      // 409 means the account has linked children; the server refuses until the admin
-      // confirms they understand those go too.
-      if (e?.response?.status === 409) setChildWarning(e.response.data.detail);
-      else toast.error(e?.response?.data?.detail || "Couldn't complete that");
+      toast.error(e?.response?.data?.detail || "Couldn't complete that");
     }
     setBusy(false);
   };
@@ -338,10 +339,13 @@ const DestroyDialog = ({ account, mode, onClose, onDone }) => {
           )}
         </div>
 
-        {childWarning && (
-          <div className="mt-4 rounded-xl border border-[#ffb020]/30 bg-[#ffb020]/10 p-4">
-            <div className="text-sm font-medium text-[#ffb020]">Linked children</div>
-            <p className="mt-1 text-xs leading-relaxed text-white/70">{childWarning}</p>
+        {isParent && (
+          <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="text-sm font-medium text-white/85">Linked learners</div>
+            <p className="mt-1 text-xs leading-relaxed text-white/55">
+              By default their accounts and progress are kept. They lose the link to this
+              guardian and are prompted in their own portal to invite a new one.
+            </p>
             <label className="mt-3 flex items-start gap-2 text-xs text-white/70">
               <input
                 type="checkbox"
@@ -350,7 +354,7 @@ const DestroyDialog = ({ account, mode, onClose, onDone }) => {
                 data-testid="destroy-cascade"
                 className="mt-0.5 accent-[#ff4d6d]"
               />
-              Yes, delete the linked child accounts and all their data too
+              Delete their accounts and all their data too
             </label>
           </div>
         )}
@@ -390,7 +394,7 @@ const DestroyDialog = ({ account, mode, onClose, onDone }) => {
           </button>
           <button
             onClick={() => run(cascade)}
-            disabled={!confirmed || busy || (childWarning && !cascade)}
+            disabled={!confirmed || busy}
             data-testid="destroy-submit"
             className="flex-1 rounded-full bg-[#ff4d6d] py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[#ff8fa3] disabled:cursor-not-allowed disabled:opacity-40"
           >

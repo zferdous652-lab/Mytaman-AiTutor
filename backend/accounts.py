@@ -37,6 +37,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from db import db
 from auth import require_role, _hash
+from notifications import notify
 
 log = logging.getLogger("accounts")
 
@@ -210,6 +211,8 @@ class DeleteAccountOut(BaseModel):
     deleted_users: int
     removed: dict
     blocked: List[str] = Field(default_factory=list)
+    # Children left in place, unlinked, and prompted to reconnect with a guardian.
+    orphaned_children: int = 0
 
 
 class BlockIn(BaseModel):
@@ -383,19 +386,48 @@ async def _remove_account(target: dict, actor: dict, cascade_children: bool, blo
     await _guard_removable(target, actor)
 
     children = await _children_of(target)
+    orphaned = 0
     if children and not cascade_children:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"{target.get('name')} has {len(children)} linked child account"
-                f"{'' if len(children) == 1 else 'ren'}. A student can only exist under a "
-                "guardian, so removing this parent must remove them too — confirm to proceed."
-            ),
+        # The children keep their accounts, progress and enrolments; only the link dies.
+        # Clearing parent_id is what re-arms the existing invite flow -- /auth/link-status
+        # reports them unlinked again, so the student portal offers to invite a guardian
+        # instead of the account silently belonging to nobody.
+        res = await db.users.update_many(
+            {"parent_id": target["id"]},
+            {
+                "$unset": {"parent_id": ""},
+                "$set": {
+                    "guardian_removed_at": datetime.now(timezone.utc).isoformat(),
+                    "former_parent_name": target.get("name"),
+                },
+            },
         )
+        orphaned = res.modified_count
+        for child in children:
+            await notify(
+                child["id"],
+                "guardian_removed",
+                "Reconnect with a parent or guardian",
+                f"{target.get('name')}'s account was removed, so you're no longer connected "
+                "to a guardian. Invite a parent below so they can follow your progress again.",
+            )
 
     removed: dict = {}
     blocked: List[str] = []
     victims = [target] + (children if cascade_children else [])
+
+    # A removed child leaves its guardian with a portal that has silently lost a learner.
+    # Told before the purge, while parent_id is still readable.
+    for victim in victims:
+        if victim.get("role") == "student" and victim.get("parent_id"):
+            await notify(
+                victim["parent_id"],
+                "child_removed",
+                f"{victim.get('name')}'s account was removed",
+                "An administrator removed this learner's account and its progress. To follow "
+                "them again, add them from your portal or have them invite you once they "
+                "sign up.",
+            )
 
     for victim in victims:
         if block:
@@ -438,6 +470,7 @@ async def _remove_account(target: dict, actor: dict, cascade_children: bool, blo
         deleted_users=len(victims),
         removed=removed,
         blocked=sorted(set(blocked)),
+        orphaned_children=orphaned,
     )
 
 

@@ -53,9 +53,15 @@ are answering ("who is locked out?") spans roles.
 
 Both destructive actions require typing the account's login to confirm, and both are
 guarded twice: you cannot remove your own account, and the last active admin cannot be
-removed. Removing a **parent** would orphan their children — a student account can only
-exist under a guardian — so the server refuses with `409` until the admin explicitly
-confirms the linked children are deleted too.
+removed.
+
+**Removing a parent does not remove their learners.** By default the children keep their
+accounts, progress and enrolments; only the link is cleared. Each one gets an in-app
+notice and their portal shows *"Reconnect with a parent or guardian"*, which reuses the
+existing invite flow — so a learner whose guardian was removed can invite a new one
+rather than being stranded. The admin can opt into deleting them too with a checkbox.
+The reverse is covered as well: removing a learner leaves a notice on their guardian's
+portal, so the child does not simply vanish from it unexplained.
 
 Existing passwords are never displayed, here or anywhere else — they are stored as
 bcrypt hashes and cannot be read back, so any UI claiming to show one would be lying. A
@@ -93,6 +99,7 @@ backend/
   courses.py      # Course/Chapter CRUD with cascade deletes
   content.py      # AI generate + manual drafts + publish + stats
   accounts.py     # Account Manager: password resets, account removal, blocklist, audit
+  notifications.py# Per-user in-app notices (guardian/learner removed)
   scripts/        # Operational scripts (demo credential rotation)
   db.py           # Shared Mongo client + Fernet cipher
 frontend/

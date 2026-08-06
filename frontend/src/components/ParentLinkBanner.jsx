@@ -3,9 +3,13 @@ import { toast } from "sonner";
 import { Send, UserPlus, X } from "lucide-react";
 import { api } from "@/lib/api";
 
-// Shown to a student whose parent hasn't connected yet, offering to resend the
-// invitation. It is not a blocker -- the student already has full access -- and it
-// disappears on its own the moment `linked` comes back true.
+// Shown to a student who has no connected guardian, offering to (re)send the invitation.
+// It is not a blocker -- the student already has full access -- and it disappears on its
+// own the moment `linked` comes back true.
+//
+// Two situations reach it: a parent who never joined, and a parent whose account was
+// later removed. The copy has to distinguish them, because telling a student their parent
+// "hasn't joined yet" when the parent did join and was then removed is simply false.
 const ParentLinkBanner = () => {
   const [status, setStatus] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -48,9 +52,23 @@ const ParentLinkBanner = () => {
       <div className="flex items-start gap-3">
         <UserPlus size={18} className="text-[#8a2be2] shrink-0 mt-0.5" />
         <div className="min-w-0 flex-1">
-          <div className="text-sm text-white font-medium">Your parent hasn't joined yet</div>
+          <div className="text-sm text-white font-medium">
+            {status.guardian_removed
+              ? "Reconnect with a parent or guardian"
+              : "Your parent hasn't joined yet"}
+          </div>
           <p className="text-xs text-white/60 mt-1 leading-relaxed">
-            {status.parent_invite_email ? (
+            {status.guardian_removed ? (
+              <>
+                {status.former_parent_name ? (
+                  <><span className="text-white/80">{status.former_parent_name}</span>'s account was removed</>
+                ) : (
+                  <>Your guardian's account was removed</>
+                )}
+                , so nobody is following your progress right now. Your work is safe —
+                invite a parent or guardian to reconnect.
+              </>
+            ) : status.parent_invite_email ? (
               <>
                 We invited <span className="text-white/80">{status.parent_invite_email}</span> to follow your
                 progress. Not there yet? Send it again.

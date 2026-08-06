@@ -178,6 +178,11 @@ async def register_student(payload: StudentRegisterIn):
 class LinkStatusOut(BaseModel):
     linked: bool
     parent_name: Optional[str] = None
+    # Set when the student HAD a guardian whose account was later removed. The prompt
+    # then reads as a reconnection rather than "your parent hasn't joined yet", which
+    # would be wrong and confusing for a student whose parent did join.
+    guardian_removed: bool = False
+    former_parent_name: Optional[str] = None
     parent_invite_email: Optional[str] = None
     invite_sent_at: Optional[str] = None
     can_resend_at: Optional[str] = None
@@ -205,6 +210,8 @@ async def link_status(student: dict = Depends(require_role("student"))):
             can_resend_at = None
     return LinkStatusOut(
         linked=False,
+        guardian_removed=bool(student.get("guardian_removed_at")),
+        former_parent_name=student.get("former_parent_name"),
         parent_invite_email=student.get("parent_invite_email") or (invite or {}).get("parent_email"),
         invite_sent_at=sent_at,
         can_resend_at=can_resend_at,

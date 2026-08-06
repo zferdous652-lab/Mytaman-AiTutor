@@ -637,6 +637,69 @@ class TestAccounts:
         uid2 = requests.get(f"{API}/auth/me", headers=_h(again.json()["token"]), timeout=10).json()["id"]
         requests.delete(f"{API}/accounts/{uid2}", headers=_h(admin_token), timeout=15)
 
+    def test_notifications_are_scoped_to_the_caller(self, student_token, parent_token):
+        """A notice is per user; one account must not be able to read or dismiss
+        another's."""
+        r = requests.get(f"{API}/notifications/list", headers=_h(student_token), timeout=10)
+        assert r.status_code == 200, r.text
+        assert isinstance(r.json(), list)
+        # A random id must 404 rather than mark anything read.
+        bogus = requests.post(
+            f"{API}/notifications/{uuid.uuid4()}/read", headers=_h(parent_token), timeout=10
+        )
+        assert bogus.status_code == 404
+
+    def test_removing_a_parent_keeps_children_and_prompts_reconnect(self, admin_token):
+        """The default is orphan-and-notify, not cascade: the learner keeps their account
+        and is asked to invite a new guardian."""
+        email = f"guardian-{uuid.uuid4().hex[:8]}@example.com"
+        reg = requests.post(
+            f"{API}/auth/register",
+            json={"email": email, "password": "TestPass123", "name": "Temp Guardian"},
+            timeout=10,
+        )
+        assert reg.status_code == 200, reg.text
+        ptoken = reg.json()["token"]
+        pid = requests.get(f"{API}/auth/me", headers=_h(ptoken), timeout=10).json()["id"]
+
+        username = f"tempkid{uuid.uuid4().hex[:6]}"
+        child = requests.post(
+            f"{API}/parents/children",
+            headers=_h(ptoken),
+            json={
+                "name": "Temp Kid", "username": username, "password": "KidPass123",
+                "grade": "Form 1", "birth_year": 2012,
+                "relationship": "guardian", "language": "en",
+            },
+            timeout=10,
+        )
+        if child.status_code != 200:
+            pytest.skip(f"could not create a test child: {child.status_code} {child.text}")
+        child_id = child.json().get("id")
+
+        r = requests.delete(f"{API}/accounts/{pid}", headers=_h(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        assert r.json()["deleted_users"] == 1, "the child must not be deleted by default"
+        assert r.json()["orphaned_children"] == 1
+
+        accounts = requests.get(f"{API}/accounts/list?role=student", headers=_h(admin_token), timeout=15).json()
+        assert any(a["id"] == child_id for a in accounts), "child should still exist"
+
+        # The child can sign in and is told to reconnect.
+        login = requests.post(
+            f"{API}/auth/login", json={"identifier": username, "password": "KidPass123"}, timeout=10
+        )
+        assert login.status_code == 200, login.text
+        ctoken = login.json()["token"]
+        status = requests.get(f"{API}/auth/link-status", headers=_h(ctoken), timeout=10).json()
+        assert status["linked"] is False
+        assert status["guardian_removed"] is True
+
+        notes = requests.get(f"{API}/notifications/list", headers=_h(ctoken), timeout=10).json()
+        assert any(n["kind"] == "guardian_removed" for n in notes)
+
+        requests.delete(f"{API}/accounts/{child_id}", headers=_h(admin_token), timeout=15)
+
     def test_cannot_deactivate_self(self, admin_token):
         me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
         r = requests.post(
