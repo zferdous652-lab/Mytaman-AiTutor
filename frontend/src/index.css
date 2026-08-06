@@ -391,6 +391,13 @@ input:focus, textarea:focus, select:focus {
   outline-color: #ffffff;
 }
 
+/* Anchor targets sit under a fixed header, so scrolling to one would tuck its heading
+   behind the bar. Reserve the bar's height plus a little breathing room. */
+section[id],
+#main {
+  scroll-margin-top: 6rem;
+}
+
 /* Skip link: present for keyboard and screen-reader users, out of the way otherwise. */
 .skip-link {
   position: absolute;
