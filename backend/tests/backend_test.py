@@ -6,6 +6,7 @@ Covers:
 - Content (manual + AI generate via Model Router, list, publish, stats)
 - Model Router (config, patch provider, order, prompts)
 """
+import json
 import os
 import time
 import uuid
@@ -16,13 +17,21 @@ import requests
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://localhost:8001").rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN = {"email": "admin@mytaman.ai", "password": "Admin@12345"}
-PARENT = {"email": "parent@mytaman.ai", "password": "Parent@12345"}
-STUDENT = {"email": "student@mytaman.ai", "password": "Student@12345"}
+# Demo passwords are no longer hardcoded in the app -- they come from the environment or
+# are generated at seed time -- so the suite reads them the same way. Point these at
+# whatever the deployment under test actually uses.
+ADMIN = {"email": "admin@mytaman.ai", "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
+PARENT = {"email": "parent@mytaman.ai", "password": os.environ.get("TEST_PARENT_PASSWORD", "")}
+STUDENT = {"email": "student@mytaman.ai", "password": os.environ.get("TEST_STUDENT_PASSWORD", "")}
 
 
 # -------- helpers --------
 def _login(email, password):
+    if not password:
+        pytest.skip(
+            f"No password configured for {email}. Set TEST_ADMIN_PASSWORD / "
+            "TEST_PARENT_PASSWORD / TEST_STUDENT_PASSWORD to the deployment's values."
+        )
     r = requests.post(f"{API}/auth/login", json={"email": email, "password": password}, timeout=15)
     assert r.status_code == 200, f"Login failed for {email}: {r.status_code} {r.text}"
     return r.json()
@@ -459,3 +468,84 @@ class TestSocratic:
         cfg = requests.get(f"{API}/router/config", headers=_h(admin_token), timeout=10).json()
         assert "socratic_tutor" in cfg["prompts"]
         assert "JSON" in cfg["prompts"]["socratic_tutor"]
+
+
+# ---------- Account Manager ----------
+class TestAccounts:
+    """Admin-side password and access control. The security properties worth testing are
+    negative ones: no password hash escapes the API, no plaintext password reaches the
+    audit trail, and the last admin cannot be locked out."""
+
+    def test_list_is_admin_only(self, student_token, parent_token):
+        for tok in (student_token, parent_token):
+            r = requests.get(f"{API}/accounts/list", headers=_h(tok), timeout=10)
+            assert r.status_code == 403
+
+    def test_list_never_returns_password_hashes(self, admin_token):
+        r = requests.get(f"{API}/accounts/list", headers=_h(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        rows = r.json()
+        assert rows, "expected at least the seeded accounts"
+        for row in rows:
+            assert "password" not in row
+            assert set(row) >= {"id", "name", "role", "login", "login_type", "active"}
+
+    def test_role_filter(self, admin_token):
+        r = requests.get(f"{API}/accounts/list?role=student", headers=_h(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        assert all(a["role"] == "student" for a in r.json())
+
+    def test_generated_password_works_and_is_returned_once(self, admin_token):
+        """The generated password must actually authenticate -- otherwise the admin hands
+        out a credential that doesn't work -- and must not be readable afterwards."""
+        students = requests.get(
+            f"{API}/accounts/list?role=student", headers=_h(admin_token), timeout=15
+        ).json()
+        target = next((s for s in students if s["login_type"] == "username"), None)
+        if target is None:
+            pytest.skip("no student account to reset")
+
+        r = requests.post(
+            f"{API}/accounts/{target['id']}/password",
+            headers=_h(admin_token), json={"generate": True, "require_change": False}, timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        pw = r.json()["generated_password"]
+        assert pw and len(pw) >= 12
+
+        login = requests.post(
+            f"{API}/auth/login", json={"identifier": target["login"], "password": pw}, timeout=15
+        )
+        assert login.status_code == 200, login.text
+
+        # The plaintext must not survive anywhere readable.
+        audit = requests.get(f"{API}/accounts/audit?limit=25", headers=_h(admin_token), timeout=10).json()
+        assert pw not in json.dumps(audit)
+        listing = requests.get(f"{API}/accounts/list?role=student", headers=_h(admin_token), timeout=15).json()
+        assert pw not in json.dumps(listing)
+
+    def test_password_must_meet_minimum_length(self, admin_token):
+        me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
+        r = requests.post(
+            f"{API}/accounts/{me['id']}/password",
+            headers=_h(admin_token), json={"new_password": "short"}, timeout=10,
+        )
+        assert r.status_code == 422
+
+    def test_cannot_supply_both_password_and_generate(self, admin_token):
+        me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
+        r = requests.post(
+            f"{API}/accounts/{me['id']}/password",
+            headers=_h(admin_token),
+            json={"new_password": "longenough123", "generate": True}, timeout=10,
+        )
+        assert r.status_code == 422
+
+    def test_cannot_deactivate_self(self, admin_token):
+        me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
+        r = requests.post(
+            f"{API}/accounts/{me['id']}/active",
+            headers=_h(admin_token), json={"active": False}, timeout=10,
+        )
+        assert r.status_code == 400
+        assert "own account" in r.json()["detail"]

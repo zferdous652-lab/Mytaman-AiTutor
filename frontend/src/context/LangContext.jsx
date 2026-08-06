@@ -126,6 +126,7 @@ const dict = {
     one_pack_current: "You're currently on",
     // socratic
     socratic: "Socratic Learning",
+    accounts: "Account Manager",
     socratic_tutor: "Socratic Tutor",
     socratic_tutor_suffix: "Tutor",
     socratic_intro:
@@ -267,6 +268,7 @@ const dict = {
     one_pack_rule: "Anda boleh belajar satu Pek Tutor pada satu masa — mendaftar pek baharu akan menggantikan pek semasa anda.",
     one_pack_current: "Anda kini menggunakan",
     socratic: "Pembelajaran Socratic",
+    accounts: "Pengurus Akaun",
     socratic_tutor: "Tutor Socratic",
     socratic_tutor_suffix: "Tutor",
     socratic_intro:

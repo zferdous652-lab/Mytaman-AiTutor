@@ -1,5 +1,7 @@
 """JWT auth with roles: admin / parent / student."""
+import logging
 import os
+import secrets
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Literal
@@ -10,6 +12,8 @@ from fastapi import APIRouter, HTTPException, Depends, Header, status
 from pydantic import BaseModel, EmailStr, Field
 
 from db import db
+
+log = logging.getLogger("auth")
 
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGO = "HS256"
@@ -176,16 +180,39 @@ async def change_password(payload: ChangePasswordIn, user: dict = Depends(get_cu
     return {"ok": True}
 
 
+def _seed_password(env_var: str) -> tuple:
+    """The password for a seeded demo account, and whether it had to be generated.
+
+    Read from the environment so no working credential lives in this repository. With
+    the variable unset a random one is generated and logged once at creation -- an
+    unguessable password an operator has to go and find beats a documented one that
+    every deployment shares.
+    """
+    from_env = os.environ.get(env_var, "").strip()
+    if from_env:
+        return from_env, False
+    return secrets.token_urlsafe(12), True
+
+
 async def seed_admin(target_db):
     """Seed a default admin + a demo parent with one linked demo child.
 
     The demo student is seeded the way the app now requires every student to exist:
     a username instead of an email, and a parent_id linking it to the demo parent.
+
+    Seeding only ever CREATES. It never rewrites the password of an account that already
+    exists, so an operator who changes a password in the Account Manager does not find it
+    reset by the next `docker compose up`. To rotate an existing deployment's demo
+    credentials, run `backend/scripts/rotate_demo_passwords.py`.
     """
     now = datetime.now(timezone.utc).isoformat()
+    admin_pw, admin_gen = _seed_password("SEED_ADMIN_PASSWORD")
+    parent_pw, parent_gen = _seed_password("SEED_PARENT_PASSWORD")
     for s in [
-        {"email": "admin@mytaman.ai", "password": "Admin@12345", "name": "Lv99.ai Admin", "role": "admin"},
-        {"email": "parent@mytaman.ai", "password": "Parent@12345", "name": "Demo Parent", "role": "parent"},
+        {"email": "admin@mytaman.ai", "password": admin_pw, "generated": admin_gen,
+         "name": "Lv99.ai Admin", "role": "admin"},
+        {"email": "parent@mytaman.ai", "password": parent_pw, "generated": parent_gen,
+         "name": "Demo Parent", "role": "parent"},
     ]:
         if await target_db.users.find_one({"email": s["email"]}):
             continue
@@ -198,8 +225,16 @@ async def seed_admin(target_db):
             "active": True,
             "created_at": now,
         })
+        if s["generated"]:
+            # Logged once, at creation. The operator reads it from `docker compose logs
+            # backend` and changes it in the Account Manager; it is never logged again.
+            log.warning(
+                "Seeded %s account %s with a GENERATED password: %s -- change it in the "
+                "Admin portal's Account Manager.", s["role"], s["email"], s["password"],
+            )
 
     parent = await target_db.users.find_one({"email": "parent@mytaman.ai"}, {"_id": 0, "id": 1})
+    student_pw, student_gen = _seed_password("SEED_STUDENT_PASSWORD")
     if parent and not await target_db.users.find_one({"username": "demostudent"}):
         await target_db.users.insert_one({
             "id": str(uuid.uuid4()),
@@ -209,8 +244,13 @@ async def seed_admin(target_db):
             "parent_id": parent["id"],
             "grade": "Form 1",
             "birth_year": 2012,
-            "password": _hash("Student@12345"),
+            "password": _hash(student_pw),
             "must_change_password": False,
             "active": True,
             "created_at": now,
         })
+        if student_gen:
+            log.warning(
+                "Seeded student account demostudent with a GENERATED password: %s -- "
+                "change it in the Admin portal's Account Manager.", student_pw,
+            )

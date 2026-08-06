@@ -6,7 +6,7 @@ An AI-powered e-learning platform for the Malaysian secondary curriculum (KSSM),
 
 | Role    | Capabilities |
 |---------|--------------|
-| **Admin**   | Create/delete Tutor Packs, author content (manually or via AI generation), manage the Model Router, review and publish confirmed content, manage students. |
+| **Admin**   | Create/delete Tutor Packs, author content (manually or via AI generation), manage the Model Router, review and publish confirmed content, manage students, manage accounts and passwords across all portals. |
 | **Parent**  | Browse and select Tutor Packs, monitor a child's enrolled packs. |
 | **Student** | Enroll in Tutor Packs, consume published content bilingually (EN/BM). |
 
@@ -29,6 +29,29 @@ Authoring follows a **draft → confirm → publish** lifecycle:
 3. **Publish** — On the Tutor Packs page, clicking a pack card opens a review pop-up listing that pack's **confirmed** drafts with a summary of what each covers. The admin selects which confirmed drafts actually go live; publishing resolves the latest confirmed version per (chapter, content type, language) slot and pushes it to the student/parent-facing content feed.
 
 AI-generated content (via the Model Router) can also be created and published through the same `contents` pipeline, as an alternative to manual authoring.
+
+## Account Manager
+
+Admin → **Account Manager** is one screen for every account across the three portals,
+because the person resetting a password is always an administrator and the question they
+are answering ("who is locked out?") spans roles.
+
+- Search and filter by portal; each row shows the login the account actually signs in
+  with — an email for admins and parents, a student ID for students.
+- **Reset a password**: generate a random 16-character one, or type a temporary one.
+  Either way the account is flagged to require a change at next sign-in, so an
+  admin-known password never becomes someone's permanent password.
+- **Suspend / restore** access. Two guards prevent an unrecoverable lockout: you cannot
+  deactivate your own account, and the last active admin cannot be deactivated.
+- An **audit trail** records who changed what and when.
+
+Existing passwords are never displayed, here or anywhere else — they are stored as
+bcrypt hashes and cannot be read back, so any UI claiming to show one would be lying. A
+generated password is returned exactly once, in the response that created it; it is
+never written to the database in plaintext and never appears in the audit trail.
+
+Demo account credentials are not in this repository. See [`DEPLOY.md`](./DEPLOY.md) for
+the `SEED_*` variables and the rotation script.
 
 ## Model Router
 
@@ -57,9 +80,11 @@ backend/
   packs.py        # Tutor Pack CRUD, enroll, publish
   courses.py      # Course/Chapter CRUD with cascade deletes
   content.py      # AI generate + manual drafts + publish + stats
+  accounts.py     # Account Manager: password resets, suspend/restore, audit trail
+  scripts/        # Operational scripts (demo credential rotation)
   db.py           # Shared Mongo client + Fernet cipher
 frontend/
-  src/pages/admin/     # Overview, Generate, Manual Content, Model Router, Tutor Packs, Students
+  src/pages/admin/     # Overview, Generate, Manual Content, Model Router, Tutor Packs, Students, Account Manager
   src/pages/student/   # My Packs, Browse & Enroll
   src/pages/parent/    # Overview, Pack selection
   src/context/         # Language context (EN/BM)
