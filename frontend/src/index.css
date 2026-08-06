@@ -67,6 +67,32 @@ body {
   font-family: "Unbounded", sans-serif;
   letter-spacing: -0.02em;
 }
+
+/* Landing-page display type.
+   Unbounded is a wide, quirky display face -- it reads as distinctive rather than as
+   the clean geometric grotesque the reference site uses. Outfit is the closest match
+   already in the bundle, so this costs no extra font request, and it keeps Unbounded
+   for the dashboards where the wider face still works. */
+.landing-display {
+  font-family: "Outfit", system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+
+/* Fluid, so the headline holds its proportion to the viewport instead of stepping at
+   breakpoints. Upper bound stops it running away on ultrawide displays. */
+.hero-title {
+  font-size: clamp(2.6rem, 6.4vw, 6rem);
+  line-height: 1.02;
+}
+.hero-sub {
+  font-size: clamp(1.0625rem, 1.4vw, 1.375rem);
+  line-height: 1.6;
+}
+.section-title {
+  font-size: clamp(2rem, 3.4vw, 3.25rem);
+  line-height: 1.1;
+}
 .font-mono {
   font-family: "JetBrains Mono", monospace;
 }

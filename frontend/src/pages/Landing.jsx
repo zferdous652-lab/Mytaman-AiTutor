@@ -60,18 +60,18 @@ const Landing = () => {
         <HeroScene />
         <div className="absolute inset-0 z-[1] grid-bg pointer-events-none" />
         {/* Explicit z-10 so the copy always sits above the scene and the grid overlay. */}
-        <div className="relative z-10 mx-auto max-w-7xl px-6 pt-40 pb-24">
-          <div className="max-w-3xl">
+        <div className="relative z-10 mx-auto max-w-7xl px-6 pt-40 pb-24 text-center">
+          <div className="mx-auto max-w-5xl">
             <div className="inline-flex items-center gap-2 overline text-[#00f0ff] mb-6">
               <Sparkles size={12} /> {t("tagline")}
             </div>
-            <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl tracking-tighter text-white leading-[1.05]">
+            <h1 className="landing-display hero-title text-white">
               {t("hero_title_1")}
               <br />
               <span className="text-[#00f0ff] neon-text">{t("hero_title_2")}</span>
             </h1>
-            <p className="mt-6 max-w-xl text-white/70 leading-relaxed">{t("hero_sub")}</p>
-            <div className="mt-10 flex flex-wrap items-center gap-3">
+            <p className="hero-sub mx-auto mt-6 max-w-2xl text-white/70">{t("hero_sub")}</p>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
               <Link
                 to="/register"
                 data-testid="hero-get-started"
@@ -101,9 +101,11 @@ const Landing = () => {
 
       {/* FEATURES */}
       <section id="features" className="relative mx-auto max-w-7xl px-6 py-24">
-        <div className="overline text-[#00f0ff] mb-3">{t("features")}</div>
-        <h2 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mb-2">{t("features_title")}</h2>
-        <p className="text-white/60 mb-10">{t("features_sub")}</p>
+        <div className="text-center">
+          <div className="overline text-[#00f0ff] mb-3">{t("features")}</div>
+          <h2 className="landing-display section-title text-white mb-3">{t("features_title")}</h2>
+          <p className="mx-auto max-w-2xl text-white/60 mb-10">{t("features_sub")}</p>
+        </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Icons follow the audience each card addresses, not the feature it used to describe. */}
           <Feature i={0} title={t("f1_title")} body={t("f1_body")} icon={GraduationCap} />
@@ -115,10 +117,10 @@ const Landing = () => {
 
       {/* ROLE CARDS */}
       <section className="relative mx-auto max-w-7xl px-6 py-24">
-        <div className="overline text-[#00f0ff] mb-3">Portals</div>
-        <h2 className="font-display text-3xl lg:text-4xl tracking-tighter text-white max-w-xl mb-10">
-          Choose your entrance.
-        </h2>
+        <div className="text-center">
+          <div className="overline text-[#00f0ff] mb-3">Portals</div>
+          <h2 className="landing-display section-title text-white mb-10">Choose your entrance.</h2>
+        </div>
         <div className="grid md:grid-cols-3 gap-5">
           <RoleCard
             testId="role-admin"
@@ -152,7 +154,7 @@ const Landing = () => {
         <div className="grid lg:grid-cols-12 gap-10">
           <div className="lg:col-span-7">
             <div className="overline text-[#00f0ff] mb-3">{t("about")}</div>
-            <h2 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mb-4">{t("about_title")}</h2>
+            <h2 className="landing-display section-title text-white mb-4">{t("about_title")}</h2>
             <p className="text-white/70 leading-relaxed max-w-2xl">{t("about_body")}</p>
           </div>
           <div className="lg:col-span-5">
@@ -175,10 +177,12 @@ const Landing = () => {
       <section id="contact" className="relative mx-auto max-w-7xl px-6 py-24">
         <div className="rounded-3xl border border-white/10 bg-[#0a0514]/70 p-10 lg:p-14 relative overflow-hidden">
           <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-[#00f0ff]/10 blur-3xl" />
-          <div className="overline text-[#00f0ff] mb-3">{t("contact")}</div>
-          <h2 className="font-display text-3xl lg:text-4xl tracking-tighter text-white mb-3">{t("contact_title")}</h2>
-          <p className="text-white/60 max-w-xl mb-8">{t("contact_body")}</p>
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="text-center">
+            <div className="overline text-[#00f0ff] mb-3">{t("contact")}</div>
+            <h2 className="landing-display section-title text-white mb-3">{t("contact_title")}</h2>
+            <p className="mx-auto max-w-xl text-white/60 mb-8">{t("contact_body")}</p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-4">
             <a
               href="mailto:hello@mytaman.ai"
               data-testid="contact-email"

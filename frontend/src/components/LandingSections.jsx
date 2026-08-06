@@ -69,7 +69,7 @@ export const StatStrip = ({ t }) => {
               className="rounded-2xl border border-white/10 bg-[#0a0514]/70 p-5 backdrop-blur-sm"
             >
               <s.icon size={16} className="text-[#00f0ff]" />
-              <div className="mt-3 font-display text-3xl lg:text-4xl tracking-tighter text-white">
+              <div className="mt-3 landing-display section-title text-white">
                 <CountUp to={s.value} />
               </div>
               <div className="mt-1 text-xs text-white/50 leading-snug">{s.label}</div>
@@ -99,7 +99,7 @@ export const PipelineSection = ({ t }) => {
     <section id="how" className="relative mx-auto max-w-7xl px-6 py-28">
       <Reveal className="text-center">
         <div className="overline text-[#8a6dff] mb-3">{t("under_hood")}</div>
-        <h2 className="font-display text-3xl lg:text-5xl tracking-tighter text-white mb-4">
+        <h2 className="landing-display section-title text-white mb-4">
           {t("under_hood_title_1")}{" "}
           <span className="bg-gradient-to-r from-[#00f0ff] via-[#8a2be2] to-[#ff0055] bg-clip-text text-transparent">
             {t("under_hood_title_2")}
@@ -163,7 +163,7 @@ export const ProgressionSection = ({ t }) => {
       <div className="grid items-center gap-12 lg:grid-cols-2">
         <Reveal>
           <div className="overline text-[#ffd23f] mb-3">{t("progression")}</div>
-          <h2 className="font-display text-3xl lg:text-5xl tracking-tighter text-white mb-4">
+          <h2 className="landing-display section-title text-white mb-4">
             {t("progression_title")}
           </h2>
           <p className="max-w-xl leading-relaxed text-white/60">{t("progression_body")}</p>
