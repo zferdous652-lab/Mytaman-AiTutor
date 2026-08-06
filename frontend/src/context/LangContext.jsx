@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 
 const LangCtx = createContext(null);
 
@@ -125,6 +125,19 @@ const dict = {
     one_pack_rule: "You can study one Tutor Pack at a time — enrolling in a new one replaces your current pack.",
     one_pack_current: "You're currently on",
     // socratic
+    portals: "Portals",
+    portals_title: "Choose your entrance.",
+    enter_portal: "Enter portal",
+    role_admin_tag: "Educator / Ops",
+    role_parent_tag: "Guardian",
+    role_student_tag: "Learner",
+    generated_per_chapter: "Generated for every chapter",
+    ct_notes: "Notes",
+    ct_mindmap: "Mind Map",
+    ct_summary: "Summary",
+    ct_flashcards: "Flashcards",
+    ct_quiz: "Quiz",
+    skip_to_content: "Skip to content",
     socratic: "Socratic Learning",
     socratic_tutor: "Socratic Tutor",
     socratic_tutor_suffix: "Tutor",
@@ -266,6 +279,19 @@ const dict = {
     current_pack: "Semasa",
     one_pack_rule: "Anda boleh belajar satu Pek Tutor pada satu masa — mendaftar pek baharu akan menggantikan pek semasa anda.",
     one_pack_current: "Anda kini menggunakan",
+    portals: "Portal",
+    portals_title: "Pilih pintu masuk anda.",
+    enter_portal: "Masuk portal",
+    role_admin_tag: "Pendidik / Operasi",
+    role_parent_tag: "Penjaga",
+    role_student_tag: "Pelajar",
+    generated_per_chapter: "Dijana untuk setiap bab",
+    ct_notes: "Nota",
+    ct_mindmap: "Peta Minda",
+    ct_summary: "Ringkasan",
+    ct_flashcards: "Kad Imbas",
+    ct_quiz: "Kuiz",
+    skip_to_content: "Langkau ke kandungan",
     socratic: "Pembelajaran Socratic",
     socratic_tutor: "Tutor Socratic",
     socratic_tutor_suffix: "Tutor",
@@ -300,6 +326,13 @@ export const LangProvider = ({ children }) => {
     localStorage.setItem("mytaman_lang", l);
     setLang(l);
   };
+  // Keep <html lang> in step with the toggle. Without this a screen reader keeps
+  // pronouncing Malay copy with English phonetics, and translation tools mis-detect the
+  // page -- the strings change but the document never says it switched language.
+  useEffect(() => {
+    document.documentElement.lang = lang === "bm" ? "ms" : "en";
+  }, [lang]);
+
   const t = (key) => dict[lang][key] ?? key;
   return <LangCtx.Provider value={{ lang, setLang: setL, t }}>{children}</LangCtx.Provider>;
 };

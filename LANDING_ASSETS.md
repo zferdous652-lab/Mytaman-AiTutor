@@ -65,3 +65,42 @@ licensing depends on your plan and on whether the output includes stock elements
 - Lazy-loaded WebGL with a CSS fallback, a WebGL-support check, and an error boundary
 - Full `prefers-reduced-motion` support — every animation above is disabled under it
 - All new copy is bilingual (EN + BM) via `LangContext`
+
+## Brand logo (delivered)
+
+`Lv99-logo.png` at the repo root is the master: 2000x2000, ~861 KB, 57% transparent
+padding. Derived files, **all with the artwork's colours untouched**:
+
+| File | Size | Used by |
+|------|------|---------|
+| `frontend/src/assets/brand/lv99-lockup.png` | 640x351, 108 KB | footer, 200-240px wide |
+| `frontend/src/assets/brand/lv99-mark.png` | 420x180, 44 KB | nav, 36-40px tall |
+| `frontend/public/favicon-32.png` | 32px, 1.2 KB | browser tab |
+| `frontend/public/apple-touch-icon.png` | 180px, 14 KB | iOS home screen |
+| `frontend/public/icon-512.png` | 512px, 62 KB | PWA + og:image |
+
+### The light plate
+
+The artwork draws `Lv` and `.ai` in near-black navy — measured `rgb(4,1,21)`, which is
+**1.02:1** against the app's `#0a0514`. It is built for a light surface. Rather than
+recolour the brand, both placements sit on one: the `.brand-plate` class in `index.css`
+(`#f7f8fc`, rounded, hairline ring + soft shadow). Every colour in the logo renders
+exactly as drawn.
+
+The icons use the same reasoning, and are cut from the **`99` glyph with the arc and
+sparkle** rather than the full lockup — at 32px the wordmark is unreadable mush, while
+the glyph cluster stays legible.
+
+To regenerate after a logo update: crop to `getbbox()`, resize with LANCZOS, and for the
+icons keep only the connected components for arc, sparkle and the two `9`s.
+
+## Landing photos
+
+The four role/about photos are still hotlinked from Unsplash and Pexels. The build
+environment has no route to those CDNs, so they could not be fetched and committed here.
+Run `scripts/localise-landing-images.sh` from a machine that can reach them (the VM) to
+download them into `frontend/src/assets/landing/` and rewrite `Landing.jsx` to import
+them. Both licences permit commercial use without attribution.
+
+Until then they carry `loading="lazy"`, `decoding="async"` and intrinsic `width`/`height`,
+so they no longer cause layout shift or compete with the hero for bandwidth.

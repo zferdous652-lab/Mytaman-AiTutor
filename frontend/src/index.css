@@ -1,5 +1,6 @@
-/* Lv99.ai — Global styles. Electric & Neon archetype. */
-@import url("https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700;800&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+/* Lv99.ai — Global styles. Electric & Neon archetype.
+   Fonts are linked from public/index.html, not @import-ed here: an @import cannot begin
+   downloading until this file has parsed, which delays first text paint. */
 
 @tailwind base;
 @tailwind components;
@@ -363,5 +364,74 @@ input:focus, textarea:focus, select:focus {
   }
   .mindmap-html .mindmap-branch::before {
     display: none;
+  }
+}
+
+
+/* ------------------------------------------------------------------ *
+ * Keyboard focus
+ * Tailwind's reset removes the UA outline, and nothing replaced it -- a keyboard user
+ * had no way to tell where they were. :focus-visible only, so a mouse click does not
+ * leave a ring behind.
+ * ------------------------------------------------------------------ */
+:focus-visible {
+  outline: 2px solid #00f0ff;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+/* On the cyan buttons a cyan ring is invisible, so those invert to white. */
+.bg-\[\#00f0ff\]:focus-visible {
+  outline-color: #ffffff;
+}
+
+/* Skip link: present for keyboard and screen-reader users, out of the way otherwise. */
+.skip-link {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 100;
+  transform: translate(-50%, -150%);
+  background: #00f0ff;
+  color: #000;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0 0 0.75rem 0.75rem;
+  transition: transform 0.18s ease;
+}
+.skip-link:focus {
+  transform: translate(-50%, 0);
+}
+
+/* ------------------------------------------------------------------ *
+ * Hero starfield
+ * Was 34 framer-motion springs, each driving its own opacity loop on the main thread,
+ * on top of the WebGL canvas. As a CSS keyframe the whole field runs on the compositor
+ * -- the difference is felt on the low-end Android that is most of this audience.
+ * ------------------------------------------------------------------ */
+@keyframes lv99-twinkle {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.85; }
+}
+.hero-particle {
+  animation: lv99-twinkle var(--dur, 5s) ease-in-out var(--delay, 0s) infinite;
+  will-change: opacity;
+}
+
+/* The logo artwork draws "Lv" and ".ai" in near-black navy: it is built for a light
+   surface. Rather than recolour the brand, it is given the surface it expects. */
+.brand-plate {
+  background: #f7f8fc;
+  border-radius: 0.875rem;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-particle {
+    animation: none;
+    opacity: 0.45;
+  }
+  .skip-link {
+    transition: none;
   }
 }
