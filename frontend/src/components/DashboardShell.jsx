@@ -17,6 +17,7 @@ import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
 import ParentLinkBanner from "@/components/ParentLinkBanner";
 import SidebarToggle, { RailTooltip } from "@/components/SidebarToggle";
+import BrandLogo from "@/components/BrandLogo";
 import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 
 const items = {
@@ -54,12 +55,14 @@ const DashboardShell = ({ children }) => {
         data-testid="dash-sidebar"
         data-collapsed={collapsed}
       >
-        <div className={`flex items-center mb-8 ${collapsed ? "flex-col gap-3" : "gap-2"}`}>
-          <div className="h-9 w-9 shrink-0 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2]" />
-          {!collapsed && (
+        <div className={`flex items-center mb-8 ${collapsed ? "flex-col gap-3" : "gap-3"}`}>
+          {/* The rail is 72px wide, where a wordmark is unreadable -- it gets the glyph. */}
+          {collapsed ? (
+            <BrandLogo variant="glyph" className="h-9 w-9 shrink-0" />
+          ) : (
             <div className="min-w-0 flex-1">
-              <div className="font-display font-semibold text-white leading-tight">Lv99.ai</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">{user.role}</div>
+              <BrandLogo className="h-8" />
+              <div className="mt-1 text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">{user.role}</div>
             </div>
           )}
           <SidebarToggle collapsed={collapsed} onToggle={toggleCollapsed} testId="dash-sidebar-toggle" align={collapsed ? "center" : "left"} />

@@ -81,7 +81,8 @@ Derived from the dark-surface master, colours untouched, no backing plate:
 | File | Size | Used by |
 |------|------|---------|
 | `frontend/src/assets/brand/lv99-lockup.png` | 640x321, 132 KB | footer, 300-360px wide |
-| `frontend/src/assets/brand/lv99-mark.png` | 420x189, 62 KB | nav, 42-60px tall |
+| `frontend/src/assets/brand/lv99-mark.png` | 420x189, 62 KB | landing nav 42-60px, portal sidebars, auth pages |
+| `frontend/src/assets/brand/lv99-glyph.png` | 256x256, 42 KB | collapsed sidebar rails (72px wide) |
 | `frontend/public/favicon-32.png` | 32px, 1.4 KB | browser tab |
 | `frontend/public/apple-touch-icon.png` | 180px, 17 KB | iOS home screen |
 | `frontend/public/icon-512.png` | 512px, 83 KB | PWA + og:image |
@@ -89,6 +90,13 @@ Derived from the dark-surface master, colours untouched, no backing plate:
 Measured on `#0a0514`, the darkest real stroke now sits at **3.75:1** against the page.
 The previous artwork measured 1.02:1 — effectively invisible, which is why it needed a
 light plate behind it. That plate is gone.
+
+### One component
+
+`frontend/src/components/BrandLogo.jsx` renders both variants; the landing nav is the
+only surface that still imports an asset directly, because it animates the logo's height
+on scroll. Everything else — both sidebars and the four auth pages — goes through it, so
+the next brand change is one file.
 
 ### Regenerating
 

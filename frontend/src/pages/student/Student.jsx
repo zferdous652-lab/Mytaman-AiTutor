@@ -12,6 +12,7 @@ import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 import CourseSidebar, { isPairDone, CourseSidebarRail } from "./CourseSidebar";
 import ContentViewer, { primaryVariant } from "./ContentViewer";
 import SocraticPanel from "./SocraticPanel";
+import BrandLogo from "@/components/BrandLogo";
 
 const LANG_FILTERS = ["all", "en", "bm"];
 
@@ -186,11 +187,12 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
         data-collapsed={collapsed}
       >
         <div className={`border-b border-white/8 ${collapsed ? "p-3 flex flex-col items-center gap-3" : "p-5 pb-3 flex items-center gap-2"}`}>
-          <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2] shrink-0" />
-          {!collapsed && (
+          {collapsed ? (
+            <BrandLogo variant="glyph" className="h-9 w-9 shrink-0" />
+          ) : (
             <div className="min-w-0 flex-1">
-              <div className="font-display font-semibold text-white leading-tight truncate">Lv99.ai</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">Course navigator</div>
+              <BrandLogo className="h-8" />
+              <div className="mt-1 text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">Course navigator</div>
             </div>
           )}
           <SidebarToggle collapsed={collapsed} onToggle={toggleCollapsed} testId="course-sidebar-toggle" align={collapsed ? "center" : "left"} />
