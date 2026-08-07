@@ -31,23 +31,29 @@ class CanvasBoundary extends React.Component {
 
 // The always-on CSS layer: glows, grid and particles. Also the standalone visual whenever
 // WebGL is unavailable or motion is reduced.
-const AmbientLayers = ({ reduce }) => (
+const AmbientLayers = () => (
   <>
     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[820px] w-[820px] rounded-full bg-[radial-gradient(circle,rgba(0,240,255,0.16),transparent_62%)]" />
     <div className="absolute top-[16%] right-[8%] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle,rgba(138,43,226,0.32),transparent_60%)] blur-3xl" />
     <div className="absolute bottom-[8%] left-[6%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle,rgba(255,0,85,0.16),transparent_60%)] blur-3xl" />
-    <div className="absolute inset-0">
+    {/* Starfield. Plain divs on a CSS keyframe rather than 34 framer-motion instances:
+        opacity-only animation stays on the compositor, so the field costs no main-thread
+        work while the WebGL scene is already using it. Reduced motion is handled in CSS. */}
+    <div className="absolute inset-0" aria-hidden="true">
       {Array.from({ length: 34 }).map((_, i) => {
         const size = ((i * 7) % 3) + 1;
-        const top = (i * 37) % 100;
-        const left = (i * 53) % 100;
         return (
-          <motion.div
+          <span
             key={i}
-            className="absolute rounded-full bg-white/70"
-            style={{ top: `${top}%`, left: `${left}%`, width: size, height: size }}
-            animate={reduce ? undefined : { opacity: [0.1, 0.85, 0.1] }}
-            transition={{ duration: 4 + (i % 5), delay: (i % 7) * 0.6, repeat: Infinity }}
+            className="hero-particle absolute rounded-full bg-white/70"
+            style={{
+              top: `${(i * 37) % 100}%`,
+              left: `${(i * 53) % 100}%`,
+              width: size,
+              height: size,
+              "--dur": `${4 + (i % 5)}s`,
+              "--delay": `${(i % 7) * 0.6}s`,
+            }}
           />
         );
       })}
@@ -64,7 +70,7 @@ const HeroScene = () => {
     // while #root's own opaque background paints at step 3 -- later, and over the top. The
     // scene was rendering correctly all along and being buried by that background.
     <div className="absolute inset-0 z-0 overflow-hidden">
-      <AmbientLayers reduce={reduce} />
+      <AmbientLayers />
 
       {webgl && (
         <CanvasBoundary fallback={null}>

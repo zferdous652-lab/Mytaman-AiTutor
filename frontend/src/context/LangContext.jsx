@@ -1,17 +1,16 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 
 const LangCtx = createContext(null);
 
 const dict = {
   en: {
     // landing
-    tagline: "Learning, engineered by AI",
+    tagline: "A Socratic Tutor, Powered by Ai",
     hero_title_1: "Personalised tutoring",
     hero_title_2: "for every learner.",
     hero_sub:
       "Turn a KSSM chapter into notes, a mind map, a summary, flashcards and a quiz — in Bahasa Melayu and English, ready in minutes instead of a weekend.",
     get_started: "Get started",
-    login_admin: "Admin login",
     login_parent: "Parent login",
     login_student: "Learner login",
     about: "About",
@@ -46,9 +45,6 @@ const dict = {
     under_hood_title_2: "actually learn",
     under_hood_sub:
       "Not a chatbot bolted onto a textbook. Every layer is built around one chapter at a time, in the language the student thinks in.",
-    uh1_title: "Multi-provider Model Router",
-    uh1_body:
-      "OpenAI, Anthropic and Gemini behind one router, with automatic failover and per-provider rate limits — so a lesson still generates when a provider is slow or down.",
     uh2_title: "Bilingual by construction",
     uh2_body:
       "Every lesson is produced in Bahasa Melayu and English and aligned line for line, so a student can read either language — or both at once — without losing their place.",
@@ -125,6 +121,18 @@ const dict = {
     one_pack_rule: "You can study one Tutor Pack at a time — enrolling in a new one replaces your current pack.",
     one_pack_current: "You're currently on",
     // socratic
+    portals: "Portals",
+    portals_title: "Choose your entrance.",
+    enter_portal: "Enter portal",
+    role_parent_tag: "Guardian",
+    role_student_tag: "Learner",
+    generated_per_chapter: "Generated for every chapter",
+    ct_notes: "Notes",
+    ct_mindmap: "Mind Map",
+    ct_summary: "Summary",
+    ct_flashcards: "Flashcards",
+    ct_quiz: "Quiz",
+    skip_to_content: "Skip to content",
     socratic: "Socratic Learning",
     accounts: "Account Manager",
     socratic_tutor: "Socratic Tutor",
@@ -153,13 +161,12 @@ const dict = {
       "This tutor is AI — it can make mistakes, so check anything important. It only discusses this lesson, and your parent and teacher can read these conversations. Don't share personal details.",
   },
   bm: {
-    tagline: "Pembelajaran dijayakan AI",
+    tagline: "Tutor Socratic, Dikuasakan oleh Ai",
     hero_title_1: "Tutor peribadi",
     hero_title_2: "untuk setiap pelajar.",
     hero_sub:
       "Tukar satu bab KSSM kepada nota, peta minda, ringkasan, kad imbas dan kuiz — dalam Bahasa Melayu dan Inggeris, siap dalam beberapa minit, bukan hujung minggu.",
     get_started: "Mula sekarang",
-    login_admin: "Log masuk Admin",
     login_parent: "Log masuk Ibu Bapa",
     login_student: "Log masuk Pelajar",
     about: "Tentang",
@@ -194,9 +201,6 @@ const dict = {
     under_hood_title_2: "benar-benar belajar",
     under_hood_sub:
       "Bukan sekadar chatbot yang dicantum pada buku teks. Setiap lapisan dibina mengelilingi satu bab pada satu masa, dalam bahasa yang difikirkan pelajar.",
-    uh1_title: "Model Router pelbagai penyedia",
-    uh1_body:
-      "OpenAI, Anthropic dan Gemini di sebalik satu router, dengan failover automatik dan had kadar bagi setiap penyedia — jadi pelajaran tetap dijana walaupun satu penyedia perlahan atau tergendala.",
     uh2_title: "Dwibahasa secara reka bentuk",
     uh2_body:
       "Setiap pelajaran dihasilkan dalam Bahasa Melayu dan Inggeris serta diselaraskan baris demi baris, supaya pelajar boleh membaca mana-mana bahasa — atau kedua-duanya sekali.",
@@ -267,6 +271,18 @@ const dict = {
     current_pack: "Semasa",
     one_pack_rule: "Anda boleh belajar satu Pek Tutor pada satu masa — mendaftar pek baharu akan menggantikan pek semasa anda.",
     one_pack_current: "Anda kini menggunakan",
+    portals: "Portal",
+    portals_title: "Pilih pintu masuk anda.",
+    enter_portal: "Masuk portal",
+    role_parent_tag: "Penjaga",
+    role_student_tag: "Pelajar",
+    generated_per_chapter: "Dijana untuk setiap bab",
+    ct_notes: "Nota",
+    ct_mindmap: "Peta Minda",
+    ct_summary: "Ringkasan",
+    ct_flashcards: "Kad Imbas",
+    ct_quiz: "Kuiz",
+    skip_to_content: "Langkau ke kandungan",
     socratic: "Pembelajaran Socratic",
     accounts: "Pengurus Akaun",
     socratic_tutor: "Tutor Socratic",
@@ -302,6 +318,13 @@ export const LangProvider = ({ children }) => {
     localStorage.setItem("mytaman_lang", l);
     setLang(l);
   };
+  // Keep <html lang> in step with the toggle. Without this a screen reader keeps
+  // pronouncing Malay copy with English phonetics, and translation tools mis-detect the
+  // page -- the strings change but the document never says it switched language.
+  useEffect(() => {
+    document.documentElement.lang = lang === "bm" ? "ms" : "en";
+  }, [lang]);
+
   const t = (key) => dict[lang][key] ?? key;
   return <LangCtx.Provider value={{ lang, setLang: setL, t }}>{children}</LangCtx.Provider>;
 };

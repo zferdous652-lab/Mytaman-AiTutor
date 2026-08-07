@@ -69,7 +69,7 @@ export const StatStrip = ({ t }) => {
               className="rounded-2xl border border-white/10 bg-[#0a0514]/70 p-5 backdrop-blur-sm"
             >
               <s.icon size={16} className="text-[#00f0ff]" />
-              <div className="mt-3 font-display text-3xl lg:text-4xl tracking-tighter text-white">
+              <div className="mt-3 landing-display section-title text-white">
                 <CountUp to={s.value} />
               </div>
               <div className="mt-1 text-xs text-white/50 leading-snug">{s.label}</div>
@@ -84,12 +84,11 @@ export const StatStrip = ({ t }) => {
 /* ------------------------------------------------------------------ *
  * "Under the hood" pipeline
  * ------------------------------------------------------------------ */
-const PIPELINE_ICONS = [Route, Languages, Sparkles, Boxes];
+const PIPELINE_ICONS = [Languages, Sparkles, Boxes];
 
 export const PipelineSection = ({ t }) => {
   const reduce = useReducedMotion();
   const items = [
-    { title: t("uh1_title"), body: t("uh1_body") },
     { title: t("uh2_title"), body: t("uh2_body") },
     { title: t("uh3_title"), body: t("uh3_body") },
     { title: t("uh4_title"), body: t("uh4_body") },
@@ -99,7 +98,7 @@ export const PipelineSection = ({ t }) => {
     <section id="how" className="relative mx-auto max-w-7xl px-6 py-28">
       <Reveal className="text-center">
         <div className="overline text-[#8a6dff] mb-3">{t("under_hood")}</div>
-        <h2 className="font-display text-3xl lg:text-5xl tracking-tighter text-white mb-4">
+        <h2 className="landing-display section-title text-white mb-4">
           {t("under_hood_title_1")}{" "}
           <span className="bg-gradient-to-r from-[#00f0ff] via-[#8a2be2] to-[#ff0055] bg-clip-text text-transparent">
             {t("under_hood_title_2")}
@@ -108,11 +107,10 @@ export const PipelineSection = ({ t }) => {
         <p className="mx-auto max-w-2xl text-white/55 leading-relaxed">{t("under_hood_sub")}</p>
       </Reveal>
 
-      <div className="relative mt-16 grid gap-5 lg:grid-cols-2">
-        {/* The spine the rows hang off — drawn only on wide screens, where the two columns
-            actually read as a pipeline rather than a stack. */}
-        <div className="pointer-events-none absolute left-1/2 top-0 hidden h-full w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-[#8a2be2]/35 to-transparent lg:block" />
-
+      {/* Three across on wide screens. The centre spine that used to run between two
+          columns went with the fourth card -- it existed to pair rows, and there are no
+          pairs now. */}
+      <div className="relative mt-16 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
         {items.map((it, i) => {
           const Icon = PIPELINE_ICONS[i];
           return (
@@ -163,7 +161,7 @@ export const ProgressionSection = ({ t }) => {
       <div className="grid items-center gap-12 lg:grid-cols-2">
         <Reveal>
           <div className="overline text-[#ffd23f] mb-3">{t("progression")}</div>
-          <h2 className="font-display text-3xl lg:text-5xl tracking-tighter text-white mb-4">
+          <h2 className="landing-display section-title text-white mb-4">
             {t("progression_title")}
           </h2>
           <p className="max-w-xl leading-relaxed text-white/60">{t("progression_body")}</p>
