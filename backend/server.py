@@ -26,6 +26,8 @@ from xp import router as xp_router  # noqa: E402
 from rewards import router as rewards_router  # noqa: E402
 from socratic import router as socratic_router, ensure_indexes as ensure_socratic_indexes  # noqa: E402
 from router_metrics import router as router_metrics_router, ensure_indexes as ensure_router_metrics_indexes  # noqa: E402
+from accounts import router as accounts_router, ensure_indexes as ensure_accounts_indexes  # noqa: E402
+from notifications import router as notifications_router, ensure_indexes as ensure_notification_indexes  # noqa: E402
 
 
 mongo_url = os.environ["MONGO_URL"]
@@ -39,6 +41,8 @@ async def lifespan(app: FastAPI):
     await seed_packs(db)
     await ensure_socratic_indexes(db)
     await ensure_router_metrics_indexes(db)
+    await ensure_accounts_indexes(db)
+    await ensure_notification_indexes(db)
     yield
     client.close()
 
@@ -65,6 +69,8 @@ api_router.include_router(courses_router)
 api_router.include_router(parents_router)
 api_router.include_router(registrations_router)
 api_router.include_router(students_router)
+api_router.include_router(accounts_router)
+api_router.include_router(notifications_router)
 api_router.include_router(xp_router)
 api_router.include_router(rewards_router)
 api_router.include_router(socratic_router)

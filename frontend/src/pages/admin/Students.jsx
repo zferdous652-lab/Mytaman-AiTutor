@@ -77,8 +77,37 @@ const StudentRow = ({ student }) => {
         data-testid={`student-toggle-${student.id}`}
       >
         <div className="min-w-0">
-          <div className="font-display text-base text-white truncate">{student.name}</div>
-          <div className="text-xs text-white/40 truncate">{student.email}</div>
+          <div className="flex items-center gap-2">
+            <span className="font-display text-base text-white truncate">{student.name}</span>
+            {student.guardian_removed && (
+              <span
+                className="shrink-0 rounded-full border border-[#ffb020]/40 bg-[#ffb020]/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-[#ffb020]"
+                title="This learner's guardian account was removed. They are asked in their own portal to invite a new one."
+                data-testid={`student-no-guardian-${student.id}`}
+              >
+                No guardian
+              </span>
+            )}
+            {!student.active && (
+              <span className="shrink-0 rounded-full border border-white/20 px-2 py-0.5 text-[10px] uppercase tracking-widest text-white/45">
+                Inactive
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-white/40 truncate">
+            {student.email}
+            {" · "}
+            {student.parent_name ? (
+              <>Guardian: {student.parent_name}</>
+            ) : student.guardian_removed ? (
+              <span className="text-[#ffb020]/80">
+                Guardian {student.former_parent_name ? `${student.former_parent_name} ` : ""}removed —
+                awaiting reconnection
+              </span>
+            ) : (
+              <span className="text-white/30">No guardian linked</span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-6 shrink-0">
           <div className="hidden sm:block text-xs text-white/40 w-20">
@@ -126,17 +155,24 @@ const Students = () => {
   const [roster, setRoster] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [onlyUnlinked, setOnlyUnlinked] = useState(false);
 
   useEffect(() => {
     api.get("/content/stats").then((r) => setStats(r.data));
     api.get("/students/roster").then((r) => setRoster(r.data)).finally(() => setLoading(false));
   }, []);
 
+  // A learner with no guardian is invisible to every parent account, so this filter is
+  // the only practical way to find them and follow up.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return roster;
-    return roster.filter((s) => s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q));
-  }, [roster, query]);
+    let rows = roster;
+    if (onlyUnlinked) rows = rows.filter((s) => !s.parent_name);
+    if (!q) return rows;
+    return rows.filter((s) => s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q));
+  }, [roster, query, onlyUnlinked]);
+
+  const unlinkedCount = useMemo(() => roster.filter((s) => !s.parent_name).length, [roster]);
 
   // Derived chart data -- computed client-side from the roster already fetched, no extra
   // network round trip. All three are single-metric-per-category, so each chart uses one
@@ -194,8 +230,25 @@ const Students = () => {
         </div>
       )}
 
-      <div className="mt-10 flex items-center justify-between gap-4">
-        <div className="overline text-[#00f0ff]">Roster</div>
+      <div className="mt-10 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="overline text-[#00f0ff]">Roster</div>
+          {unlinkedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setOnlyUnlinked((v) => !v)}
+              data-testid="students-filter-unlinked"
+              title="Learners with no guardian account attached — no parent can see them"
+              className={`rounded-full border px-3 py-1 text-[11px] transition-colors ${
+                onlyUnlinked
+                  ? "border-[#ffb020]/60 bg-[#ffb020]/10 text-[#ffb020]"
+                  : "border-white/10 text-white/50 hover:border-[#ffb020]/40 hover:text-[#ffb020]"
+              }`}
+            >
+              {unlinkedCount} without a guardian
+            </button>
+          )}
+        </div>
         <div className="relative w-full max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
           <input
@@ -212,7 +265,11 @@ const Students = () => {
         {loading && <div className="text-sm text-white/40">Loading…</div>}
         {!loading && filtered.length === 0 && (
           <div className="text-sm text-white/40">
-            {roster.length === 0 ? "No students have registered yet." : "No students match your search."}
+            {roster.length === 0
+              ? "No students have registered yet."
+              : onlyUnlinked
+              ? "Every learner has a guardian linked."
+              : "No students match your search."}
           </div>
         )}
         {!loading && filtered.map((s) => <StudentRow key={s.id} student={s} />)}

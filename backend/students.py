@@ -32,6 +32,13 @@ class RosterStudent(BaseModel):
     packs: List[RosterPackEntry]
     overall_completion_pct: int
     last_active: Optional[str] = None
+    # Guardian state. A learner with no guardian is invisible to every parent account,
+    # so the roster is the only place the situation surfaces -- which makes it the right
+    # place to flag it rather than leave it to be noticed by accident.
+    parent_name: Optional[str] = None
+    guardian_removed: bool = False
+    former_parent_name: Optional[str] = None
+    active: bool = True
 
 
 @router.get("/roster", response_model=List[RosterStudent])
@@ -40,6 +47,12 @@ async def roster(_: dict = Depends(require_role("admin"))):
     if not students:
         return []
     student_ids = [s["id"] for s in students]
+
+    parent_ids = list({s["parent_id"] for s in students if s.get("parent_id")})
+    parents = await db.users.find(
+        {"id": {"$in": parent_ids}}, {"_id": 0, "id": 1, "name": 1}
+    ).to_list(1000)
+    parent_names = {p["id"]: p["name"] for p in parents}
 
     enrollments = await db.enrollments.find({"user_id": {"$in": student_ids}}, {"_id": 0}).to_list(5000)
     pack_ids = list({e["pack_id"] for e in enrollments})
@@ -110,5 +123,9 @@ async def roster(_: dict = Depends(require_role("admin"))):
             packs=entries,
             overall_completion_pct=round(overall_completed / overall_total * 100) if overall_total else 0,
             last_active=last_active_all,
+            parent_name=parent_names.get(s.get("parent_id")),
+            guardian_removed=bool(s.get("guardian_removed_at")) and not s.get("parent_id"),
+            former_parent_name=s.get("former_parent_name"),
+            active=s.get("active", True) is not False,
         ))
     return result

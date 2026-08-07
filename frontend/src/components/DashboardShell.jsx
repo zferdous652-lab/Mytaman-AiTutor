@@ -11,11 +11,13 @@ import {
   BookOpen,
   Trophy,
   Brain,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
 import ParentLinkBanner from "@/components/ParentLinkBanner";
+import NotificationBanner from "@/components/NotificationBanner";
 import SidebarToggle, { RailTooltip } from "@/components/SidebarToggle";
 import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 
@@ -28,6 +30,7 @@ const items = {
     { to: "/admin/packs", label: t("packs"), icon: Package, id: "packs" },
     { to: "/admin/students", label: t("students_label"), icon: Users, id: "students" },
     { to: "/admin/socratic", label: t("socratic"), icon: Brain, id: "socratic" },
+    { to: "/admin/accounts", label: t("accounts"), icon: ShieldCheck, id: "accounts" },
   ],
   student: (t) => [
     { to: "/student", label: t("my_packs"), icon: BookOpen, end: true, id: "my-packs" },
@@ -114,13 +117,14 @@ const DashboardShell = ({ children }) => {
         </div>
       </aside>
       <main className="min-h-screen">
-        {/* Sits above every student page so the invite prompt can't be missed, and
-            removes itself once the parent has connected. */}
-        {user.role === "student" && (
-          <div className="px-8 lg:px-12 pt-8 lg:pt-12 [&+*]:pt-0">
-            <ParentLinkBanner />
-          </div>
-        )}
+        {/* Notices sit above every portal: they report changes the user did not cause
+            (a guardian or learner account removed) and would otherwise meet as an
+            unexplained absence. The student invite prompt sits with them, and removes
+            itself once a parent has connected. */}
+        <div className="px-8 lg:px-12 pt-8 lg:pt-12 empty:hidden [&:not(:has(*))]:hidden [&+*]:pt-0">
+          <NotificationBanner />
+          {user.role === "student" && <ParentLinkBanner />}
+        </div>
         {children}
       </main>
     </div>
