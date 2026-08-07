@@ -167,16 +167,11 @@ const Landing = () => {
           <div className="overline text-[#00f0ff] mb-3">{t("portals")}</div>
           <h2 className="landing-display section-title text-white mb-10">{t("portals_title")}</h2>
         </div>
-        <div className="grid md:grid-cols-3 gap-5">
-          <RoleCard
-            testId="role-admin"
-            to="/login?role=admin"
-            label={t("login_admin")}
-            tag={t("role_admin_tag")}
-            cta={t("enter_portal")}
-            icon={Shield}
-            image="https://images.pexels.com/photos/14314636/pexels-photo-14314636.jpeg"
-          />
+        {/* Two entrances, not three. The admin portal is staff-only, so advertising it to
+            the public serves nobody -- /login?role=admin still works for anyone who needs
+            it, it just is not signposted from the homepage. Narrowed so two cards do not
+            stretch across the full width. */}
+        <div className="mx-auto grid max-w-4xl gap-5 md:grid-cols-2">
           <RoleCard
             testId="role-parent"
             to="/login?role=parent"

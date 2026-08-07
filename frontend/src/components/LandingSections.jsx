@@ -84,12 +84,11 @@ export const StatStrip = ({ t }) => {
 /* ------------------------------------------------------------------ *
  * "Under the hood" pipeline
  * ------------------------------------------------------------------ */
-const PIPELINE_ICONS = [Route, Languages, Sparkles, Boxes];
+const PIPELINE_ICONS = [Languages, Sparkles, Boxes];
 
 export const PipelineSection = ({ t }) => {
   const reduce = useReducedMotion();
   const items = [
-    { title: t("uh1_title"), body: t("uh1_body") },
     { title: t("uh2_title"), body: t("uh2_body") },
     { title: t("uh3_title"), body: t("uh3_body") },
     { title: t("uh4_title"), body: t("uh4_body") },
@@ -108,11 +107,10 @@ export const PipelineSection = ({ t }) => {
         <p className="mx-auto max-w-2xl text-white/55 leading-relaxed">{t("under_hood_sub")}</p>
       </Reveal>
 
-      <div className="relative mt-16 grid gap-5 lg:grid-cols-2">
-        {/* The spine the rows hang off — drawn only on wide screens, where the two columns
-            actually read as a pipeline rather than a stack. */}
-        <div className="pointer-events-none absolute left-1/2 top-0 hidden h-full w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-[#8a2be2]/35 to-transparent lg:block" />
-
+      {/* Three across on wide screens. The centre spine that used to run between two
+          columns went with the fourth card -- it existed to pair rows, and there are no
+          pairs now. */}
+      <div className="relative mt-16 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
         {items.map((it, i) => {
           const Icon = PIPELINE_ICONS[i];
           return (

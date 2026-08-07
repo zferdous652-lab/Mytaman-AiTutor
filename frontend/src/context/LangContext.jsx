@@ -11,7 +11,6 @@ const dict = {
     hero_sub:
       "Turn a KSSM chapter into notes, a mind map, a summary, flashcards and a quiz — in Bahasa Melayu and English, ready in minutes instead of a weekend.",
     get_started: "Get started",
-    login_admin: "Admin login",
     login_parent: "Parent login",
     login_student: "Learner login",
     about: "About",
@@ -46,9 +45,6 @@ const dict = {
     under_hood_title_2: "actually learn",
     under_hood_sub:
       "Not a chatbot bolted onto a textbook. Every layer is built around one chapter at a time, in the language the student thinks in.",
-    uh1_title: "Multi-provider Model Router",
-    uh1_body:
-      "OpenAI, Anthropic and Gemini behind one router, with automatic failover and per-provider rate limits — so a lesson still generates when a provider is slow or down.",
     uh2_title: "Bilingual by construction",
     uh2_body:
       "Every lesson is produced in Bahasa Melayu and English and aligned line for line, so a student can read either language — or both at once — without losing their place.",
@@ -128,7 +124,6 @@ const dict = {
     portals: "Portals",
     portals_title: "Choose your entrance.",
     enter_portal: "Enter portal",
-    role_admin_tag: "Educator / Ops",
     role_parent_tag: "Guardian",
     role_student_tag: "Learner",
     generated_per_chapter: "Generated for every chapter",
@@ -171,7 +166,6 @@ const dict = {
     hero_sub:
       "Tukar satu bab KSSM kepada nota, peta minda, ringkasan, kad imbas dan kuiz — dalam Bahasa Melayu dan Inggeris, siap dalam beberapa minit, bukan hujung minggu.",
     get_started: "Mula sekarang",
-    login_admin: "Log masuk Admin",
     login_parent: "Log masuk Ibu Bapa",
     login_student: "Log masuk Pelajar",
     about: "Tentang",
@@ -206,9 +200,6 @@ const dict = {
     under_hood_title_2: "benar-benar belajar",
     under_hood_sub:
       "Bukan sekadar chatbot yang dicantum pada buku teks. Setiap lapisan dibina mengelilingi satu bab pada satu masa, dalam bahasa yang difikirkan pelajar.",
-    uh1_title: "Model Router pelbagai penyedia",
-    uh1_body:
-      "OpenAI, Anthropic dan Gemini di sebalik satu router, dengan failover automatik dan had kadar bagi setiap penyedia — jadi pelajaran tetap dijana walaupun satu penyedia perlahan atau tergendala.",
     uh2_title: "Dwibahasa secara reka bentuk",
     uh2_body:
       "Setiap pelajaran dihasilkan dalam Bahasa Melayu dan Inggeris serta diselaraskan baris demi baris, supaya pelajar boleh membaca mana-mana bahasa — atau kedua-duanya sekali.",
@@ -282,7 +273,6 @@ const dict = {
     portals: "Portal",
     portals_title: "Pilih pintu masuk anda.",
     enter_portal: "Masuk portal",
-    role_admin_tag: "Pendidik / Operasi",
     role_parent_tag: "Penjaga",
     role_student_tag: "Pelajar",
     generated_per_chapter: "Dijana untuk setiap bab",
