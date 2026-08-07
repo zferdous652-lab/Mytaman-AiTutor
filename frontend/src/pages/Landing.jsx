@@ -251,7 +251,7 @@ const Landing = () => {
 
       <footer className="border-t border-white/8 py-12">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-6">
-          {/* The supplied PNG as-is: transparent, colours untouched, no backing plate. */}
+          {/* The dark-surface logo, as supplied: transparent, unmodified, no backing plate. */}
           <img
             src={lv99Lockup}
             alt="Lv99.ai — The AI Tutor That Levels You Up"
@@ -259,7 +259,7 @@ const Landing = () => {
             height={351}
             loading="lazy"
             decoding="async"
-            className="w-[280px] max-w-full sm:w-[340px]"
+            className="w-[300px] max-w-full sm:w-[360px]"
           />
           {/* white/40 measured 3.73:1 on this background, under the 4.5:1 AA needs. */}
           <div className="text-center text-xs text-white/55">{t("footer")}</div>

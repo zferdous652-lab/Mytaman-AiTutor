@@ -140,17 +140,17 @@ const LandingNav = ({ t }) => {
           transition={reduce ? { duration: 0 } : { duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
           style={{ paddingLeft: 20, paddingRight: 20 }}
         >
-          {/* The supplied PNG, transparent and unmodified. Its "Lv" and ".ai" are drawn in
-              near-black navy, so they sit dark against this background -- the artwork is
-              built for a light surface. Alt text carries the name because this replaces
-              the text wordmark; the tagline is cropped off, illegible at nav height. */}
+          {/* The dark-surface logo: light neon strokes with their own glow, so it needs no
+              plate. Alt text carries the name because this replaces the text wordmark; the
+              tagline is cropped off, illegible at nav height. Sizes run a little larger
+              than the old artwork because the glow occupies part of the box. */}
           <Link to="/" data-testid="nav-logo" className="flex items-center">
             <motion.img
               src={lv99Mark}
               alt="Lv99.ai"
               width={420}
               height={180}
-              animate={{ height: scrolled ? 38 : 56 }}
+              animate={{ height: scrolled ? 42 : 60 }}
               transition={reduce ? { duration: 0 } : { duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
               className="w-auto"
             />

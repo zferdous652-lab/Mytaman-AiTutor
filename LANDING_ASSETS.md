@@ -68,31 +68,45 @@ licensing depends on your plan and on whether the output includes stock elements
 
 ## Brand logo (delivered)
 
-`Lv99-logo.png` at the repo root is the master: 2000x2000, ~861 KB, 57% transparent
-padding. Derived files, **all with the artwork's colours untouched**:
+Two masters at the repo root, for two surfaces:
+
+- **`Lv99-logo-on-dark.png`** — 1024x1024, light neon strokes with their own glow. This is
+  what the app uses. (Committed as `Lv99 Image Aug 7, 2026, 11_56_33 AM.png`; renamed for
+  sanity.)
+- **`Lv99-logo.png`** — 2000x2000, dark navy strokes. Built for a **white** surface: print,
+  light-mode email, anything on paper. Not used in the app.
+
+Derived from the dark-surface master, colours untouched, no backing plate:
 
 | File | Size | Used by |
 |------|------|---------|
-| `frontend/src/assets/brand/lv99-lockup.png` | 640x351, 108 KB | footer, 200-240px wide |
-| `frontend/src/assets/brand/lv99-mark.png` | 420x180, 44 KB | nav, 36-40px tall |
-| `frontend/public/favicon-32.png` | 32px, 1.2 KB | browser tab |
-| `frontend/public/apple-touch-icon.png` | 180px, 14 KB | iOS home screen |
-| `frontend/public/icon-512.png` | 512px, 62 KB | PWA + og:image |
+| `frontend/src/assets/brand/lv99-lockup.png` | 640x321, 132 KB | footer, 300-360px wide |
+| `frontend/src/assets/brand/lv99-mark.png` | 420x189, 62 KB | nav, 42-60px tall |
+| `frontend/public/favicon-32.png` | 32px, 1.4 KB | browser tab |
+| `frontend/public/apple-touch-icon.png` | 180px, 17 KB | iOS home screen |
+| `frontend/public/icon-512.png` | 512px, 83 KB | PWA + og:image |
 
-### The light plate
+Measured on `#0a0514`, the darkest real stroke now sits at **3.75:1** against the page.
+The previous artwork measured 1.02:1 — effectively invisible, which is why it needed a
+light plate behind it. That plate is gone.
 
-The artwork draws `Lv` and `.ai` in near-black navy — measured `rgb(4,1,21)`, which is
-**1.02:1** against the app's `#0a0514`. It is built for a light surface. Rather than
-recolour the brand, both placements sit on one: the `.brand-plate` class in `index.css`
-(`#f7f8fc`, rounded, hairline ring + soft shadow). Every colour in the logo renders
-exactly as drawn.
+### Regenerating
 
-The icons use the same reasoning, and are cut from the **`99` glyph with the arc and
-sparkle** rather than the full lockup — at 32px the wordmark is unreadable mush, while
-the glyph cluster stays legible.
+Crop on `alpha > 4`, not `alpha > 0`: a faint halo trails ~250px below the artwork and
+would add dead space to every render.
 
-To regenerate after a logo update: crop to `getbbox()`, resize with LANCZOS, and for the
-icons keep only the connected components for arc, sparkle and the two `9`s.
+The nav mark cuts above the tagline rule, located by finding the widest bright row in the
+lower quarter rather than by a fixed percentage — the glow makes a percentage cut clip
+descenders.
+
+The icons keep only the sparkle, arc and the two `9`s (connected components at
+`alpha > 150`), because the full wordmark is unreadable at 32px. They are selected by
+component and then dilated + blurred into a soft gate over the original alpha, so each
+glyph brings its own glow: a rectangular crop cannot separate them, since the arc's left
+tail and the `v` overlap in x.
+
+Icon plates are **dark** (`#0a0514`), not white. These strokes are light, and a
+light-mode browser tab is white — cyan on white would barely show.
 
 ## Landing photos
 
