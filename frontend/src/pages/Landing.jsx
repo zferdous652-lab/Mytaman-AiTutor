@@ -232,11 +232,11 @@ const Landing = () => {
           </div>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
-              href="mailto:hello@mytaman.ai"
+              href="mailto:ai.tutor@lv99.ai"
               data-testid="contact-email"
               className="inline-flex items-center rounded-full bg-[#00f0ff] px-5 py-2.5 text-sm font-semibold text-black hover:bg-white transition-colors"
             >
-              {t("email")}: hello@mytaman.ai
+              {t("email")}: ai.tutor@lv99.ai
             </a>
           </div>
         </div>
