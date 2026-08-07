@@ -1,20 +1,39 @@
 import React from "react";
 import { motion, useScroll, useTransform, useReducedMotion } from "framer-motion";
 
-// Splits summary body text into paragraphs on blank lines -- the same shape the AI
-// generator produces for both languages, which is what lets BM/EN paragraphs be paired
-// by index below.
-const splitParagraphs = (text) =>
-  text
-    .split(/\n\s*\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
+const splitOn = (re) => (text) => text.split(re).map((p) => p.trim()).filter(Boolean);
+const byBlankLine = splitOn(/\n\s*\n/);
+const byLine = splitOn(/\n+/);
+
+/**
+ * Pairs BM and EN into matching blocks, or returns null if they cannot be trusted to
+ * correspond.
+ *
+ * Blank lines first -- that is the shape the translate prompt asks for. If that does not
+ * line up, try line level on both sides: a translation that kept its line breaks but
+ * dropped the blank lines between them is a real and common model output, and it used to
+ * fall all the way back to two stacked blocks.
+ *
+ * Two blocks minimum, deliberately. Without it, two unrelated single-paragraph summaries
+ * both split to one block, "match", and get rendered as though one were a translation of
+ * the other. Refusing to pair is the safe answer whenever the structures disagree --
+ * pairing the wrong lines together is worse than showing the two versions separately.
+ */
+const pairBlocks = (bmText, enText) => {
+  if (!bmText || !enText) return null;
+  for (const split of [byBlankLine, byLine]) {
+    const bm = split(bmText);
+    const en = split(enText);
+    if (bm.length >= 2 && bm.length === en.length) return { bm, en };
+  }
+  return null;
+};
 
 // pair shape: { bm: {payload:{body}}|null, en: {payload:{body}}|null }. BM renders as the
 // main text; EN (when both exist) renders as a subtle translation under each BM paragraph,
-// same inline-per-line pattern as NotesViewer. Falls back to one whole-text block per
-// language if the two don't split into the same number of paragraphs, so misaligned
-// content still renders sensibly instead of pairing the wrong lines together.
+// same inline-per-line pattern as NotesViewer. When the two cannot be aligned -- which
+// means they are not a translation pair, but two independently generated summaries -- each
+// renders whole, one after the other, rather than pairing unrelated lines.
 const SummaryViewer = ({ pair, scrollRef }) => {
   const reduce = useReducedMotion();
   const bmText = pair.bm?.payload?.body ?? pair.bm?.body ?? "";
@@ -25,9 +44,7 @@ const SummaryViewer = ({ pair, scrollRef }) => {
 
   if (!mainText) return <div className="text-base text-[#5c5346]">No content.</div>;
 
-  const bmParas = splitParagraphs(bmText);
-  const enParas = splitParagraphs(enText);
-  const paired = bmText && enText && bmParas.length > 0 && bmParas.length === enParas.length;
+  const blocks = pairBlocks(bmText, enText);
 
   return (
     <div className="relative" data-testid="summary-view">
@@ -36,18 +53,18 @@ const SummaryViewer = ({ pair, scrollRef }) => {
         className="pointer-events-none absolute -inset-x-8 -top-8 h-40 rounded-full blur-3xl opacity-10"
         style={{ y: bgY, background: "radial-gradient(circle, rgba(31,111,92,0.5), transparent 65%)" }}
       />
-      {paired ? (
+      {blocks ? (
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
           className="relative space-y-5"
         >
-          {bmParas.map((para, i) => (
+          {blocks.bm.map((para, i) => (
             <div key={i}>
               <p className="whitespace-pre-wrap text-xl text-[#2b2620] leading-loose">{para}</p>
               <p className="mt-1.5 whitespace-pre-wrap text-lg text-[#5c5346] leading-relaxed italic" data-testid="summary-secondary">
-                {enParas[i]}
+                {blocks.en[i]}
               </p>
             </div>
           ))}
