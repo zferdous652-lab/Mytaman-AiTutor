@@ -6,8 +6,8 @@ const dict = {
   en: {
     // landing
     tagline: "A Socratic Tutor, Powered by Ai",
-    hero_title_1: "Personalised tutoring",
-    hero_title_2: "for every learner.",
+    hero_title_1: "Personalised Tutoring",
+    hero_title_2: "For Every Learner",
     hero_sub:
       "Turn a KSSM chapter into notes, a mind map, a summary, flashcards and a quiz — in Bahasa Melayu and English, ready in minutes instead of a weekend.",
     get_started: "Get started",
@@ -162,8 +162,8 @@ const dict = {
   },
   bm: {
     tagline: "Tutor Socratic, Dikuasakan oleh Ai",
-    hero_title_1: "Tutor peribadi",
-    hero_title_2: "untuk setiap pelajar.",
+    hero_title_1: "Tutor Peribadi",
+    hero_title_2: "Untuk Setiap Pelajar",
     hero_sub:
       "Tukar satu bab KSSM kepada nota, peta minda, ringkasan, kad imbas dan kuiz — dalam Bahasa Melayu dan Inggeris, siap dalam beberapa minit, bukan hujung minggu.",
     get_started: "Mula sekarang",
