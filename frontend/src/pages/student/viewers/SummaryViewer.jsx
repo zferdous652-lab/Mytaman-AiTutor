@@ -9,10 +9,14 @@ const byLine = splitOn(/\n+/);
  * Pairs BM and EN into matching blocks, or returns null if they cannot be trusted to
  * correspond.
  *
- * Blank lines first -- that is the shape the translate prompt asks for. If that does not
- * line up, try line level on both sides: a translation that kept its line breaks but
- * dropped the blank lines between them is a real and common model output, and it used to
- * fall all the way back to two stacked blocks.
+ * The FINEST alignment wins, not the first one found. A summary written as sections of
+ * several lines each, separated by blank lines, aligns at both levels: line by line, and
+ * section by section. Taking the section-level match puts a whole paragraph of English
+ * under a whole paragraph of BM, which is barely better than stacking the two versions.
+ * Line level puts each English sentence directly under the BM sentence it translates,
+ * which is the point of the interleaved view. Preferring more blocks is also the safer
+ * read, not the riskier one: the more blocks that line up, the less likely the match is
+ * coincidence.
  *
  * Two blocks minimum, deliberately. Without it, two unrelated single-paragraph summaries
  * both split to one block, "match", and get rendered as though one were a translation of
@@ -21,12 +25,14 @@ const byLine = splitOn(/\n+/);
  */
 const pairBlocks = (bmText, enText) => {
   if (!bmText || !enText) return null;
-  for (const split of [byBlankLine, byLine]) {
+  let best = null;
+  for (const split of [byLine, byBlankLine]) {
     const bm = split(bmText);
     const en = split(enText);
-    if (bm.length >= 2 && bm.length === en.length) return { bm, en };
+    if (bm.length < 2 || bm.length !== en.length) continue;
+    if (!best || bm.length > best.bm.length) best = { bm, en };
   }
-  return null;
+  return best;
 };
 
 // pair shape: { bm: {payload:{body}}|null, en: {payload:{body}}|null }. BM renders as the
