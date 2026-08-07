@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
-import { Package, Trophy, LogOut, ArrowRight } from "lucide-react";
+import { LogOut, ArrowRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
@@ -13,6 +13,7 @@ import CourseSidebar, { isPairDone, CourseSidebarRail } from "./CourseSidebar";
 import ContentViewer, { primaryVariant } from "./ContentViewer";
 import SocraticPanel from "./SocraticPanel";
 import BrandLogo from "@/components/BrandLogo";
+import { BrowsePacksIcon, DashboardIcon } from "@/components/icons/NavIcons";
 
 const LANG_FILTERS = ["all", "en", "bm"];
 
@@ -226,7 +227,11 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
               collapsed ? "h-9 w-9" : "flex-1 gap-1.5 px-2 py-2"
             }`}
           >
-            <Package size={13} /> {!collapsed && t("browse_packs")}
+            {/* 16 rather than the sidebar's 20: these are small pills sitting next to a
+                12px label, and at 20 the icon starts to outweigh its own text. Below 16
+                the magnifier and the star -- the details that make these read as the
+                same set -- close up. The rail has no label to balance against. */}
+            <BrowsePacksIcon size={collapsed ? 18 : 16} /> {!collapsed && t("browse_packs")}
             {collapsed && <RailTooltip>{t("browse_packs")}</RailTooltip>}
           </button>
           <button
@@ -237,7 +242,7 @@ const CoursePlayer = ({ mine, activePack, onSwitchPack }) => {
               collapsed ? "h-9 w-9" : "flex-1 gap-1.5 px-2 py-2"
             }`}
           >
-            <Trophy size={13} /> {!collapsed && (t("dashboard") || "Dashboard")}
+            <DashboardIcon size={collapsed ? 18 : 16} /> {!collapsed && (t("dashboard") || "Dashboard")}
             {collapsed && <RailTooltip>{t("dashboard") || "Dashboard"}</RailTooltip>}
           </button>
         </div>

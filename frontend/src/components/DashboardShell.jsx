@@ -19,7 +19,6 @@ import NotificationBanner from "@/components/NotificationBanner";
 import SidebarToggle, { RailTooltip } from "@/components/SidebarToggle";
 import BrandLogo from "@/components/BrandLogo";
 import {
-  NavIconDefs,
   PacksIcon,
   BrowsePacksIcon,
   DashboardIcon,
@@ -79,8 +78,6 @@ const DashboardShell = ({ children }) => {
         data-testid="dash-sidebar"
         data-collapsed={collapsed}
       >
-        {/* The icons reference this gradient by id, so it has to exist in the document. */}
-        <NavIconDefs />
         <div className={`flex items-center mb-8 ${collapsed ? "flex-col gap-3" : "gap-3"}`}>
           {/* The rail is 72px wide, where a wordmark is unreadable -- it gets the glyph. */}
           {collapsed ? (

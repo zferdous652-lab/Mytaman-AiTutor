@@ -7,6 +7,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { LangProvider } from "@/context/LangContext";
 import RequireRole from "@/components/RequireRole";
 import DashboardShell from "@/components/DashboardShell";
+import { NavIconDefs } from "@/components/icons/NavIcons";
 
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
@@ -48,6 +49,11 @@ function App() {
     <LangProvider>
       <AuthProvider>
         <div className="App">
+          {/* The gradient the nav icons stroke with, defined once for the whole document.
+              It cannot live in a shell: on /student the course navigator renders inside
+              DashboardShell, so a per-shell copy would put two elements with the same id
+              on the page. */}
+          <NavIconDefs />
           <Toaster position="top-right" theme="dark" richColors />
           <BrowserRouter>
             <Routes>
