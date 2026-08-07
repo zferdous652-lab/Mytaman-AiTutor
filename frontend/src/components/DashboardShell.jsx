@@ -44,11 +44,21 @@ const items = {
   ],
 };
 
+// Where the sidebar logo takes you, per role. Student gets the progress dashboard;
+// parent gets Overview, which is their equivalent -- there is no /parent/dashboard.
+// Admin is deliberately absent: its logo stays a plain image until someone decides
+// which of its eight sections counts as "home".
+const LOGO_HOME = {
+  student: "/student/dashboard",
+  parent: "/parent",
+};
+
 const DashboardShell = ({ children }) => {
   const { user, logout } = useAuth();
   const { t } = useLang();
   const nav = useNavigate();
   const list = items[user.role](t);
+  const logoHome = LOGO_HOME[user.role];
   const [collapsed, toggleCollapsed] = useSidebarCollapsed("mytaman:sidebar:shell");
 
   return (
@@ -61,10 +71,10 @@ const DashboardShell = ({ children }) => {
         <div className={`flex items-center mb-8 ${collapsed ? "flex-col gap-3" : "gap-3"}`}>
           {/* The rail is 72px wide, where a wordmark is unreadable -- it gets the glyph. */}
           {collapsed ? (
-            <BrandLogo variant="glyph" className="h-9 w-9 shrink-0" />
+            <BrandLogo variant="glyph" className="h-9 w-9 shrink-0" to={logoHome} testId="dash-logo-home" />
           ) : (
             <div className="min-w-0 flex-1">
-              <BrandLogo className="h-8" />
+              <BrandLogo className="h-8" to={logoHome} testId="dash-logo-home" />
               <div className="mt-1 text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">{user.role}</div>
             </div>
           )}
