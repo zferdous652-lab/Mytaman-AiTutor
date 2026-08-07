@@ -1,6 +1,13 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { AnimatePresence, motion, useReducedMotion, useScroll, useSpring } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+  useMotionValueEvent,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+} from "framer-motion";
 import { Menu, X } from "lucide-react";
 import LanguageToggle from "@/components/LanguageToggle";
 import lv99Mark from "@/assets/brand/lv99-mark.png";
@@ -18,6 +25,8 @@ const SECTIONS = [
  * page or three sections down, which told the reader nothing. Now it reacts to the
  * scroll it is sitting over:
  *
+ *   - it slides away when you scroll down and comes back the moment you scroll up, so
+ *     reading gets the full viewport but the nav is one flick away,
  *   - it compacts and solidifies once you leave the hero, so it stops competing with the
  *     headline at rest but stays legible over content,
  *   - the link for the section you are actually reading is marked, with the highlight
@@ -30,10 +39,11 @@ const SECTIONS = [
 const LandingNav = ({ t }) => {
   const reduce = useReducedMotion();
   const [scrolled, setScrolled] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const [active, setActive] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const { scrollYProgress } = useScroll();
+  const { scrollY, scrollYProgress } = useScroll();
   // Spring only for the progress bar: raw scrollYProgress jitters on trackpads.
   const progress = useSpring(scrollYProgress, { stiffness: 220, damping: 40, mass: 0.4 });
 
@@ -43,6 +53,26 @@ const LandingNav = ({ t }) => {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Hide on the way down, return on the way up.
+  //
+  // Three things stop it flickering. A 6px dead zone, because trackpads and phone
+  // rubber-banding emit tiny alternating deltas that would otherwise toggle the bar
+  // every frame. A 140px floor, so it never hides while the hero is still on screen --
+  // there is nothing to reclaim up there, and a bar that vanishes on the first nudge
+  // reads as a glitch. And the menu pins it open: sliding a panel off screen while
+  // someone is using it would be its own bug.
+  const lastY = useRef(0);
+  useMotionValueEvent(scrollY, "change", (y) => {
+    const delta = y - lastY.current;
+    if (Math.abs(delta) < 6) return;
+    lastY.current = y;
+    if (menuOpen || y < 140) {
+      setHidden(false);
+      return;
+    }
+    setHidden(delta > 0);
+  });
 
   // Which section is being read. An observer rather than a scroll handler doing
   // getBoundingClientRect on every frame -- the browser does this work off the main
@@ -122,8 +152,14 @@ const LandingNav = ({ t }) => {
     <header className="fixed top-0 inset-x-0 z-40">
       <motion.div
         className="mx-auto max-w-7xl px-6"
-        animate={{ paddingTop: scrolled ? 8 : 16, paddingBottom: scrolled ? 8 : 16 }}
-        transition={reduce ? { duration: 0 } : { duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        animate={{
+          paddingTop: scrolled ? 8 : 16,
+          paddingBottom: scrolled ? 8 : 16,
+          // -140% rather than -100%: the bar is inset from the top, so -100% leaves its
+          // own top margin still showing as a strip.
+          y: hidden && !reduce ? "-140%" : "0%",
+        }}
+        transition={reduce ? { duration: 0 } : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
       >
         <motion.div
           data-scrolled={scrolled}
