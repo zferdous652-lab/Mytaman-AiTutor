@@ -8,6 +8,7 @@ import TiltCard from "@/components/TiltCard";
 import { Reveal, StatStrip, PipelineSection, ProgressionSection, MascotSlot } from "@/components/LandingSections";
 import { useLang } from "@/context/LangContext";
 import lv99Lockup from "@/assets/brand/lv99-lockup.png";
+import charAbout from "@/assets/landing/char-about.png";
 
 const RoleCard = ({ to, label, tag, cta, icon: Icon, image, testId }) => (
   <TiltCard intensity={9} className="rounded-2xl">
@@ -202,17 +203,24 @@ const Landing = () => {
             <p className="text-white/70 leading-relaxed max-w-2xl">{t("about_body")}</p>
           </div>
           <div className="lg:col-span-5">
-            <div className="relative rounded-2xl overflow-hidden border border-white/10 h-72">
+            {/* No frame and no crop: the artwork is a transparent cut-out, so a bordered
+                box with object-cover would slice the character's head off and reintroduce
+                a rectangle the illustration does not need. The glow behind it does the
+                grounding a frame used to. */}
+            <div className="relative grid place-items-center">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(138,43,226,0.22),transparent_65%)]"
+              />
               <img
-                src="https://images.pexels.com/photos/30547577/pexels-photo-30547577.jpeg"
-                alt=""
-                width={1200}
-                height={800}
+                src={charAbout}
+                alt="A student learning with her AI tutor, surrounded by the things it generates for her"
+                width={820}
+                height={801}
                 loading="lazy"
                 decoding="async"
-                className="absolute inset-0 h-full w-full object-cover"
+                className="relative w-full max-w-sm lg:max-w-none"
               />
-              <div className="absolute inset-0 bg-gradient-to-tr from-[#050505]/80 via-transparent to-[#8a2be2]/30" />
             </div>
           </div>
         </div>

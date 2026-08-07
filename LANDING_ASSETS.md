@@ -116,13 +116,41 @@ tail and the `v` overlap in x.
 Icon plates are **dark** (`#0a0514`), not white. These strokes are light, and a
 light-mode browser tab is white — cyan on white would barely show.
 
+## Character illustration
+
+`assets/char_about.png` (1254x1254, 1.4 MB, opaque white background) is the master.
+`frontend/src/assets/landing/char-about.png` is what the About section imports: **820x801,
+108 KB**, transparent.
+
+Getting there took two steps worth repeating if the artwork is ever updated:
+
+**Cutting the background.** A plain "make white transparent" pass would have punched holes
+through the robot — its body, the speech bubble and the eye highlights are all white too.
+Instead the near-white mask is labelled and only the components *touching the border* are
+treated as background, so enclosed white stays filled. Alpha ramps from opaque to clear
+between lightness 205 and 255 rather than switching at a threshold, because a hard cut
+leaves a white fringe on every anti-aliased edge, which reads as a halo on a dark page.
+
+**The bottom edge.** The illustration dissolves the figure into white at the base, which
+survives the cut as a pale haze. A vertical alpha fade over the last 12% turns that into a
+deliberate vignette instead of a torn edge.
+
+Compression is a 256-colour palette via `FASTOCTREE` — the only Pillow quantiser that
+handles RGBA. On flat-shaded artwork the error is imperceptible (mean 2.43/255) and it
+takes 957 KB down to 108 KB.
+
+It renders unframed: a bordered box with `object-cover` would crop the character's head
+and reintroduce the rectangle a cut-out exists to avoid. A radial glow behind it does the
+grounding a frame used to.
+
 ## Landing photos
 
-The four role/about photos are still hotlinked from Unsplash and Pexels. The build
-environment has no route to those CDNs, so they could not be fetched and committed here.
-Run `scripts/localise-landing-images.sh` from a machine that can reach them (the VM) to
-download them into `frontend/src/assets/landing/` and rewrite `Landing.jsx` to import
-them. Both licences permit commercial use without attribution.
+Two role-card photos are still hotlinked from Unsplash (the About photo they used to
+accompany is now the illustration above, and the admin card was removed). The build
+environment has no route to that CDN, so they could not be fetched and committed. Run
+`scripts/localise-landing-images.sh` from a machine that can reach them (the VM) to pull
+them into `frontend/src/assets/landing/` and rewrite the imports. The Unsplash licence
+permits commercial use without attribution.
 
 Until then they carry `loading="lazy"`, `decoding="async"` and intrinsic `width`/`height`,
 so they no longer cause layout shift or compete with the hero for bandwidth.

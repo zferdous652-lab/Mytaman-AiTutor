@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Download the four landing-page photos and rewrite Landing.jsx to point at local copies.
+# Download the landing-page role-card photos and rewrite Landing.jsx to point at local copies.
 #
 # Why this is a script rather than a commit: the build environment has no route to
 # images.unsplash.com or images.pexels.com, so the files could not be fetched there. Run
@@ -19,10 +19,8 @@ mkdir -p "$OUT"
 
 # name|url  -- resized server-side where the CDN supports it, so we store ~1200px, not 4000px
 IMAGES=(
-  "role-admin|https://images.pexels.com/photos/14314636/pexels-photo-14314636.jpeg?auto=compress&cs=tinysrgb&w=1200"
   "role-parent|https://images.unsplash.com/photo-1758525861536-15fb8a3ee629?fm=jpg&q=72&w=1200"
   "role-student|https://images.unsplash.com/photo-1760260627301-c92d64cb2a67?fm=jpg&q=72&w=1200"
-  "about-circuits|https://images.pexels.com/photos/30547577/pexels-photo-30547577.jpeg?auto=compress&cs=tinysrgb&w=1200"
 )
 
 for entry in "${IMAGES[@]}"; do
@@ -40,16 +38,12 @@ p = pathlib.Path("frontend/src/pages/Landing.jsx")
 s = p.read_text()
 
 mapping = {
-    "images.pexels.com/photos/14314636": "roleAdminImg",
     "photo-1758525861536-15fb8a3ee629": "roleParentImg",
     "photo-1760260627301-c92d64cb2a67": "roleStudentImg",
-    "images.pexels.com/photos/30547577": "aboutImg",
 }
 files = {
-    "roleAdminImg": "role-admin",
     "roleParentImg": "role-parent",
     "roleStudentImg": "role-student",
-    "aboutImg": "about-circuits",
 }
 
 for marker, var in mapping.items():
