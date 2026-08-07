@@ -5,6 +5,7 @@ import { Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import LanguageToggle from "@/components/LanguageToggle";
+import BrandLogo from "@/components/BrandLogo";
 
 export const GRADES = ["Form 1", "Form 2", "Form 3", "Form 4", "Form 5"];
 
@@ -51,9 +52,8 @@ const RegisterStudent = () => {
     <div className="min-h-screen grid place-items-center p-6">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-between mb-8">
-          <Link to="/" data-testid="student-register-logo" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2]" />
-            <div className="font-display font-semibold text-white">Lv99.ai</div>
+          <Link to="/" data-testid="student-register-logo" className="flex items-center">
+            <BrandLogo className="h-9" />
           </Link>
           <LanguageToggle testId="student-register-lang" />
         </div>

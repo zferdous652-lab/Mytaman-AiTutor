@@ -21,6 +21,7 @@ import AdminRouter from "@/pages/admin/Router";
 import AdminPacks from "@/pages/admin/Packs";
 import AdminStudents from "@/pages/admin/Students";
 import AdminSocratic from "@/pages/admin/Socratic";
+import AdminAccounts from "@/pages/admin/Accounts";
 
 import { StudentHome, StudentBrowse } from "@/pages/student/Student";
 import StudentDashboard from "@/pages/student/Dashboard";
@@ -65,6 +66,7 @@ function App() {
               <Route path="/admin/packs" element={<AdminLayout><AdminPacks /></AdminLayout>} />
               <Route path="/admin/students" element={<AdminLayout><AdminStudents /></AdminLayout>} />
               <Route path="/admin/socratic" element={<AdminLayout><AdminSocratic /></AdminLayout>} />
+              <Route path="/admin/accounts" element={<AdminLayout><AdminAccounts /></AdminLayout>} />
 
               <Route path="/student" element={<StudentLayout><StudentHome /></StudentLayout>} />
               <Route path="/student/browse" element={<StudentLayout><StudentBrowse /></StudentLayout>} />

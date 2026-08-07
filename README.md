@@ -6,7 +6,7 @@ An AI-powered e-learning platform for the Malaysian secondary curriculum (KSSM),
 
 | Role    | Capabilities |
 |---------|--------------|
-| **Admin**   | Create/delete Tutor Packs, author content (manually or via AI generation), manage the Model Router, review and publish confirmed content, manage students. |
+| **Admin**   | Create/delete Tutor Packs, author content (manually or via AI generation), manage the Model Router, review and publish confirmed content, manage students, manage accounts and passwords across all portals. |
 | **Parent**  | Browse and select Tutor Packs, monitor a child's enrolled packs. |
 | **Student** | Enroll in Tutor Packs, consume published content bilingually (EN/BM). |
 
@@ -52,6 +52,52 @@ Socratic) re-checks entitlement.
 > wired in, an admin unlocks a course via `POST /billing/grant` or `POST /billing/orders/{id}/mark-paid`.
 > `_fulfil_order()` is the single function a gateway webhook needs to call.
 
+## Account Manager
+
+Admin → **Account Manager** is one screen for every account across the three portals,
+because the person resetting a password is always an administrator and the question they
+are answering ("who is locked out?") spans roles.
+
+- Search and filter by portal; each row shows the login the account actually signs in
+  with — an email for admins and parents, a student ID for students.
+- **Reset a password**: generate a random 16-character one, or type a temporary one.
+  Either way the account is flagged to require a change at next sign-in, so an
+  admin-known password never becomes someone's permanent password.
+- **Remove** — deletes the account *and everything it owns*: password, enrolments,
+  progress, XP, quiz results, tutor conversations and pending invitations. There is no
+  restore. The person is free to sign up again afterwards with the same email.
+- **Block** — the same deletion, plus the login is added to a blocklist that bars it from
+  registering or signing in again. Students are blocked by student ID rather than email,
+  since that is what they actually sign in with. A **Blocked** panel lists every barred
+  identifier with its reason, lets an admin block an address that has no account here,
+  and lifts a block (which permits registration again — it does not restore the account).
+- An **audit trail** records who changed what and when.
+
+Both destructive actions require typing the account's login to confirm, and both are
+guarded twice: you cannot remove your own account, and the last active admin cannot be
+removed.
+
+**Removing a parent does not remove their learners.** By default the children keep their
+accounts, progress and enrolments; only the link is cleared. Each one gets an in-app
+notice and their portal shows *"Reconnect with a parent or guardian"*, which reuses the
+existing invite flow — so a learner whose guardian was removed can invite a new one
+rather than being stranded. The admin can opt into deleting them too with a checkbox.
+The reverse is covered as well: removing a learner leaves a notice on their guardian's
+portal, so the child does not simply vanish from it unexplained.
+
+A learner with no guardian is invisible to every parent account, so the **Students**
+roster is where that state surfaces: each row shows the guardian's name, flags
+`No guardian` where the guardian was removed, and a counter filters the roster down to
+everyone still waiting to be reconnected.
+
+Existing passwords are never displayed, here or anywhere else — they are stored as
+bcrypt hashes and cannot be read back, so any UI claiming to show one would be lying. A
+generated password is returned exactly once, in the response that created it; it is
+never written to the database in plaintext and never appears in the audit trail.
+
+Demo account credentials are not in this repository. See [`DEPLOY.md`](./DEPLOY.md) for
+the `SEED_*` variables and the rotation script.
+
 ## Model Router
 
 Admin-configurable multi-provider AI setup (OpenAI / Anthropic / Gemini) with:
@@ -79,9 +125,12 @@ backend/
   packs.py        # Tutor Pack CRUD, enroll, publish
   courses.py      # Course/Chapter CRUD with cascade deletes
   content.py      # AI generate + manual drafts + publish + stats
+  accounts.py     # Account Manager: password resets, account removal, blocklist, audit
+  notifications.py# Per-user in-app notices (guardian/learner removed)
+  scripts/        # Operational scripts (demo credential rotation)
   db.py           # Shared Mongo client + Fernet cipher
 frontend/
-  src/pages/admin/     # Overview, Generate, Manual Content, Model Router, Tutor Packs, Students
+  src/pages/admin/     # Overview, Generate, Manual Content, Model Router, Tutor Packs, Students, Account Manager
   src/pages/student/   # My Packs, Browse & Enroll
   src/pages/parent/    # Overview, Pack selection
   src/context/         # Language context (EN/BM)

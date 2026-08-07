@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
+import BrandLogo from "@/components/BrandLogo";
 
 const roleDest = { admin: "/admin", parent: "/parent", student: "/student/dashboard" };
 
@@ -47,9 +48,8 @@ const Login = () => {
         />
         <div className="absolute inset-0 bg-gradient-to-br from-[#050505]/80 via-[#050505]/40 to-[#8a2be2]/40" />
         <div className="relative h-full flex flex-col justify-between p-12">
-          <Link to="/" className="flex items-center gap-2" data-testid="login-logo">
-            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2]" />
-            <div className="font-display font-semibold text-white">Lv99.ai</div>
+          <Link to="/" className="flex items-center" data-testid="login-logo">
+            <BrandLogo className="h-10" />
           </Link>
           <div>
             <div className="overline text-[#00f0ff]">{t("tagline")}</div>

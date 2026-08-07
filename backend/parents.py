@@ -107,6 +107,9 @@ async def create_child(payload: CreateChildIn, parent: dict = Depends(require_ro
     await _assert_room_for_another_child(parent["id"])
     username = normalize_username(payload.username)
     await assert_username_available(username)
+    from accounts import is_blocked
+    if await is_blocked(username):
+        raise HTTPException(status_code=403, detail="This student ID cannot be registered")
     doc = _new_student_doc(
         name=payload.name.strip(),
         username=username,

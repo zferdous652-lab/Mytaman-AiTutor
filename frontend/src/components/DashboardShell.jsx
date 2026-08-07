@@ -11,12 +11,15 @@ import {
   BookOpen,
   Trophy,
   Brain,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import LanguageToggle from "@/components/LanguageToggle";
 import ParentLinkBanner from "@/components/ParentLinkBanner";
+import NotificationBanner from "@/components/NotificationBanner";
 import SidebarToggle, { RailTooltip } from "@/components/SidebarToggle";
+import BrandLogo from "@/components/BrandLogo";
 import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 
 const items = {
@@ -28,6 +31,7 @@ const items = {
     { to: "/admin/packs", label: t("packs"), icon: Package, id: "packs" },
     { to: "/admin/students", label: t("students_label"), icon: Users, id: "students" },
     { to: "/admin/socratic", label: t("socratic"), icon: Brain, id: "socratic" },
+    { to: "/admin/accounts", label: t("accounts"), icon: ShieldCheck, id: "accounts" },
   ],
   student: (t) => [
     { to: "/student", label: t("my_packs"), icon: BookOpen, end: true, id: "my-packs" },
@@ -54,12 +58,14 @@ const DashboardShell = ({ children }) => {
         data-testid="dash-sidebar"
         data-collapsed={collapsed}
       >
-        <div className={`flex items-center mb-8 ${collapsed ? "flex-col gap-3" : "gap-2"}`}>
-          <div className="h-9 w-9 shrink-0 rounded-lg bg-gradient-to-br from-[#00f0ff] to-[#8a2be2]" />
-          {!collapsed && (
+        <div className={`flex items-center mb-8 ${collapsed ? "flex-col gap-3" : "gap-3"}`}>
+          {/* The rail is 72px wide, where a wordmark is unreadable -- it gets the glyph. */}
+          {collapsed ? (
+            <BrandLogo variant="glyph" className="h-9 w-9 shrink-0" />
+          ) : (
             <div className="min-w-0 flex-1">
-              <div className="font-display font-semibold text-white leading-tight">Lv99.ai</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">{user.role}</div>
+              <BrandLogo className="h-8" />
+              <div className="mt-1 text-[10px] uppercase tracking-[0.2em] text-[#00f0ff]">{user.role}</div>
             </div>
           )}
           <SidebarToggle collapsed={collapsed} onToggle={toggleCollapsed} testId="dash-sidebar-toggle" align={collapsed ? "center" : "left"} />
@@ -114,13 +120,14 @@ const DashboardShell = ({ children }) => {
         </div>
       </aside>
       <main className="min-h-screen">
-        {/* Sits above every student page so the invite prompt can't be missed, and
-            removes itself once the parent has connected. */}
-        {user.role === "student" && (
-          <div className="px-8 lg:px-12 pt-8 lg:pt-12 [&+*]:pt-0">
-            <ParentLinkBanner />
-          </div>
-        )}
+        {/* Notices sit above every portal: they report changes the user did not cause
+            (a guardian or learner account removed) and would otherwise meet as an
+            unexplained absence. The student invite prompt sits with them, and removes
+            itself once a parent has connected. */}
+        <div className="px-8 lg:px-12 pt-8 lg:pt-12 empty:hidden [&:not(:has(*))]:hidden [&+*]:pt-0">
+          <NotificationBanner />
+          {user.role === "student" && <ParentLinkBanner />}
+        </div>
         {children}
       </main>
     </div>

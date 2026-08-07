@@ -1,5 +1,6 @@
-/* Lv99.ai — Global styles. Electric & Neon archetype. */
-@import url("https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700;800&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+/* Lv99.ai — Global styles. Electric & Neon archetype.
+   Fonts are linked from public/index.html, not @import-ed here: an @import cannot begin
+   downloading until this file has parsed, which delays first text paint. */
 
 @tailwind base;
 @tailwind components;
@@ -66,6 +67,53 @@ body {
 .font-display {
   font-family: "Unbounded", sans-serif;
   letter-spacing: -0.02em;
+}
+
+/* Landing-page display type.
+
+   The reference site sets `Nohemi, "Segoe UI", system-ui, sans-serif`. Nohemi is a
+   commercial face (Pangram Pangram) -- free for personal use only, not on Google Fonts
+   -- so it is NOT bundled here. It is named first in the stack anyway: drop a licensed
+   nohemi.woff2 into src/assets/fonts/, uncomment the @font-face below, and every
+   landing headline picks it up with no other change.
+
+   Until then Outfit carries it. Outfit is the closest geometric grotesque already in
+   the bundle, so this costs no extra font request, and Unbounded stays on the
+   dashboards where the wider display face still works. */
+
+/* @font-face {
+  font-family: "Nohemi";
+  src: url("./assets/fonts/nohemi-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+} */
+
+.landing-display {
+  font-family: "Nohemi", "Outfit", system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+
+/* Fluid, so the headline holds its proportion to the viewport instead of stepping at
+   breakpoints. Upper bound stops it running away on ultrawide displays. */
+.hero-title {
+  font-size: clamp(2.6rem, 6.4vw, 6rem);
+  line-height: 1.02;
+}
+.hero-sub {
+  font-size: clamp(1.0625rem, 1.4vw, 1.375rem);
+  line-height: 1.6;
+}
+/* The hero overline sits alone above a 92px headline; at the shared 0.7rem it reads as
+   a caption that got lost. Tracking eases off slightly as it grows, because 0.2em on
+   larger text opens the words up too far. */
+.overline-hero {
+  font-size: clamp(0.8125rem, 1.05vw, 0.9375rem);
+  letter-spacing: 0.17em;
+}
+.section-title {
+  font-size: clamp(2rem, 3.4vw, 3.25rem);
+  line-height: 1.1;
 }
 .font-mono {
   font-family: "JetBrains Mono", monospace;
@@ -323,5 +371,73 @@ input:focus, textarea:focus, select:focus {
   }
   .mindmap-html .mindmap-branch::before {
     display: none;
+  }
+}
+
+
+/* ------------------------------------------------------------------ *
+ * Keyboard focus
+ * Tailwind's reset removes the UA outline, and nothing replaced it -- a keyboard user
+ * had no way to tell where they were. :focus-visible only, so a mouse click does not
+ * leave a ring behind.
+ * ------------------------------------------------------------------ */
+:focus-visible {
+  outline: 2px solid #00f0ff;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+/* On the cyan buttons a cyan ring is invisible, so those invert to white. */
+.bg-\[\#00f0ff\]:focus-visible {
+  outline-color: #ffffff;
+}
+
+/* Anchor targets sit under a fixed header, so scrolling to one would tuck its heading
+   behind the bar. Reserve the bar's height plus a little breathing room. */
+section[id],
+#main {
+  scroll-margin-top: 6rem;
+}
+
+/* Skip link: present for keyboard and screen-reader users, out of the way otherwise. */
+.skip-link {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 100;
+  transform: translate(-50%, -150%);
+  background: #00f0ff;
+  color: #000;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0 0 0.75rem 0.75rem;
+  transition: transform 0.18s ease;
+}
+.skip-link:focus {
+  transform: translate(-50%, 0);
+}
+
+/* ------------------------------------------------------------------ *
+ * Hero starfield
+ * Was 34 framer-motion springs, each driving its own opacity loop on the main thread,
+ * on top of the WebGL canvas. As a CSS keyframe the whole field runs on the compositor
+ * -- the difference is felt on the low-end Android that is most of this audience.
+ * ------------------------------------------------------------------ */
+@keyframes lv99-twinkle {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.85; }
+}
+.hero-particle {
+  animation: lv99-twinkle var(--dur, 5s) ease-in-out var(--delay, 0s) infinite;
+  will-change: opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-particle {
+    animation: none;
+    opacity: 0.45;
+  }
+  .skip-link {
+    transition: none;
   }
 }

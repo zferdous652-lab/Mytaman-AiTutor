@@ -137,6 +137,12 @@ async def register_student(payload: StudentRegisterIn):
             detail="That address is already in use by a student account. Please use your parent's own email.",
         )
 
+    from accounts import is_blocked
+    if await is_blocked(username, parent_email):
+        # Covers both halves of this flow: a blocked student ID, and a blocked guardian
+        # trying to get back in by having a child request an account for them.
+        raise HTTPException(status_code=403, detail="This account cannot be registered")
+
     now = _now().isoformat()
     student = {
         "id": str(uuid.uuid4()),
@@ -172,6 +178,11 @@ async def register_student(payload: StudentRegisterIn):
 class LinkStatusOut(BaseModel):
     linked: bool
     parent_name: Optional[str] = None
+    # Set when the student HAD a guardian whose account was later removed. The prompt
+    # then reads as a reconnection rather than "your parent hasn't joined yet", which
+    # would be wrong and confusing for a student whose parent did join.
+    guardian_removed: bool = False
+    former_parent_name: Optional[str] = None
     parent_invite_email: Optional[str] = None
     invite_sent_at: Optional[str] = None
     can_resend_at: Optional[str] = None
@@ -199,6 +210,8 @@ async def link_status(student: dict = Depends(require_role("student"))):
             can_resend_at = None
     return LinkStatusOut(
         linked=False,
+        guardian_removed=bool(student.get("guardian_removed_at")),
+        former_parent_name=student.get("former_parent_name"),
         parent_invite_email=student.get("parent_invite_email") or (invite or {}).get("parent_email"),
         invite_sent_at=sent_at,
         can_resend_at=can_resend_at,

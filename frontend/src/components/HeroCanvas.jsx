@@ -195,7 +195,9 @@ const HeroCanvas = ({ reduce = false }) => (
     <CameraRig reduce={reduce} />
     <KnowledgeMesh reduce={reduce} />
     <SubjectNodes reduce={reduce} />
-    <Stars radius={60} depth={40} count={900} factor={3} saturation={0} fade speed={reduce ? 0 : 0.4} />
+    {/* 900 stars was more geometry than the effect needs behind a mesh and a vignette;
+        420 is indistinguishable here and roughly halves the draw. */}
+    <Stars radius={60} depth={40} count={420} factor={3} saturation={0} fade speed={reduce ? 0 : 0.4} />
   </Canvas>
 );
 

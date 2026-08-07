@@ -136,11 +136,33 @@ http://<your-vm-public-ip>:3000
 
 Seeded demo accounts (created automatically on first backend boot):
 
-| Role    | Sign in with          | Password        |
-|---------|-----------------------|-----------------|
-| Admin   | admin@mytaman.ai      | Admin@12345     |
-| Parent  | parent@mytaman.ai     | Parent@12345    |
-| Student | `demostudent`         | Student@12345   |
+| Role    | Sign in with          | Password                                  |
+|---------|-----------------------|-------------------------------------------|
+| Admin   | admin@mytaman.ai      | `SEED_ADMIN_PASSWORD`, else generated     |
+| Parent  | parent@mytaman.ai     | `SEED_PARENT_PASSWORD`, else generated    |
+| Student | `demostudent`         | `SEED_STUDENT_PASSWORD`, else generated   |
+
+**There are no default passwords.** Set the three `SEED_*` variables in `.env` before
+the first boot, or leave them blank and the backend generates a random password per
+account and logs it **once**, at creation:
+
+```bash
+docker compose logs backend | grep GENERATED
+```
+
+Seeding only ever *creates*. It never overwrites the password of an account that already
+exists, so a password changed in the Account Manager survives `docker compose up`.
+
+**Rotating credentials on a deployment that already has these accounts** (the `SEED_*`
+variables have no effect once the users exist):
+
+```bash
+docker compose exec backend python scripts/rotate_demo_passwords.py
+```
+
+Each account gets a fresh random password, printed once, and is flagged to require a
+change at next sign-in. Add `--show-only` to see which accounts would be affected
+without changing anything.
 
 Students sign in with a **student ID**, not an email — the demo student is linked as
 a child of the demo parent. New student accounts are only created by a parent, or by

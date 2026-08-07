@@ -6,6 +6,7 @@ Covers:
 - Content (manual + AI generate via Model Router, list, publish, stats)
 - Model Router (config, patch provider, order, prompts)
 """
+import json
 import os
 import time
 import uuid
@@ -16,13 +17,21 @@ import requests
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://localhost:8001").rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN = {"email": "admin@mytaman.ai", "password": "Admin@12345"}
-PARENT = {"email": "parent@mytaman.ai", "password": "Parent@12345"}
-STUDENT = {"email": "student@mytaman.ai", "password": "Student@12345"}
+# Demo passwords are no longer hardcoded in the app -- they come from the environment or
+# are generated at seed time -- so the suite reads them the same way. Point these at
+# whatever the deployment under test actually uses.
+ADMIN = {"email": "admin@mytaman.ai", "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
+PARENT = {"email": "parent@mytaman.ai", "password": os.environ.get("TEST_PARENT_PASSWORD", "")}
+STUDENT = {"email": "student@mytaman.ai", "password": os.environ.get("TEST_STUDENT_PASSWORD", "")}
 
 
 # -------- helpers --------
 def _login(email, password):
+    if not password:
+        pytest.skip(
+            f"No password configured for {email}. Set TEST_ADMIN_PASSWORD / "
+            "TEST_PARENT_PASSWORD / TEST_STUDENT_PASSWORD to the deployment's values."
+        )
     r = requests.post(f"{API}/auth/login", json={"email": email, "password": password}, timeout=15)
     assert r.status_code == 200, f"Login failed for {email}: {r.status_code} {r.text}"
     return r.json()
@@ -518,3 +527,257 @@ class TestBilling:
 
         after = set(requests.get(f"{API}/billing/entitlements", headers=_h(student_token), timeout=10).json()["course_ids"])
         assert after == owned, "an unpaid checkout must not grant access"
+
+# ---------- Account Manager ----------
+class TestAccounts:
+    """Admin-side password and access control. The security properties worth testing are
+    negative ones: no password hash escapes the API, no plaintext password reaches the
+    audit trail, and the last admin cannot be locked out."""
+
+    def test_list_is_admin_only(self, student_token, parent_token):
+        for tok in (student_token, parent_token):
+            r = requests.get(f"{API}/accounts/list", headers=_h(tok), timeout=10)
+            assert r.status_code == 403
+
+    def test_list_never_returns_password_hashes(self, admin_token):
+        r = requests.get(f"{API}/accounts/list", headers=_h(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        rows = r.json()
+        assert rows, "expected at least the seeded accounts"
+        for row in rows:
+            assert "password" not in row
+            assert set(row) >= {"id", "name", "role", "login", "login_type", "active"}
+
+    def test_role_filter(self, admin_token):
+        r = requests.get(f"{API}/accounts/list?role=student", headers=_h(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        assert all(a["role"] == "student" for a in r.json())
+
+    def test_generated_password_works_and_is_returned_once(self, admin_token):
+        """The generated password must actually authenticate -- otherwise the admin hands
+        out a credential that doesn't work -- and must not be readable afterwards."""
+        students = requests.get(
+            f"{API}/accounts/list?role=student", headers=_h(admin_token), timeout=15
+        ).json()
+        target = next((s for s in students if s["login_type"] == "username"), None)
+        if target is None:
+            pytest.skip("no student account to reset")
+
+        r = requests.post(
+            f"{API}/accounts/{target['id']}/password",
+            headers=_h(admin_token), json={"generate": True, "require_change": False}, timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        pw = r.json()["generated_password"]
+        assert pw and len(pw) >= 12
+
+        login = requests.post(
+            f"{API}/auth/login", json={"identifier": target["login"], "password": pw}, timeout=15
+        )
+        assert login.status_code == 200, login.text
+
+        # The plaintext must not survive anywhere readable.
+        audit = requests.get(f"{API}/accounts/audit?limit=25", headers=_h(admin_token), timeout=10).json()
+        assert pw not in json.dumps(audit)
+        listing = requests.get(f"{API}/accounts/list?role=student", headers=_h(admin_token), timeout=15).json()
+        assert pw not in json.dumps(listing)
+
+    def test_password_must_meet_minimum_length(self, admin_token):
+        me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
+        r = requests.post(
+            f"{API}/accounts/{me['id']}/password",
+            headers=_h(admin_token), json={"new_password": "short"}, timeout=10,
+        )
+        assert r.status_code == 422
+
+    def test_cannot_supply_both_password_and_generate(self, admin_token):
+        me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
+        r = requests.post(
+            f"{API}/accounts/{me['id']}/password",
+            headers=_h(admin_token),
+            json={"new_password": "longenough123", "generate": True}, timeout=10,
+        )
+        assert r.status_code == 422
+
+    def test_cannot_remove_self(self, admin_token):
+        me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
+        r = requests.delete(f"{API}/accounts/{me['id']}", headers=_h(admin_token), timeout=10)
+        assert r.status_code == 400
+        assert "own account" in r.json()["detail"]
+
+    def test_cannot_block_self(self, admin_token):
+        """Block deletes as well, so the self-guard has to cover it too -- otherwise the
+        last admin could delete themselves and blocklist the address on the way out."""
+        me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
+        r = requests.post(
+            f"{API}/accounts/{me['id']}/block", headers=_h(admin_token), json={}, timeout=10
+        )
+        assert r.status_code == 400
+
+    def test_block_and_unblock_an_identifier(self, admin_token):
+        """A blocked address must be refused at registration, and registrable again once
+        the block is lifted."""
+        email = f"blocktest-{uuid.uuid4().hex[:8]}@example.com"
+        r = requests.post(
+            f"{API}/accounts/blocked/add",
+            headers=_h(admin_token), json={"identifier": email, "reason": "automated test"},
+            timeout=10,
+        )
+        assert r.status_code == 200, r.text
+        block_id = r.json()["id"]
+
+        try:
+            reg = requests.post(
+                f"{API}/auth/register",
+                json={"email": email, "password": "TestPass123", "name": "Blocked Tester"},
+                timeout=10,
+            )
+            assert reg.status_code == 403, reg.text
+
+            listing = requests.get(f"{API}/accounts/blocked/list", headers=_h(admin_token), timeout=10)
+            assert any(b["identifier"] == email for b in listing.json())
+        finally:
+            un = requests.delete(f"{API}/accounts/blocked/{block_id}", headers=_h(admin_token), timeout=10)
+            assert un.status_code == 200, un.text
+
+        # Registrable again once unblocked.
+        reg2 = requests.post(
+            f"{API}/auth/register",
+            json={"email": email, "password": "TestPass123", "name": "Blocked Tester"},
+            timeout=10,
+        )
+        assert reg2.status_code == 200, reg2.text
+        me = requests.get(
+            f"{API}/auth/me", headers=_h(reg2.json()["token"]), timeout=10
+        ).json()
+        # Clean up the account this test created.
+        requests.delete(f"{API}/accounts/{me['id']}", headers=_h(admin_token), timeout=10)
+
+    def test_blocking_the_same_address_twice_is_idempotent(self, admin_token):
+        email = f"dupe-{uuid.uuid4().hex[:8]}@example.com"
+        a = requests.post(f"{API}/accounts/blocked/add", headers=_h(admin_token),
+                          json={"identifier": email}, timeout=10)
+        b = requests.post(f"{API}/accounts/blocked/add", headers=_h(admin_token),
+                          json={"identifier": email}, timeout=10)
+        assert a.status_code == 200 and b.status_code == 200
+        assert a.json()["id"] == b.json()["id"]
+        requests.delete(f"{API}/accounts/blocked/{a.json()['id']}", headers=_h(admin_token), timeout=10)
+
+    def test_remove_purges_the_account_and_its_data(self, admin_token):
+        """Create a throwaway parent, delete it, and confirm it is gone from the API --
+        Remove is a real deletion, not a flag."""
+        email = f"purge-{uuid.uuid4().hex[:8]}@example.com"
+        reg = requests.post(
+            f"{API}/auth/register",
+            json={"email": email, "password": "TestPass123", "name": "Purge Tester"},
+            timeout=10,
+        )
+        assert reg.status_code == 200, reg.text
+        token = reg.json()["token"]
+        uid = requests.get(f"{API}/auth/me", headers=_h(token), timeout=10).json()["id"]
+
+        r = requests.delete(f"{API}/accounts/{uid}", headers=_h(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        assert r.json()["deleted_users"] == 1
+        assert r.json()["removed"]["users"] == 1
+
+        listing = requests.get(f"{API}/accounts/list", headers=_h(admin_token), timeout=15).json()
+        assert all(a["id"] != uid for a in listing)
+        # The old session must stop working immediately.
+        assert requests.get(f"{API}/auth/me", headers=_h(token), timeout=10).status_code == 401
+        # Remove does not blocklist: the address is free to register again.
+        again = requests.post(
+            f"{API}/auth/register",
+            json={"email": email, "password": "TestPass123", "name": "Purge Tester"},
+            timeout=10,
+        )
+        assert again.status_code == 200, again.text
+        uid2 = requests.get(f"{API}/auth/me", headers=_h(again.json()["token"]), timeout=10).json()["id"]
+        requests.delete(f"{API}/accounts/{uid2}", headers=_h(admin_token), timeout=15)
+
+    def test_roster_reports_guardian_state(self, admin_token):
+        """The roster is the only surface where a guardian-less learner is visible, so it
+        has to carry the guardian fields."""
+        r = requests.get(f"{API}/students/roster", headers=_h(admin_token), timeout=20)
+        assert r.status_code == 200, r.text
+        rows = r.json()
+        if not rows:
+            pytest.skip("no students on the roster")
+        for row in rows:
+            assert set(row) >= {"parent_name", "guardian_removed", "former_parent_name", "active"}
+            # A learner with a live guardian is never simultaneously flagged as having
+            # lost one.
+            if row["parent_name"]:
+                assert row["guardian_removed"] is False
+
+    def test_notifications_are_scoped_to_the_caller(self, student_token, parent_token):
+        """A notice is per user; one account must not be able to read or dismiss
+        another's."""
+        r = requests.get(f"{API}/notifications/list", headers=_h(student_token), timeout=10)
+        assert r.status_code == 200, r.text
+        assert isinstance(r.json(), list)
+        # A random id must 404 rather than mark anything read.
+        bogus = requests.post(
+            f"{API}/notifications/{uuid.uuid4()}/read", headers=_h(parent_token), timeout=10
+        )
+        assert bogus.status_code == 404
+
+    def test_removing_a_parent_keeps_children_and_prompts_reconnect(self, admin_token):
+        """The default is orphan-and-notify, not cascade: the learner keeps their account
+        and is asked to invite a new guardian."""
+        email = f"guardian-{uuid.uuid4().hex[:8]}@example.com"
+        reg = requests.post(
+            f"{API}/auth/register",
+            json={"email": email, "password": "TestPass123", "name": "Temp Guardian"},
+            timeout=10,
+        )
+        assert reg.status_code == 200, reg.text
+        ptoken = reg.json()["token"]
+        pid = requests.get(f"{API}/auth/me", headers=_h(ptoken), timeout=10).json()["id"]
+
+        username = f"tempkid{uuid.uuid4().hex[:6]}"
+        child = requests.post(
+            f"{API}/parents/children",
+            headers=_h(ptoken),
+            json={
+                "name": "Temp Kid", "username": username, "password": "KidPass123",
+                "grade": "Form 1", "birth_year": 2012,
+                "relationship": "guardian", "language": "en",
+            },
+            timeout=10,
+        )
+        if child.status_code != 200:
+            pytest.skip(f"could not create a test child: {child.status_code} {child.text}")
+        child_id = child.json().get("id")
+
+        r = requests.delete(f"{API}/accounts/{pid}", headers=_h(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        assert r.json()["deleted_users"] == 1, "the child must not be deleted by default"
+        assert r.json()["orphaned_children"] == 1
+
+        accounts = requests.get(f"{API}/accounts/list?role=student", headers=_h(admin_token), timeout=15).json()
+        assert any(a["id"] == child_id for a in accounts), "child should still exist"
+
+        # The child can sign in and is told to reconnect.
+        login = requests.post(
+            f"{API}/auth/login", json={"identifier": username, "password": "KidPass123"}, timeout=10
+        )
+        assert login.status_code == 200, login.text
+        ctoken = login.json()["token"]
+        status = requests.get(f"{API}/auth/link-status", headers=_h(ctoken), timeout=10).json()
+        assert status["linked"] is False
+        assert status["guardian_removed"] is True
+
+        notes = requests.get(f"{API}/notifications/list", headers=_h(ctoken), timeout=10).json()
+        assert any(n["kind"] == "guardian_removed" for n in notes)
+
+        requests.delete(f"{API}/accounts/{child_id}", headers=_h(admin_token), timeout=15)
+
+    def test_cannot_deactivate_self(self, admin_token):
+        me = requests.get(f"{API}/auth/me", headers=_h(admin_token), timeout=10).json()
+        r = requests.post(
+            f"{API}/accounts/{me['id']}/active",
+            headers=_h(admin_token), json={"active": False}, timeout=10,
+        )
+        assert r.status_code == 400
+        assert "own account" in r.json()["detail"]
