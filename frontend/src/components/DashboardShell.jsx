@@ -8,8 +8,6 @@ import {
   Package,
   Users,
   LogOut,
-  BookOpen,
-  Trophy,
   Brain,
   ShieldCheck,
 } from "lucide-react";
@@ -20,6 +18,13 @@ import ParentLinkBanner from "@/components/ParentLinkBanner";
 import NotificationBanner from "@/components/NotificationBanner";
 import SidebarToggle, { RailTooltip } from "@/components/SidebarToggle";
 import BrandLogo from "@/components/BrandLogo";
+import {
+  NavIconDefs,
+  PacksIcon,
+  BrowsePacksIcon,
+  DashboardIcon,
+  OverviewIcon,
+} from "@/components/icons/NavIcons";
 import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 
 const items = {
@@ -33,16 +38,22 @@ const items = {
     { to: "/admin/socratic", label: t("socratic"), icon: Brain, id: "socratic" },
     { to: "/admin/accounts", label: t("accounts"), icon: ShieldCheck, id: "accounts" },
   ],
+  // Student and parent get the gradient set; admin stays on flat lucide, which suits a
+  // dense eight-item operations sidebar better than eight competing gradients.
   student: (t) => [
-    { to: "/student", label: t("my_packs"), icon: BookOpen, end: true, id: "my-packs" },
-    { to: "/student/browse", label: t("browse_packs"), icon: Package, id: "browse" },
-    { to: "/student/dashboard", label: t("dashboard") || "Dashboard", icon: Trophy, id: "dashboard" },
+    { to: "/student", label: t("my_packs"), icon: PacksIcon, end: true, id: "my-packs" },
+    { to: "/student/browse", label: t("browse_packs"), icon: BrowsePacksIcon, id: "browse" },
+    { to: "/student/dashboard", label: t("dashboard") || "Dashboard", icon: DashboardIcon, id: "dashboard" },
   ],
   parent: (t) => [
-    { to: "/parent", label: t("overview"), icon: LayoutDashboard, end: true, id: "overview" },
-    { to: "/parent/packs", label: t("packs"), icon: Package, id: "packs" },
+    { to: "/parent", label: t("overview"), icon: OverviewIcon, end: true, id: "overview" },
+    { to: "/parent/packs", label: t("packs"), icon: BrowsePacksIcon, id: "packs" },
   ],
 };
+
+// The gradient icons are a touch larger than the flat ones were: the magnifier and the
+// star are the details that carry the style, and at 16px they close up.
+const ICON_SIZE = { student: 20, parent: 20 };
 
 // Where the sidebar logo takes you, per role. Student gets the progress dashboard;
 // parent gets Overview, which is their equivalent -- there is no /parent/dashboard.
@@ -68,6 +79,8 @@ const DashboardShell = ({ children }) => {
         data-testid="dash-sidebar"
         data-collapsed={collapsed}
       >
+        {/* The icons reference this gradient by id, so it has to exist in the document. */}
+        <NavIconDefs />
         <div className={`flex items-center mb-8 ${collapsed ? "flex-col gap-3" : "gap-3"}`}>
           {/* The rail is 72px wide, where a wordmark is unreadable -- it gets the glyph. */}
           {collapsed ? (
@@ -99,7 +112,7 @@ const DashboardShell = ({ children }) => {
                 }`
               }
             >
-              <it.icon size={16} className="shrink-0" />
+              <it.icon size={ICON_SIZE[user.role] || 16} className="shrink-0" />
               {collapsed ? <RailTooltip>{it.label}</RailTooltip> : it.label}
             </NavLink>
           ))}
