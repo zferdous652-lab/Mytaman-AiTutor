@@ -134,6 +134,7 @@ const dict = {
     ct_quiz: "Quiz",
     skip_to_content: "Skip to content",
     socratic: "Socratic Learning",
+    accounts: "Account Manager",
     socratic_tutor: "Socratic Tutor",
     socratic_tutor_suffix: "Tutor",
     socratic_intro:
@@ -283,6 +284,7 @@ const dict = {
     ct_quiz: "Kuiz",
     skip_to_content: "Langkau ke kandungan",
     socratic: "Pembelajaran Socratic",
+    accounts: "Pengurus Akaun",
     socratic_tutor: "Tutor Socratic",
     socratic_tutor_suffix: "Tutor",
     socratic_intro:
