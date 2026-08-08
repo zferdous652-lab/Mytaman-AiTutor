@@ -11,6 +11,7 @@ import { NavIconDefs } from "@/components/icons/NavIcons";
 
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
+import JoinAs from "@/pages/JoinAs";
 import Register from "@/pages/Register";
 import RegisterStudent from "@/pages/RegisterStudent";
 import ConnectChild from "@/pages/ConnectChild";
@@ -59,6 +60,10 @@ function App() {
             <Routes>
               <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/join" element={<JoinAs />} />
+              {/* /register stays the parent form. Existing links point at it -- the
+                  child-approval emails carry ?token=, and it is the destination the
+                  picker sends parents to. */}
               <Route path="/register" element={<Register />} />
               <Route path="/register-student" element={<RegisterStudent />} />
               <Route path="/connect-child" element={<ConnectChild />} />

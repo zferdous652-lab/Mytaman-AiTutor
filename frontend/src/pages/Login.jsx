@@ -111,7 +111,7 @@ const Login = () => {
             <div>
               Are you a student?{" "}
               <Link to="/register-student" className="text-[#00f0ff] hover:underline" data-testid="login-to-student-register">
-                Sign up with a parent's approval
+                Create a student account
               </Link>
             </div>
           </div>

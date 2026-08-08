@@ -104,7 +104,7 @@ const Landing = () => {
             <p className="hero-sub mx-auto mt-6 max-w-2xl text-white/70">{t("hero_sub")}</p>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
               <Link
-                to="/register"
+                to="/join"
                 data-testid="hero-get-started"
                 className="inline-flex items-center gap-2 rounded-full bg-[#00f0ff] px-6 py-3 text-sm font-semibold text-black hover:bg-white transition-colors"
               >
